@@ -793,6 +793,11 @@ def integracao_testar():
         raise HTTPException(400, "Preencha o endereço e a chave e salve antes de testar.")
     status, texto = _chamar("GET", i["url"] + "/menork/ping", i["chave"], timeout=20)
     if 200 <= status < 300:
+        try:
+            json.loads(texto or "{}")
+        except ValueError:
+            return {"ok": False, "msg": f"O endereço respondeu uma página do site, e não a API do {i['nome']}. "
+                                        "Confira o Endereço da API (não é o endereço do painel)."}
         return {"ok": True, "msg": f"Conexão com o {i['nome']} funcionando."}
     dica = {401: "a chave foi recusada", 403: "a chave não tem permissão", 404: "o endereço /menork/ping não existe lá"}
     return {"ok": False, "msg": f"O {i['nome']} respondeu {status}: {dica.get(status, texto[:160] or 'erro')}."}
@@ -867,7 +872,8 @@ def _ler_sistema(caminho):
     try:
         return json.loads(texto)
     except ValueError:
-        raise HTTPException(502, f"O {i['nome']} respondeu algo que não é JSON.")
+        raise HTTPException(502, f"O endereço {i['url']} respondeu uma página do site, e não a API do {i['nome']}. "
+                                 "Confira o Endereço da API em Integrações: ele não é o endereço do painel.")
 
 
 def _txt(v, limite=200):
