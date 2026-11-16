@@ -1,13 +1,15 @@
 // Fundo animado: agua escura em movimento, desenhada pela placa de video (WebGL).
-// Leve: desenha em meia resolucao, a 30 quadros por segundo, e para quando a aba nao esta visivel.
+// Resolucao da tela (ate 1,5x em telas de alta densidade); se o PC nao der conta, baixa sozinha.
+// 30 quadros por segundo, e para quando a aba nao esta visivel.
 (() => {
   const tela = document.getElementById('agua'); if (!tela) return;
   const gl = tela.getContext('webgl', { antialias: false, alpha: false, powerPreference: 'low-power' });
   if (!gl) { tela.classList.add('sem-webgl'); return; }
   const quieto = matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const frag = `precision mediump float;
+  const alta = gl.getShaderPrecisionFormat(gl.FRAGMENT_SHADER, gl.HIGH_FLOAT).precision > 0;
+  const frag = `precision ${alta ? 'highp' : 'mediump'} float;
 uniform vec2 r; uniform float t;
-float h(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
+float h(vec2 p){vec3 q=fract(vec3(p.xyx)*.1031);q+=dot(q,q.yzx+33.33);return fract((q.x+q.y)*q.z);}
 float n(vec2 p){vec2 i=floor(p),f=fract(p),u=f*f*(3.-2.*f);
   return mix(mix(h(i),h(i+vec2(1.,0.)),u.x),mix(h(i+vec2(0.,1.)),h(i+vec2(1.,1.)),u.x),u.y);}
 float fbm(vec2 p){float v=0.,a=.5;mat2 m=mat2(1.6,1.2,-1.2,1.6);for(int k=0;k<4;k++){v+=a*n(p);p=m*p;a*=.5;}return v;}
@@ -34,15 +36,27 @@ void main(){
   gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
   const p = gl.getAttribLocation(pr, 'p'); gl.enableVertexAttribArray(p); gl.vertexAttribPointer(p, 2, gl.FLOAT, false, 0, 0);
   const ur = gl.getUniformLocation(pr, 'r'), ut = gl.getUniformLocation(pr, 't');
-  const ESCALA = .5, inicio = performance.now() - 40000;
-  let ultimo = 0, pedido = 0;
-  function medir() { tela.width = Math.max(1, innerWidth * ESCALA | 0); tela.height = Math.max(1, innerHeight * ESCALA | 0); gl.viewport(0, 0, tela.width, tela.height); gl.uniform2f(ur, tela.width, tela.height); }
+  const inicio = performance.now() - 40000, LIMITE = 2.4e6;
+  let esc = 1, ultimo = 0, pedido = 0, somas = 0, quadros = 0;
+  function medir() {
+    const d = Math.min(devicePixelRatio || 1, 1.5), area = innerWidth * innerHeight * d * d;
+    const e = Math.min(d, Math.sqrt(LIMITE / area) * d) * esc;
+    tela.width = Math.max(1, innerWidth * e | 0); tela.height = Math.max(1, innerHeight * e | 0);
+    gl.viewport(0, 0, tela.width, tela.height); gl.uniform2f(ur, tela.width, tela.height);
+  }
   function quadro(agora) {
     pedido = 0;
-    if (agora - ultimo >= 33) { ultimo = agora; gl.uniform1f(ut, (agora - inicio) / 1000); gl.drawArrays(gl.TRIANGLES, 0, 3); }
+    if (agora - ultimo >= 33) {
+      if (ultimo && !quieto) { somas += agora - ultimo; quadros++; }
+      if (quadros === 40) {  // PC sofrendo (abaixo de ~22 quadros por segundo): desenha com menos pontos
+        if (somas / quadros > 45 && esc > .45) { esc *= .8; medir(); }
+        somas = quadros = 0;
+      }
+      ultimo = agora; gl.uniform1f(ut, (agora - inicio) / 1000); gl.drawArrays(gl.TRIANGLES, 0, 3);
+    }
     if (!quieto && !document.hidden) pedido = requestAnimationFrame(quadro);
   }
   addEventListener('resize', () => { medir(); if (quieto) quadro(performance.now()); });
-  document.addEventListener('visibilitychange', () => { if (!document.hidden && !pedido && !quieto) pedido = requestAnimationFrame(quadro); });
+  document.addEventListener('visibilitychange', () => { ultimo = 0; somas = quadros = 0; if (!document.hidden && !pedido && !quieto) pedido = requestAnimationFrame(quadro); });
   medir(); quadro(performance.now() + 1000);
 })();
