@@ -18,8 +18,22 @@ from . import nucleo as n
 app = FastAPI(title="Imagens Menork", docs_url=None, redoc_url=None, openapi_url=None)
 app.mount("/static", StaticFiles(directory=n.BASE / "app" / "static"), name="static")
 tpl = Jinja2Templates(directory=n.BASE / "app" / "templates")
+LOGOS = ("logo.png", "logo.jpg", "logo.jpeg", "logo.webp", "logo.svg")
 
-LIVRES = ("/static", "/entrar", "/criar-senha")
+
+def arquivo_logo():
+    """A logo fica em dados/ (so no PC do usuario, nunca no repositorio)."""
+    return next((n.pasta_dados() / nome for nome in LOGOS if (n.pasta_dados() / nome).exists()), None)
+
+
+def versao_logo():
+    p = arquivo_logo()
+    return int(p.stat().st_mtime) if p else 0
+
+
+tpl.env.globals["versao_logo"] = versao_logo
+
+LIVRES = ("/static", "/entrar", "/criar-senha", "/logo")
 LOCAIS = ("127.0.0.1", "::1", "localhost")
 
 
@@ -52,6 +66,14 @@ async def porteiro(request: Request, call_next):
 
 
 # ---------------------------------------------------------------------- senha
+@app.get("/logo")
+def logo():
+    p = arquivo_logo()
+    if not p:
+        raise HTTPException(404)
+    return FileResponse(p, headers={"Cache-Control": "max-age=86400"})
+
+
 @app.get("/criar-senha")
 def criar_senha_tela(request: Request):
     if n.tem_senha():

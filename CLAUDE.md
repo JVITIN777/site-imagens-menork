@@ -10,6 +10,7 @@ Site local (Python/FastAPI + SQLite) do Menork para receber, aprovar e organizar
 
 ## Cuidados
 - O repositório é público: nunca coloque caminhos da TrueNAS, nomes de clientes, chaves nem o `config.json`.
+- A logo do usuário fica só no PC dele, em `dados/logo.png` (ou .jpg/.webp/.svg), servida em `/logo`. Nunca a coloque no repositório.
 - O banco ajusta as colunas sozinho ao ligar (`iniciar_banco` em `app/nucleo.py`): ao criar coluna ou tabela, só acrescente, nunca apague.
 - `faltas` e o pacote usam a mesma função `checagem` em `app/main.py`; mantenha assim.
 - Se mudar comandos do `menork.ps1`, atualize `INSTRUCOES_GROK_BOT.md`: os bots leem esse arquivo pelo comando `instrucoes`.

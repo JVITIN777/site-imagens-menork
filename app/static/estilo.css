@@ -28,6 +28,8 @@ input:focus-visible,select:focus-visible{outline-offset:0;border-color:var(--luz
 .lateral{position:fixed;inset:0 auto 0 0;width:var(--lateral);background:var(--painel);border-right:1px solid var(--borda);display:flex;flex-direction:column;gap:18px;padding:20px 14px 16px;z-index:20}
 .marca-site{display:flex;align-items:center;gap:11px;padding:0 6px}
 .marca-site svg{width:34px;height:34px;stroke:none}
+.marca-site .logo{width:38px;height:38px;border-radius:9px;object-fit:cover;flex:none;box-shadow:0 0 0 1px var(--borda-forte)}
+.cartao-senha .logo-grande{width:84px;height:84px;border-radius:18px;object-fit:cover;box-shadow:0 0 0 1px var(--borda-forte)}
 .marca-site svg rect{fill:var(--luz)}.marca-site svg path{fill:var(--luz-tinta)}
 .marca-site span{font:700 21px/1 var(--titulo);letter-spacing:.3px;display:flex;flex-direction:column;gap:3px}
 .marca-site small,.cartao-senha h1 small{font:400 12px var(--corpo);color:var(--fraco);letter-spacing:0}

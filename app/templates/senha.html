@@ -1,8 +1,9 @@
 <!doctype html>
 <html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Imagens Menork</title><link rel="stylesheet" href="/static/estilo.css"></head>
+<title>Imagens Menork</title>{% if versao_logo() %}<link rel="icon" href="/logo?v={{ versao_logo() }}">{% endif %}<link rel="stylesheet" href="/static/estilo.css"></head>
 <body class="porta">
 <form method="post" class="cartao-senha">
+  {% if versao_logo() %}<img class="logo-grande" src="/logo?v={{ versao_logo() }}" alt="">{% endif %}
   <h1>Menork <small>imagens</small></h1>
   {% if criar %}<p>Primeiro acesso: crie a senha do site.</p>{% else %}<p>Digite a senha para entrar.</p>{% endif %}
   {% if erro %}<div class="alerta">{{ erro }}</div>{% endif %}

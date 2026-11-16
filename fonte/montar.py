@@ -111,7 +111,10 @@ extra='''
 .medidas .bloco{display:flex;flex-direction:column;gap:10px}.medidas .b{align-self:flex-start}.medidas td .b{padding:4px 10px}
 '''
 API_DEMO="  const api = (url, corpo, formulario) => FAKE(url, corpo, formulario);"
-def pagina(estilos, banner, rodape, scripts, titulo):
+MARCA = '<svg viewBox="0 0 32 32" aria-hidden="true"><rect x="2" y="2" width="28" height="28" rx="7"/><path d="M8 21c0-5 3-7 6-7 1 2 3 3 6 3 3 0 4 2 4 4z"/></svg>'
+MARCA_SITE = '{% set lv = versao_logo() %}{% if lv %}<img class="logo" src="/logo?v={{ lv }}" alt="">{% else %}' + MARCA + '{% endif %}'
+ICONE_SITE = '{% if versao_logo() %}<link rel="icon" href="/logo?v={{ versao_logo() }}">{% endif %}'
+def pagina(estilos, banner, rodape, scripts, titulo, marca=MARCA):
     return f"""<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -122,7 +125,7 @@ def pagina(estilos, banner, rodape, scripts, titulo):
 </head>
 <body data-desfazer="60">
 <aside class="lateral">
-  <a class="marca-site" href="#" data-rota="/"><svg viewBox="0 0 32 32" aria-hidden="true"><rect x="2" y="2" width="28" height="28" rx="7"/><path d="M8 21c0-5 3-7 6-7 1 2 3 3 6 3 3 0 4 2 4 4z"/></svg><span>Menork<small>imagens</small></span></a>
+  <a class="marca-site" href="#" data-rota="/">{marca}<span>Menork<small>imagens</small></span></a>
   <form class="busca" data-busca="1"><svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="9" cy="9" r="6"/><path d="m14 14 4 4"/></svg><input type="search" name="q" placeholder="Buscar" aria-label="Buscar produto, cor, tipo, anúncio ou arquivo"></form>
   <nav>{nav}</nav>
   <div class="rodape-lateral">{rodape}</div>
@@ -151,7 +154,7 @@ site_js='\n'.join(["'use strict';", comuns, open('dados_site.js').read(), telas,
 assert 'FAKE' not in site_js and 'arte(' not in site_js and 'TAREFAS_NOVAS' not in site_js
 open(R+'static/site.js','w').write(site_js)
 open(R+'static/extra.css','w').write(extra.split('\n',3)[3])
-open(R+'templates/app.html','w').write(pagina('<link rel="stylesheet" href="/static/estilo.css?v={{ versao }}">\n<link rel="stylesheet" href="/static/extra.css?v={{ versao }}">', '',
+open(R+'templates/app.html','w').write(pagina(ICONE_SITE + '\n<link rel="stylesheet" href="/static/estilo.css?v={{ versao }}">\n<link rel="stylesheet" href="/static/extra.css?v={{ versao }}">', '',
             '<div class="pulso"><i></i><span>Lendo a pasta de entrada</span></div><a class="sair" href="/sair">Sair</a>',
-            '<script src="/static/site.js?v={{ versao }}"></script>', "Imagens Menork"))
+            '<script src="/static/site.js?v={{ versao }}"></script>', "Imagens Menork", MARCA_SITE))
 print('site', len(site_js))
