@@ -137,7 +137,7 @@ const TELAS = {
     <div class="filtros">${elo('/', 'Todas', 'ficha ' + (!q.produto && !q.so ? 'ativo' : ''))}${sem ? elo('/?so=sem', `Falta classificar (${sem})`, 'ficha ' + (q.so === 'sem' ? 'ativo' : '')) : ''}${comAlerta ? elo('/?so=alerta', `Com alerta (${comAlerta})`, 'ficha ' + (q.so === 'alerta' ? 'ativo' : '')) : ''}
       ${Object.keys(porProd).filter(Boolean).sort().map(p => elo(rota('/', { produto: p }), `${esc(p)} (${porProd[p]})`, 'ficha ' + (q.produto === p ? 'ativo' : ''))).join('')}</div>
     ${bots ? `<p class="faixa-bots">Os bots já reprovaram ${bots} imagem(ns) antes de chegar aqui. ${elo('/erros', 'Ver lista de erros')}</p>` : ''}
-    ${l.length ? `<p class="dica">Clique numa imagem para ver grande ao lado do fundo branco. No visor: <kbd>A</kbd> aprova, <kbd>R</kbd> reprova, <kbd>←</kbd> <kbd>→</kbd> trocam de imagem. Marque várias para decidir em lote.</p>
+    ${l.length ? `<p class="dica">Clique numa imagem para ver grande ao lado do fundo branco. No visor: <kbd>A</kbd> aprova, <kbd>R</kbd> reprova, <kbd>←</kbd> <kbd>→</kbd> trocam de imagem. Para marcar várias, marque a caixinha da primeira; depois é só clicar nas outras imagens.</p>
       <div class="grade" data-some-ao-decidir="1">${ordenar(l).map(cartao).join('')}</div>` : `<div class="vazio"><h2>Nada esperando aprovação</h2><p>Quando o gerador salvar imagens novas na pasta de entrada, elas aparecem aqui sozinhas.</p></div>`}`;
   },
   catalogo(q) {
@@ -440,7 +440,7 @@ document.addEventListener('click', e => {
   const marcados = () => $$('.cartao.marcado:not([hidden])').map(c => +c.dataset.id);
   function atualizarBarra() {
     const b = $('#barra'); if (!b) return;
-    const n = marcados().length; b.hidden = n === 0; $('#barra-qtd').textContent = n;
+    const n = marcados().length; b.hidden = n === 0; document.body.classList.toggle('selecionando', n > 0); $('#barra-qtd').textContent = n;
   }
   document.addEventListener('change', e => {
     if (!e.target.matches('.marca input')) return;
@@ -475,6 +475,10 @@ document.addEventListener('click', e => {
   document.addEventListener('click', e => {
     const c = e.target.closest('.cartao[data-id]');
     if (!c || e.target.closest('.marca')) return;
+    if (marcados().length || e.ctrlKey || e.metaKey || e.shiftKey) {  // selecionando: clicar no cartao marca/desmarca
+      const caixa = $('.marca input', c); caixa.checked = !caixa.checked;
+      c.classList.toggle('marcado', caixa.checked); atualizarBarra(); return;
+    }
     abrir(+c.dataset.id);
   });
   async function abrir(id) {

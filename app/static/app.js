@@ -46,7 +46,7 @@
   const marcados = () => $$('.cartao.marcado:not([hidden])').map(c => +c.dataset.id);
   function atualizarBarra() {
     const b = $('#barra'); if (!b) return;
-    const n = marcados().length; b.hidden = n === 0; $('#barra-qtd').textContent = n;
+    const n = marcados().length; b.hidden = n === 0; document.body.classList.toggle('selecionando', n > 0); $('#barra-qtd').textContent = n;
   }
   document.addEventListener('change', e => {
     if (!e.target.matches('.marca input')) return;
@@ -81,6 +81,10 @@
   document.addEventListener('click', e => {
     const c = e.target.closest('.cartao[data-id]');
     if (!c || e.target.closest('.marca')) return;
+    if (marcados().length || e.ctrlKey || e.metaKey || e.shiftKey) {  // selecionando: clicar no cartao marca/desmarca
+      const caixa = $('.marca input', c); caixa.checked = !caixa.checked;
+      c.classList.toggle('marcado', caixa.checked); atualizarBarra(); return;
+    }
     abrir(+c.dataset.id);
   });
   async function abrir(id) {

@@ -80,6 +80,7 @@ h2 small{font:400 13px var(--corpo);color:var(--fraco)}
 .cartao{background:var(--painel);border:1px solid var(--borda);border-radius:14px;padding:8px;position:relative;cursor:pointer;display:block;transition:border-color .12s,translate .12s,background .12s}
 .cartao:hover{border-color:var(--borda-forte);translate:0 -2px;background:#1e1e20}
 .cartao.marcado{border-color:var(--luz);box-shadow:0 0 0 1px var(--luz)}
+body.selecionando .cartao[data-id]{cursor:copy}body.selecionando .cartao[data-id] .marca{opacity:1}
 .foto{border-radius:8px;overflow:hidden;background:#f6f5f1;aspect-ratio:1}
 .foto img{width:100%;height:100%;object-fit:contain;display:block}
 .sem-foto{display:grid;place-items:center;background:var(--relevo);color:var(--apagado);font-size:13px}
