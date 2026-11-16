@@ -12,12 +12,14 @@ const mandar = (url, corpo) => window.menork.api(url, corpo);
 function faltas(aid) { return (DB.faltas || {})[aid] || { produto: '', itens: [], metaIA: 0, metaCapa: 0, kit: false, tarefa: '', info: 0, tab: 0, capas: { meta: 0, aprovadas: 0, esperando_aprovacao: 0 } }; }
 const PACOTES = aid => (DB.pacotes || {})[aid] || [];
 const PEDIDO = aid => (DB.pedidos || {})[aid];
+const ENVIOS = aid => (DB.envios || {})[aid] || [];
+const INTEG = () => DB.integracao || { nome: 'B2X', url: '', tem_chave: false, rascunho: true };
 const SRV = {
   carregar: async () => {
     const r = await fetch('/api/estado');
     if (r.status === 401) { location.href = '/entrar'; throw new Error('Entre de novo com a senha.'); }
     const e = await r.json();
-    Object.assign(DB, { imgs: e.imgs, anuncios: e.anuncios, links: e.links, cores: e.cores, demandas: e.demandas, faltas: e.faltas, pacotes: e.pacotes, pedidos: e.pedidos });
+    Object.assign(DB, { imgs: e.imgs, anuncios: e.anuncios, links: e.links, cores: e.cores, demandas: e.demandas, faltas: e.faltas, pacotes: e.pacotes, pedidos: e.pedidos, envios: e.envios, integracao: e.integracao });
     for (const k in MEDIDAS) delete MEDIDAS[k];
     Object.assign(MEDIDAS, e.medidas); BOTS = e.bots; CONTAS = e.contas; INFO = e;
     const p = document.querySelector('.pulso'), l = e.leitor || {};
@@ -33,6 +35,9 @@ const SRV = {
   buscarClickup: async () => (await mandar('/api/clickup', {})).msg,
   pacote: async (aid, mk, forcar) => { location.href = `/anuncios/${aid}/zip?mk=${encodeURIComponent(mk)}${forcar ? '&forcar=1' : ''}`; setTimeout(() => window.AO_DESENHAR?.(aid), 2500); },
   copiar: d => mandar('/api/anuncio-copiar', d),
+  salvarIntegracao: d => mandar('/api/integracao', d),
+  testarIntegracao: () => mandar('/api/integracao/testar', {}),
+  enviarSistema: (aid, forcar) => mandar(`/api/anuncios/${aid}/enviar`, { forcar }),
   pedir: async aid => (await mandar('/api/pedido', { an: aid })).texto,
 };
 function PAINEL_EXTRA() {

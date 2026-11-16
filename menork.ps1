@@ -52,6 +52,7 @@ try {
     "status"      { if (-not $Bot) { throw "Diga o bot com -Bot" }; Mostrar (MandarJson "/bot/status" @{ bot = $Bot; status = $Status; detalhe = $Detalhe }) }
     "conta"       { if (-not $Conta) { throw "Diga a conta com -Conta" }; Mostrar (MandarJson "/bot/conta" @{ conta = $Conta; limite = $Limite }) }
     "instrucoes"  { (Get-Content (Join-Path $raiz "INSTRUCOES_GROK_BOT.md") -Raw -Encoding UTF8).Replace("C:\SiteImagensMenork", $raiz) }
+    "enviar-sistema" { if (-not $Anuncio) { throw "Diga o anuncio com -Anuncio" }; Mostrar (MandarJson "/bot/enviar-sistema" @{ anuncio = $Anuncio; bot = $Bot }) }
     "pedidos"     { Mostrar (Pegar "/bot/pedidos") }
     "pedido"      { if (-not $Id -or -not $Status) { throw "Diga -Id e -Status (pego ou feito)" }; Mostrar (MandarJson "/bot/pedido" @{ id = $Id; status = $Status; bot = $Bot }) }
     "demanda"     {
@@ -83,6 +84,7 @@ Comandos (respostas em JSON):
   demanda     -Tarefa "NOME DA TAREFA" -Info "texto do INFO JOAO" [-Pasta "\\TRUENAS\..."] [-Produto CI9] [-Marketplaces SHP,ML]
   pacote      -Anuncio "CI9 unitario" -Destino "C:\pasta" [-Marketplace SHP] [-Bot NOME]   (da ERRO com a lista se faltar algo)
   pedidos                                                   (o que o Menork pediu pelo botao "Pedir ao bot")
+  enviar-sistema -Anuncio "CI9 unitario" [-Bot NOME]         (manda o anuncio completo para o sistema do Menork, ex.: B2X)
   pedido      -Id 3 -Status pego|feito -Bot NOME
 Tipos: fb, kit2_fb, kit3_fb, kit4_fb, ia, informativo, tabela, capa, capa_kit2, capa_kit3, capa_kit4, cena
 "@

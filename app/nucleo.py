@@ -162,6 +162,9 @@ def iniciar_banco():
             CREATE TABLE IF NOT EXISTS pedidos(
               id INTEGER PRIMARY KEY, anuncio_id INTEGER REFERENCES anuncios(id) ON DELETE CASCADE,
               criado_em TEXT, texto TEXT, status TEXT DEFAULT 'aberto', bot TEXT DEFAULT '', atualizado TEXT);
+            CREATE TABLE IF NOT EXISTS envios(
+              id INTEGER PRIMARY KEY, anuncio_id INTEGER REFERENCES anuncios(id) ON DELETE CASCADE,
+              quando TEXT, por TEXT DEFAULT '', ok INTEGER DEFAULT 0, resposta TEXT DEFAULT '', id_externo TEXT DEFAULT '');
             CREATE TABLE IF NOT EXISTS medidas(produto TEXT, pos INTEGER, numero TEXT, cm TEXT);
             CREATE TABLE IF NOT EXISTS bots(nome TEXT PRIMARY KEY COLLATE NOCASE, status TEXT, detalhe TEXT, atualizado TEXT);
             CREATE TABLE IF NOT EXISTS contas(nome TEXT PRIMARY KEY COLLATE NOCASE, limite TEXT DEFAULT '', atualizado TEXT);
@@ -172,7 +175,7 @@ def iniciar_banco():
                               ("preco_antigo", "TEXT DEFAULT ''"), ("descricao", "TEXT DEFAULT ''")],
                  "imagem_anuncio": [("papel", "TEXT DEFAULT ''"), ("posicao", "INTEGER DEFAULT 0")]}
         novas["anuncios"] += [("demanda_id", "INTEGER"), ("meta_ia", "INTEGER"), ("meta_capa", "INTEGER"),
-                              ("familia", "INTEGER")]
+                              ("familia", "INTEGER"), ("id_externo", "TEXT DEFAULT ''")]
         novas["imagens"] = [("motivo", "TEXT DEFAULT ''"), ("origem_decisao", "TEXT DEFAULT ''"), ("alertas", "TEXT DEFAULT ''"),
                             ("ref", "INTEGER DEFAULT 0"), ("conta", "TEXT DEFAULT ''"), ("dhash", "TEXT DEFAULT ''"),
                             ("estilo", "TEXT DEFAULT ''")]

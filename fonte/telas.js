@@ -74,6 +74,7 @@ const TELAS = {
       <button class="b claro" id="montar-auto" title="Preenche capa, fotos e cores vazias com as imagens aprovadas deste anúncio">Montar sozinho</button>
       <button class="b claro" id="copiar-anuncio" data-id="${a.id}" title="Cria cópias deste anúncio ou leva as fotos dele para outros anúncios">Copiar fotos para outros</button>
       <label class="b claro">Enviar imagens<input type="file" id="enviar" data-anuncio="${esc(a.nome)}" multiple accept="image/*" hidden></label>
+      ${INTEG().url ? `<button class="b" id="enviar-sistema" data-id="${a.id}">Enviar para o ${esc(INTEG().nome)}</button>` : ''}
       <button class="b verde" id="baixar-zip" data-id="${a.id}">Exportar</button><button class="b claro" id="excluir-anuncio" data-id="${a.id}">Excluir</button></div></div>
     <div class="montagem"><div class="editor"><div class="bloco faltas" id="faltas"></div><section id="editor" class="editor"></section></div><aside class="previa">
       <div class="troca" role="group" aria-label="Modelo da prévia"><button data-modelo="a" class="ativo">Preço primeiro</button><button data-modelo="b">Título primeiro</button></div>
@@ -84,7 +85,7 @@ const TELAS = {
 async function RENDER() {
   await SRV.carregar();
   const [caminho, busca = ''] = ROTA.split('?'), q = Object.fromEntries(new URLSearchParams(busca)), m = /^\/anuncios\/(\d+)$/.exec(caminho);
-  const nome = m ? 'anuncio' : ({ '/': 'fila', '/catalogo': 'catalogo', '/capas': 'capas', '/anuncios': 'anuncios', '/referencias': 'referencias', '/erros': 'erros', '/painel': 'painel', '/medidas': 'medidas', '/demandas': 'demandas' }[caminho] || 'fila');
+  const nome = m ? 'anuncio' : ({ '/': 'fila', '/catalogo': 'catalogo', '/capas': 'capas', '/anuncios': 'anuncios', '/referencias': 'referencias', '/erros': 'erros', '/painel': 'painel', '/medidas': 'medidas', '/demandas': 'demandas', '/integracoes': 'integracoes' }[caminho] || 'fila');
   window.AO_MUDAR = null;
   document.querySelector('main').innerHTML = TELAS[nome](q, m ? +m[1] : 0);
   document.querySelectorAll('.lateral nav a').forEach(a => a.classList.toggle('ativo', a.dataset.tela === (nome === 'anuncio' ? 'anuncios' : nome)));

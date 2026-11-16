@@ -69,12 +69,14 @@ const mandar = (url, corpo) => window.menork.api(url, corpo);
 function faltas(aid) { return (DB.faltas || {})[aid] || { produto: '', itens: [], metaIA: 0, metaCapa: 0, kit: false, tarefa: '', info: 0, tab: 0, capas: { meta: 0, aprovadas: 0, esperando_aprovacao: 0 } }; }
 const PACOTES = aid => (DB.pacotes || {})[aid] || [];
 const PEDIDO = aid => (DB.pedidos || {})[aid];
+const ENVIOS = aid => (DB.envios || {})[aid] || [];
+const INTEG = () => DB.integracao || { nome: 'B2X', url: '', tem_chave: false, rascunho: true };
 const SRV = {
   carregar: async () => {
     const r = await fetch('/api/estado');
     if (r.status === 401) { location.href = '/entrar'; throw new Error('Entre de novo com a senha.'); }
     const e = await r.json();
-    Object.assign(DB, { imgs: e.imgs, anuncios: e.anuncios, links: e.links, cores: e.cores, demandas: e.demandas, faltas: e.faltas, pacotes: e.pacotes, pedidos: e.pedidos });
+    Object.assign(DB, { imgs: e.imgs, anuncios: e.anuncios, links: e.links, cores: e.cores, demandas: e.demandas, faltas: e.faltas, pacotes: e.pacotes, pedidos: e.pedidos, envios: e.envios, integracao: e.integracao });
     for (const k in MEDIDAS) delete MEDIDAS[k];
     Object.assign(MEDIDAS, e.medidas); BOTS = e.bots; CONTAS = e.contas; INFO = e;
     const p = document.querySelector('.pulso'), l = e.leitor || {};
@@ -90,6 +92,9 @@ const SRV = {
   buscarClickup: async () => (await mandar('/api/clickup', {})).msg,
   pacote: async (aid, mk, forcar) => { location.href = `/anuncios/${aid}/zip?mk=${encodeURIComponent(mk)}${forcar ? '&forcar=1' : ''}`; setTimeout(() => window.AO_DESENHAR?.(aid), 2500); },
   copiar: d => mandar('/api/anuncio-copiar', d),
+  salvarIntegracao: d => mandar('/api/integracao', d),
+  testarIntegracao: () => mandar('/api/integracao/testar', {}),
+  enviarSistema: (aid, forcar) => mandar(`/api/anuncios/${aid}/enviar`, { forcar }),
   pedir: async aid => (await mandar('/api/pedido', { an: aid })).texto,
 };
 function PAINEL_EXTRA() {
@@ -190,6 +195,7 @@ const TELAS = {
       <button class="b claro" id="montar-auto" title="Preenche capa, fotos e cores vazias com as imagens aprovadas deste anúncio">Montar sozinho</button>
       <button class="b claro" id="copiar-anuncio" data-id="${a.id}" title="Cria cópias deste anúncio ou leva as fotos dele para outros anúncios">Copiar fotos para outros</button>
       <label class="b claro">Enviar imagens<input type="file" id="enviar" data-anuncio="${esc(a.nome)}" multiple accept="image/*" hidden></label>
+      ${INTEG().url ? `<button class="b" id="enviar-sistema" data-id="${a.id}">Enviar para o ${esc(INTEG().nome)}</button>` : ''}
       <button class="b verde" id="baixar-zip" data-id="${a.id}">Exportar</button><button class="b claro" id="excluir-anuncio" data-id="${a.id}">Excluir</button></div></div>
     <div class="montagem"><div class="editor"><div class="bloco faltas" id="faltas"></div><section id="editor" class="editor"></section></div><aside class="previa">
       <div class="troca" role="group" aria-label="Modelo da prévia"><button data-modelo="a" class="ativo">Preço primeiro</button><button data-modelo="b">Título primeiro</button></div>
@@ -200,7 +206,7 @@ const TELAS = {
 async function RENDER() {
   await SRV.carregar();
   const [caminho, busca = ''] = ROTA.split('?'), q = Object.fromEntries(new URLSearchParams(busca)), m = /^\/anuncios\/(\d+)$/.exec(caminho);
-  const nome = m ? 'anuncio' : ({ '/': 'fila', '/catalogo': 'catalogo', '/capas': 'capas', '/anuncios': 'anuncios', '/referencias': 'referencias', '/erros': 'erros', '/painel': 'painel', '/medidas': 'medidas', '/demandas': 'demandas' }[caminho] || 'fila');
+  const nome = m ? 'anuncio' : ({ '/': 'fila', '/catalogo': 'catalogo', '/capas': 'capas', '/anuncios': 'anuncios', '/referencias': 'referencias', '/erros': 'erros', '/painel': 'painel', '/medidas': 'medidas', '/demandas': 'demandas', '/integracoes': 'integracoes' }[caminho] || 'fila');
   window.AO_MUDAR = null;
   document.querySelector('main').innerHTML = TELAS[nome](q, m ? +m[1] : 0);
   document.querySelectorAll('.lateral nav a').forEach(a => a.classList.toggle('ativo', a.dataset.tela === (nome === 'anuncio' ? 'anuncios' : nome)));
@@ -294,6 +300,7 @@ window.AO_DESENHAR = async aid => {
     <div class="metas">${f.kit ? '' : `<label>Fotos IA por cor <input type="number" min="0" max="30" data-meta="ia" data-an="${aid}" value="${f.metaIA}"></label>`}<label>Capas a produzir <input type="number" min="0" max="40" data-meta="capa" data-an="${aid}" value="${f.metaCapa}"></label>${f.kit ? '' : `<span class="pequeno">Por cor: ${f.info} informativos e ${f.tab} tabela. Só contam as imagens colocadas nas fotos do anúncio.</span>`}</div>` +
     (f.itens.length ? `<ul>${f.itens.map(t => `<li>${esc(t)}</li>`).join('')}</ul><div class="acoes pedir"><button class="b" id="pedir-bot" data-an="${aid}">Pedir ao bot o que falta</button><span class="pequeno">${pedido}</span></div>` : `<p class="completo">Nada faltando. O pacote deste anúncio pode ser montado.</p>${pedido ? `<p class="pequeno">${pedido}</p>` : ''}`) +
     `<p class="pequeno linha-capas">Capas deste anúncio: ${f.capas.aprovadas} aprovada(s) de ${f.capas.meta} pedida(s)${f.capas.esperando_aprovacao ? `, ${f.capas.esperando_aprovacao} esperando aprovação` : ''}.</p>` +
+    (ENVIOS(aid).length ? `<h3>Envios para o ${esc(INTEG().nome)}</h3><ul class="envios-feitos">${ENVIOS(aid).map(v => `<li><b class="${v.ok ? 'ok-mini' : 'alerta-mini'}">${v.ok ? 'Enviado' : 'Falhou'}</b> em ${hora(v.quando)} por ${esc(v.por)}${v.id ? ` · código no ${esc(INTEG().nome)}: ${esc(v.id)}` : ''}${v.resposta ? ` · ${esc(v.resposta)}` : ''}</li>`).join('')}</ul>` : '') +
     (pk.length ? `<h3>Pacotes montados</h3><ul class="pacotes-feitos">${pk.map(p => `<li><b class="${p.status === 'completo' ? 'ok-mini' : 'alerta-mini'}">${p.status === 'completo' ? 'Completo' : 'Incompleto'}</b> Montado em ${hora(p.quando)} por ${esc(p.por)}${p.mk ? ' para ' + esc(MKT[p.mk] || p.mk) : ''}, ${p.arquivos} arquivo(s).${p.tem_zip ? ` <a href="/pacotes/${p.id}/zip">Abrir o ZIP guardado</a>` : ''}</li>`).join('')}</ul>` : '');
 };
 document.addEventListener('click', async e => { const b = e.target.closest('#pedir-bot'); if (!b) return; const aid = +b.dataset.an;
@@ -340,6 +347,25 @@ document.addEventListener('submit', async e => {
   } catch (err) { window.menork.aviso(err.message); }
 });
 
+// ---- enviar para o sistema do usuario (B2X)
+document.addEventListener('click', async e => {
+  const b = e.target.closest('#enviar-sistema'); if (!b) return; const aid = +b.dataset.id, nome = INTEG().nome, pend = faltas(aid).itens;
+  if (pend.length && !b.dataset.forcar) {
+    abrirJanela(`<h2>Enviar ao ${esc(nome)} incompleto?</h2><div class="nota ruim"><b>O anúncio ainda tem pendências</b>${pend.map(t => `<span>${esc(t)}</span>`).join('')}</div>
+      <p class="pequeno">Os bots só conseguem enviar anúncios completos. Você pode enviar assim mesmo${INTEG().rascunho ? ', e ele entra como rascunho' : ''}.</p>
+      <div class="acoes"><button class="b" data-enviar-forcado="${aid}">Enviar mesmo assim</button><button class="b claro" data-fechar>Cancelar</button></div>`);
+    return;
+  }
+  window.menork.aviso(`Enviando ao ${nome}…`, null, null, 120);
+  try { const r = await SRV.enviarSistema(aid, false); window.menork.aviso(r.msg, null, null, 10); window.AO_DESENHAR(aid); } catch (err) { window.menork.aviso(err.message, null, null, 15); window.AO_DESENHAR(aid); }
+});
+document.addEventListener('click', async e => {
+  const b = e.target.closest('[data-enviar-forcado]'); if (!b) return; const aid = +b.dataset.enviarForcado; fecharJanela();
+  window.menork.aviso(`Enviando ao ${INTEG().nome}…`, null, null, 120);
+  try { const r = await SRV.enviarSistema(aid, true); window.menork.aviso(r.msg, null, null, 10); } catch (err) { window.menork.aviso(err.message, null, null, 15); }
+  window.AO_DESENHAR(aid);
+});
+
 // ---- exportar por marketplace
 function EXPORTAR(aid) {
   const m = montagem(aid), fotos = [m.capa, ...m.galeria].filter(Boolean), base = m.anuncio.nome.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').replace(/[^A-Za-z0-9]+/g, '-').toLowerCase();
@@ -367,8 +393,35 @@ document.addEventListener('click', e => { if (!e.target.closest('#buscar-clickup
   window.menork.aviso('Lendo a lista DEMANDAS…', null, null, 60);
   SRV.buscarClickup().then(msg => RENDER().then(() => window.menork.aviso(msg, null, null, 9))).catch(err => window.menork.aviso(err.message, null, null, 12)); });
 
+document.addEventListener('submit', async e => {
+  const f = e.target; if (f.id !== 'form-integ') return; e.preventDefault();
+  try { await SRV.salvarIntegracao({ nome: f.nome.value, url: f.url.value, chave: f.chave.value, rascunho: f.rascunho.checked }); await RENDER(); window.menork.aviso('Integração salva.'); } catch (err) { window.menork.aviso(err.message, null, null, 10); }
+});
+document.addEventListener('click', async e => {
+  if (e.target.closest('#testar-integ')) { window.menork.aviso('Testando a conexão…', null, null, 30); try { const r = await SRV.testarIntegracao(); window.menork.aviso(r.msg, null, null, 12); } catch (err) { window.menork.aviso(err.message, null, null, 12); } }
+  const ap = e.target.closest('#apagar-chave'); if (ap) { if (!ap.dataset.ok) { ap.dataset.ok = 1; ap.textContent = 'Confirmar: apagar a chave'; ap.classList.add('vermelho'); return; } await SRV.salvarIntegracao({ ...INTEG(), chave: '', apagar_chave: true }); await RENDER(); window.menork.aviso('Chave apagada.'); }
+});
+
 // ---- telas novas
 Object.assign(TELAS, {
+  integracoes() {
+    const i = INTEG();
+    return `<div class="cabeca"><h1>Integrações <small>ligue o site ao seu sistema para enviar anúncios prontos</small></h1></div>
+    <div class="bloco"><h2>${esc(i.nome)} <small>${i.url && i.tem_chave ? 'configurado' : 'ainda não configurado'}</small></h2>
+      <form class="integ-form" id="form-integ">
+        <label>Nome do sistema<input type="text" name="nome" value="${esc(i.nome)}" maxlength="30"></label>
+        <label>Endereço da API<input type="url" name="url" value="${esc(i.url)}" placeholder="https://seu-sistema.com.br/api"></label>
+        <label class="largo">Chave da API ${i.tem_chave ? '<span class="ok-mini">· chave salva (por segurança ela não aparece)</span>' : ''}<input type="password" name="chave" autocomplete="off" placeholder="${i.tem_chave ? 'deixe vazio para manter a chave salva' : 'cole aqui a chave gerada no seu sistema'}"></label>
+        <label class="linha largo"><input type="checkbox" name="rascunho" ${i.rascunho ? 'checked' : ''}> Mandar como rascunho (o anúncio entra no sistema sem ser publicado)</label>
+        <div class="acoes largo"><button class="b">Salvar</button><button type="button" class="b claro" id="testar-integ">Testar conexão</button>${i.tem_chave ? '<button type="button" class="b claro" id="apagar-chave">Apagar a chave</button>' : ''}</div>
+      </form></div>
+    <div class="bloco"><h2>Como funciona</h2><ul class="envios-feitos">
+      <li>Dentro de cada anúncio aparece o botão <b>Enviar para o ${esc(i.nome)}</b>. Ele manda título, preço, descrição, as fotos na ordem (a 1 é a capa), as cores e os marketplaces da tarefa, com os arquivos das imagens junto.</li>
+      <li>Se o anúncio já foi enviado antes, o mesmo botão <b>atualiza</b> o anúncio lá, em vez de criar outro.</li>
+      <li>Os bots também podem enviar, com <code>menork.ps1 enviar-sistema</code>, mas só anúncios completos.</li>
+      <li>A chave fica guardada só no seu PC. Ela não vai para o GitHub nem aparece na tela.</li>
+      <li>O seu sistema precisa ter dois endereços para receber: <code>/menork/ping</code> (teste) e <code>/menork/anuncios</code> (receber o anúncio). O formato está no arquivo <b>INTEGRACAO.md</b>, na pasta do site.</li></ul></div>`;
+  },
   demandas() {
     const campo = (d, chave, rotulo, valor) => `<label>${rotulo}<input type="number" min="0" max="40" data-dem="${d.id}" data-meta="${chave}" value="${valor}"></label>`;
     return `<div class="cabeca"><h1>Demandas <small>${DB.demandas.length} tarefa(s) do ClickUp viraram cadastro</small></h1><div class="acoes"><button class="b claro" id="buscar-clickup">Buscar tarefas no ClickUp</button></div></div>

@@ -136,6 +136,8 @@ function faltas(aid) {
 const GRANDE = IMG;
 // Na demonstracao as mudancas ficam so na memoria. No site de verdade, este mesmo objeto fala com o servidor.
 const PACOTES = () => [];
+DB.integracao = { nome: 'B2X', url: 'https://exemplo-b2x.com.br/api', tem_chave: true, rascunho: true }; DB.envios = {};
+const INTEG = () => DB.integracao, ENVIOS = aid => DB.envios[aid] || [];
 const PEDIDO = aid => (DB.pedidos ||= {})[aid];
 const SRV = {
   carregar: async () => {},
@@ -150,6 +152,9 @@ const SRV = {
       const nv = novoAnuncio(`${base} ${String(n).padStart(2, '0')}`, { formato: a.formato, titulo: d.titulo ? a.titulo : '', preco: a.preco, preco_antigo: a.preco_antigo, descricao: a.descricao, demanda: a.demanda, familia: fam, meta_ia: a.meta_ia, meta_capa: a.meta_capa });
       leva(nv.id); novos.push(nv.nome); n++; }
     return { novos, atualizados: d.destinos.filter(x => x !== d.id).length }; },
+  salvarIntegracao: async d => { Object.assign(DB.integracao, { nome: d.nome || 'B2X', url: d.url, rascunho: d.rascunho }); if (d.chave) DB.integracao.tem_chave = true; if (d.apagar_chave) DB.integracao.tem_chave = false; },
+  testarIntegracao: async () => ({ msg: 'Na demonstração não há sistema de verdade para testar.' }),
+  enviarSistema: async aid => { (DB.envios[aid] ||= []).unshift({ quando: agora(), por: 'você', ok: true, id: 'B2X-' + (1000 + aid) }); return { msg: 'Na demonstração nada é enviado de verdade.' }; },
   pedir: async aid => { const a = DB.anuncios.find(x => x.id === aid), f = faltas(aid), n = Object.keys(DB.pedidos ||= {}).length + 1;
     const texto = [`PEDIDO DO MENORK nº ${n}: completar o anúncio "${a.nome}"${f.produto ? ' (produto ' + f.produto + ')' : ''}`, 'O que falta:', ...f.itens.map(t => '- ' + t), '', 'Mande cada imagem com menork.ps1 enviar, dizendo -Produto, -Cor, -Tipo e -Anuncio.'].join('\n');
     DB.pedidos[aid] = { id: n, status: 'aberto', bot: '', quando: agora(), atualizado: agora(), texto }; return texto; },

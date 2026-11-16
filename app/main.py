@@ -2,6 +2,7 @@
 import io
 import json
 import re
+import secrets
 import tempfile
 import time
 import zipfile
@@ -185,6 +186,12 @@ def estado(request: Request):
             if len(lista) < 5:
                 lista.append({"id": p["id"], "mk": p["marketplace"], "quando": p["criado_em"], "por": p["por"], "status": p["status"],
                               "arquivos": len(json.loads(p["arquivos"] or "[]")), "tem_zip": bool(p["zip"])})
+        envios = {}
+        for p in c.execute("SELECT * FROM envios ORDER BY id DESC"):
+            lista = envios.setdefault(p["anuncio_id"], [])
+            if len(lista) < 5:
+                lista.append({"quando": p["quando"], "por": p["por"], "ok": bool(p["ok"]), "id": p["id_externo"],
+                              "resposta": p["resposta"][:200] if not p["ok"] else ""})
         pedidos = {}
         for p in c.execute("SELECT * FROM pedidos WHERE status<>'substituido' ORDER BY id"):
             pedidos[p["anuncio_id"]] = {"id": p["id"], "status": p["status"], "bot": p["bot"], "quando": p["criado_em"],
@@ -200,7 +207,7 @@ def estado(request: Request):
                   for nome in sorted(set(usadas) | set(limites))]
     porta = n.CFG["porta"]
     return {"imgs": imgs, "anuncios": anuncios, "links": links, "cores": cores, "demandas": demandas, "medidas": medidas,
-            "bots": bots, "contas": contas, "faltas": faltas, "pacotes": pacotes, "pedidos": pedidos, "versao": atu.situacao(), "leitor": n.estado, "clickup": bool(str(n.CFG["clickup_token"]).strip()),
+            "bots": bots, "contas": contas, "faltas": faltas, "pacotes": pacotes, "pedidos": pedidos, "envios": envios, "integracao": integracao_ver(), "versao": atu.situacao(), "leitor": n.estado, "clickup": bool(str(n.CFG["clickup_token"]).strip()),
             "bot": {"endereco": f"http://localhost:{porta}", "chave": n.chave_bots()}}
 
 
@@ -714,6 +721,143 @@ async def bot_pedido(request: Request):
         c.execute("UPDATE pedidos SET status=?, bot=?, atualizado=? WHERE id=?",
                   (status, str(d.get("bot", "")).strip() or p["bot"], n.agora(), p["id"]))
         return {"ok": True, "ainda_falta": [i["texto"] for i in checagem(c, p["anuncio_id"])["faltas"]]}
+
+
+# ------------------------------------- integracao com o sistema do usuario (B2X)
+# A chave fica so no banco local (dados/menork.db), nunca no repositorio. Formato do envio: INTEGRACAO.md
+def integ():
+    return {"nome": n.ajuste("integ_nome") or "B2X", "url": (n.ajuste("integ_url") or "").rstrip("/"),
+            "chave": n.ajuste("integ_chave") or "", "rascunho": (n.ajuste("integ_rascunho") or "1") == "1"}
+
+
+def _chamar(metodo, url, chave, corpo=None, tipo=None, timeout=60):
+    import urllib.error
+    import urllib.request
+    cab = {"Authorization": f"Bearer {chave}", "User-Agent": "site-imagens-menork", "Accept": "application/json"}
+    if tipo:
+        cab["Content-Type"] = tipo
+    req = urllib.request.Request(url, data=corpo, headers=cab, method=metodo)
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            return r.status, r.read().decode("utf-8", "replace")
+    except urllib.error.HTTPError as e:
+        return e.code, e.read().decode("utf-8", "replace")
+    except Exception as e:
+        raise HTTPException(502, f"Não consegui falar com o {integ()['nome']}: {e}")
+
+
+def _multipart(dados, arquivos):
+    limite = "menork" + secrets.token_hex(12)
+    partes = io.BytesIO()
+    escrever = lambda t: partes.write(t.encode("utf-8"))
+    escrever(f'--{limite}\r\nContent-Disposition: form-data; name="dados"\r\n'
+             f'Content-Type: application/json; charset=utf-8\r\n\r\n')
+    escrever(json.dumps(dados, ensure_ascii=False))
+    escrever("\r\n")
+    for nome, caminho in arquivos:
+        tipo = {".png": "image/png", ".webp": "image/webp"}.get(Path(nome).suffix.lower(), "image/jpeg")
+        escrever(f'--{limite}\r\nContent-Disposition: form-data; name="arquivos"; filename="{nome}"\r\n'
+                 f"Content-Type: {tipo}\r\n\r\n")
+        partes.write(Path(caminho).read_bytes())
+        escrever("\r\n")
+    escrever(f"--{limite}--\r\n")
+    return partes.getvalue(), f"multipart/form-data; boundary={limite}"
+
+
+@app.get("/api/integracao")
+def integracao_ver():
+    i = integ()
+    return {"nome": i["nome"], "url": i["url"], "tem_chave": bool(i["chave"]), "rascunho": i["rascunho"]}
+
+
+@app.post("/api/integracao")
+async def integracao_salvar(request: Request):
+    d = await request.json()
+    url = str(d.get("url", "")).strip().rstrip("/")
+    if url and not re.match(r"^https?://", url):
+        raise HTTPException(400, "O endereço precisa começar com https:// (ou http://).")
+    n.gravar_ajuste("integ_nome", (str(d.get("nome", "")).strip() or "B2X")[:30])
+    n.gravar_ajuste("integ_url", url)
+    n.gravar_ajuste("integ_rascunho", "1" if d.get("rascunho", True) else "0")
+    if str(d.get("chave", "")).strip():
+        n.gravar_ajuste("integ_chave", str(d["chave"]).strip())
+    if d.get("apagar_chave"):
+        n.gravar_ajuste("integ_chave", "")
+    return integracao_ver()
+
+
+@app.post("/api/integracao/testar")
+def integracao_testar():
+    i = integ()
+    if not i["url"] or not i["chave"]:
+        raise HTTPException(400, "Preencha o endereço e a chave e salve antes de testar.")
+    status, texto = _chamar("GET", i["url"] + "/menork/ping", i["chave"], timeout=20)
+    if 200 <= status < 300:
+        return {"ok": True, "msg": f"Conexão com o {i['nome']} funcionando."}
+    dica = {401: "a chave foi recusada", 403: "a chave não tem permissão", 404: "o endereço /menork/ping não existe lá"}
+    return {"ok": False, "msg": f"O {i['nome']} respondeu {status}: {dica.get(status, texto[:160] or 'erro')}."}
+
+
+def enviar_anuncio(aid, por="você", forcar=False):
+    i = integ()
+    if not i["url"] or not i["chave"]:
+        raise HTTPException(400, f"Configure o {i['nome']} em Integrações antes de enviar.")
+    with n.con() as c:
+        m = montagem(c, aid)
+        chk = checagem(c, aid, m)
+        dem = c.execute("SELECT * FROM demandas WHERE id=(SELECT demanda_id FROM anuncios WHERE id=?)", (aid,)).fetchone()
+        id_externo = c.execute("SELECT id_externo FROM anuncios WHERE id=?", (aid,)).fetchone()[0] or ""
+    if not chk["completo"] and not forcar:
+        raise HTTPException(409, {"erro": f"Anúncio incompleto. Nada foi enviado ao {i['nome']}.",
+                                  "faltas": [x["texto"] for x in chk["faltas"]]})
+    L, a = m["linhas"], m["anuncio"]
+    ordem = ([L["capa"]] if L["capa"] else []) + L["galeria"]
+    arquivos, fotos, cores = [], [], []
+    for pos, r in enumerate(ordem, 1):
+        nome = f"{pos:02d}{'_capa' if L['capa'] and pos == 1 else ''}{Path(r['arquivo']).suffix.lower()}"
+        arquivos.append((nome, n.caminho_imagem(r)))
+        fotos.append({"posicao": pos, "capa": bool(L["capa"]) and pos == 1, "arquivo": nome, "tipo": r["tipo"], "cor": r["cor"]})
+    for r in L["cores"]:
+        nome = f"cor_{_pedaco(r['nome_cor']).lower()}{Path(r['arquivo']).suffix.lower()}"
+        arquivos.append((nome, n.caminho_imagem(r)))
+        cores.append({"nome": r["nome_cor"], "arquivo": nome})
+    dados = {"versao": 1, "origem": "site-imagens-menork", "id_menork": aid, "id_externo": id_externo,
+             "rascunho": i["rascunho"], "nome": a["nome"], "formato": a["formato"], "produto": m["produto"],
+             "titulo": a["titulo"], "preco": a["preco"], "preco_antigo": a["preco_antigo"], "descricao": a["descricao"],
+             "marketplaces": json.loads(dem["marketplaces"] or "[]") if dem else [],
+             "tarefa_clickup": dem["url"] if dem else "", "completo": chk["completo"], "fotos": fotos, "cores": cores}
+    corpo, tipo = _multipart(dados, arquivos)
+    status, texto = _chamar("POST", i["url"] + "/menork/anuncios", i["chave"], corpo, tipo, timeout=180)
+    try:
+        resp = json.loads(texto) if texto else {}
+    except ValueError:
+        resp = {}
+    ok = 200 <= status < 300
+    novo_id = str(resp.get("id") or resp.get("id_externo") or "") if ok else ""
+    with n.con() as c:
+        if novo_id:
+            c.execute("UPDATE anuncios SET id_externo=? WHERE id=?", (novo_id, aid))
+        c.execute("INSERT INTO envios(anuncio_id,quando,por,ok,resposta,id_externo) VALUES(?,?,?,?,?,?)",
+                  (aid, n.agora(), por, int(ok), (texto or "")[:500], novo_id or id_externo))
+    if not ok:
+        raise HTTPException(502, f"O {i['nome']} recusou o envio ({status}): {texto[:200]}")
+    acao = "atualizado" if id_externo else "criado"
+    return {"ok": True, "id_externo": novo_id or id_externo,
+            "msg": f"Anúncio {acao} no {i['nome']}" + (" como rascunho" if i["rascunho"] else "") + "."}
+
+
+@app.post("/api/anuncios/{aid}/enviar")
+async def enviar(aid: int, request: Request):
+    d = await request.json()
+    return enviar_anuncio(aid, "você", bool(d.get("forcar")))
+
+
+@app.post("/bot/enviar-sistema")
+async def bot_enviar_sistema(request: Request):
+    d = await request.json()
+    with n.con() as c:
+        aid = _anuncio_por_nome(c, str(d.get("anuncio", "")))
+    return enviar_anuncio(aid, (str(d.get("bot", "")) or "bot").strip())  # bot nao pode forcar envio incompleto
 
 
 @app.get("/pacotes/{pid}/zip")
