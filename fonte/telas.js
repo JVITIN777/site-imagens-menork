@@ -85,7 +85,7 @@ const TELAS = {
 async function RENDER() {
   await SRV.carregar();
   const [caminho, busca = ''] = ROTA.split('?'), q = Object.fromEntries(new URLSearchParams(busca)), m = /^\/anuncios\/(\d+)$/.exec(caminho);
-  const nome = m ? 'anuncio' : ({ '/': 'fila', '/catalogo': 'catalogo', '/capas': 'capas', '/anuncios': 'anuncios', '/referencias': 'referencias', '/erros': 'erros', '/painel': 'painel', '/medidas': 'medidas', '/demandas': 'demandas', '/integracoes': 'integracoes', '/lojas': 'lojas' }[caminho] || 'fila');
+  const nome = m ? 'anuncio' : ({ '/': 'fila', '/catalogo': 'catalogo', '/capas': 'capas', '/anuncios': 'anuncios', '/referencias': 'referencias', '/erros': 'erros', '/painel': 'painel', '/medidas': 'medidas', '/demandas': 'demandas', '/integracoes': 'integracoes' }[caminho] || 'fila');
   window.AO_MUDAR = null;
   document.querySelector('main').innerHTML = TELAS[nome](q, m ? +m[1] : 0);
   document.querySelectorAll('.lateral nav a').forEach(a => a.classList.toggle('ativo', a.dataset.tela === (nome === 'anuncio' ? 'anuncios' : nome)));
