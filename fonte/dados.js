@@ -96,7 +96,9 @@ function novaDemanda(o) {
   [['CI9', 'Preto', 'ia', 'Sola errada', 'bot conferente', 2], ['CI9', 'Rosa', 'ia', 'Cara de IA', 'bot conferente', 3], ['SD2', 'Verde', 'ia', 'Sem logo ou logo errada', 'bot conferente', 1], ['CI9', 'Rosa', 'informativo', 'Layout inventado', 'você', 1], ['SD2', 'Branco', 'ia', 'Produto pequeno ou longe', 'você', 4], ['CI9', 'Preto', 'ia', 'Produto diferente do fundo branco', 'bot conferente', 6]]
     .forEach(([produto, cor, tipo, motivo, origem, v]) => Object.assign(nova({ produto, cor, tipo, v, status: 'reprovada' }), { motivo, origem }));
   DB.imgs.filter(i => i.status === 'aprovada' && ['informativo', 'tabela', 'capa'].includes(i.tipo) && i.produto === 'CI9').forEach(i => i.ref = true);
-  [0, 1, 3].forEach(v => nova({ tipo: 'cena', v, status: 'aprovada', ref: true, nome_original: 'cena_moca_0' + (v + 1) + '.png' }));
+  [0, 1, 3].forEach((v, k) => nova({ tipo: 'cena', v, status: 'aprovada', ref: true, estilo: ['Academia', 'Street', 'Academia'][k], nome_original: 'cena_moca_0' + (v + 1) + '.png' }));
+  DB.imgs.filter(i => i.ref && i.tipo === 'informativo').forEach((i, k) => i.estilo = ['Academia', 'Street'][k % 2]);
+  DB.imgs.filter(i => i.status === 'aprovada' && i.tipo === 'ia').slice(0, 3).forEach((i, k) => { i.ref = true; i.estilo = ['Street', 'Sandália', ''][k]; });
 })();
 const demandaDe = a => DB.demandas.find(d => d.id === a.demanda);
 function metasDe(a) {
@@ -190,6 +192,7 @@ function acao(d) {
   else if (d.acao === 'reprovar') L.forEach(i => { i.antes = i.status; i.status = 'reprovada'; i.motivo = d.motivo || 'Sem motivo'; i.origem = 'você'; });
   else if (d.acao === 'desfazer') L.forEach(i => { i.status = i.produto && i.tipo ? 'conferencia' : 'gerada'; delete i.motivo; });
   else if (d.acao === 'referencia') L.forEach(i => { i.ref = !i.ref; });
+  else if (d.acao === 'estilo') L.forEach(i => { const e = String(d.estilo || '').trim().replace(/\s+/g, ' '); i.estilo = e ? e[0].toUpperCase() + e.slice(1) : ''; });
   else if (d.acao === 'classificar') {
     L.forEach(i => { for (const c of ['produto', 'cor', 'tipo']) if (c in d && (d[c] || d.limpar)) i[c] = c === 'produto' ? d[c].trim().toUpperCase() : d[c].trim(); if (i.status !== 'aprovada' && i.status !== 'reprovada') i.status = i.produto && i.tipo ? 'conferencia' : 'gerada'; });
     if ((d.anuncio || '').trim()) { const a = obterAnuncio(d.anuncio); ids.forEach(i => ligar(i, a.id)); }

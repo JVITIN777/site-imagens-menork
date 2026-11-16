@@ -8,7 +8,7 @@ param(
   [string]$Arquivo, [string]$Produto, [string]$Cor, [string]$Tipo, [string]$Anuncio, [string]$Conta,
   [string[]]$Alertas, [switch]$Conferida, [string]$Motivo, [string]$Bot, [string]$Status, [string]$Detalhe,
   [string]$Limite, [string]$Marketplace, [string]$Destino, [string]$Tarefa, [string]$Info, [string]$Pasta,
-  [string[]]$Marketplaces, [int]$Max = 5, [int]$Id
+  [string[]]$Marketplaces, [int]$Max = 5, [int]$Id, [string]$Estilo
 )
 $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"
@@ -44,7 +44,7 @@ try {
   switch ($Comando.ToLower()) {
     "enviar"      { Mostrar (MandarArquivo "/bot/imagem" @{}) }
     "reprovada"   { if (-not $Motivo) { throw "Diga o motivo com -Motivo" }; Mostrar (MandarArquivo "/bot/reprovada" @{ motivo = $Motivo }) }
-    "referencias" { Mostrar (Pegar "/bot/referencias" @{ tipo = $Tipo; produto = $Produto; max = $Max }) }
+    "referencias" { Mostrar (Pegar "/bot/referencias" @{ tipo = $Tipo; produto = $Produto; estilo = $Estilo; max = $Max }) }
     "erros"       { Mostrar (Pegar "/bot/erros" @{ produto = $Produto }) }
     "anuncios"    { Mostrar (Pegar "/bot/anuncios") }
     "faltas"      { if (-not $Anuncio) { throw "Diga o anuncio com -Anuncio" }; Mostrar (Pegar "/bot/faltas" @{ anuncio = $Anuncio }) }
@@ -73,7 +73,7 @@ Comandos (respostas em JSON):
   instrucoes                                                (mostra as regras atuais; rode no comeco de cada rodada)
   enviar      -Arquivo <png/jpg> -Produto CI9 -Cor Caramelo -Tipo ia [-Anuncio "CI9 unitario"] [-Conta "Conta 1"] [-Conferida] [-Alertas "Sola diferente","Sem logo"]
   reprovada   -Arquivo <png/jpg> -Motivo "Sola errada" -Bot CONFERENTE [-Produto -Cor -Tipo -Conta]
-  referencias -Tipo informativo|tabela|capa|cena [-Produto CI9] [-Max 5]
+  referencias -Tipo informativo|ia|capa|cena|tabela [-Estilo Academia] [-Produto CI9] [-Max 5]
   erros       [-Produto CI9]
   anuncios
   faltas      -Anuncio "CI9 unitario"

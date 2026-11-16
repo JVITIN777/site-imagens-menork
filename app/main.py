@@ -161,7 +161,7 @@ def estado(request: Request):
         imgs = [{"id": l["id"], "produto": l["produto"], "cor": l["cor"], "tipo": l["tipo"], "status": l["status"],
                  "nome_original": l["nome_original"], "largura": l["largura"], "altura": l["altura"], "criado_em": l["criado_em"],
                  "motivo": l["motivo"] or "", "origem": l["origem_decisao"] or "", "alertas": _alertas(l["alertas"]),
-                 "ref": bool(l["ref"]), "parecida": parecidas.get(l["id"]),
+                 "ref": bool(l["ref"]), "estilo": l["estilo"] or "", "parecida": parecidas.get(l["id"]),
                  "caminho": str(n.caminho_imagem(l)) if l["arquivo"] else ""} for l in linhas]
         anuncios = [{"id": a["id"], "nome": a["nome"], "formato": a["formato"], "titulo": a["titulo"], "preco": a["preco"],
                      "preco_antigo": a["preco_antigo"], "descricao": a["descricao"], "demanda": a["demanda_id"],
@@ -731,17 +731,23 @@ async def bot_reprovada(request: Request):
 
 
 @app.get("/bot/referencias")
-def bot_referencias(tipo: str = "", produto: str = "", max: int = 5):
+def bot_referencias(tipo: str = "", produto: str = "", estilo: str = "", max: int = 5):
     q, args = "SELECT * FROM imagens WHERE ref=1 AND status='aprovada' AND arquivo<>''", []
     if tipo:
         q += " AND tipo LIKE ?"
         args.append(tipo + "%" if tipo == "capa" else tipo)
+    if estilo.strip():
+        q += " AND lower(estilo)=lower(?)"
+        args.append(" ".join(estilo.split()))
     with n.con() as c:
         linhas = c.execute(q + " ORDER BY (produto=?) DESC, id DESC", [*args, produto.strip().upper()]).fetchall()
     linhas = linhas[: min(5, max)]
-    arquivos = [{"id": l["id"], "tipo": l["tipo"], "produto": l["produto"], "cor": l["cor"],
+    arquivos = [{"id": l["id"], "tipo": l["tipo"], "estilo": l["estilo"] or "", "produto": l["produto"], "cor": l["cor"],
                  "caminho": str(n.caminho_imagem(l))} for l in linhas]
-    return {"arquivos": arquivos,
+    with n.con() as c:
+        estilos = [r[0] for r in c.execute("SELECT DISTINCT estilo FROM imagens WHERE ref=1 AND status='aprovada' "
+                                           "AND estilo<>'' ORDER BY 1")]
+    return {"arquivos": arquivos, "estilos_existentes": estilos,
             "comando": "-Referencias " + ",".join(f'"{a["caminho"]}"' for a in arquivos) if arquivos else ""}
 
 
@@ -950,6 +956,10 @@ async def acao(request: Request):
                 n.vincular(c, ids, aid)
         elif oque == "referencia":
             c.execute(f"UPDATE imagens SET ref=1-ref WHERE id IN ({marcas}) AND status='aprovada'", ids)
+        elif oque == "estilo":
+            estilo = " ".join(str(d.get("estilo", "")).split())[:40]
+            estilo = estilo[:1].upper() + estilo[1:]
+            c.execute(f"UPDATE imagens SET estilo=? WHERE id IN ({marcas})", [estilo, *ids])
         elif oque == "desvincular":
             c.execute(f"DELETE FROM imagem_anuncio WHERE anuncio_id=? AND imagem_id IN ({marcas})",
                       [int(d["anuncio_id"]), *ids])

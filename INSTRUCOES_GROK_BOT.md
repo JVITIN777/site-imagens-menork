@@ -41,9 +41,11 @@ menork.ps1 pedido -Id 3 -Status feito -Bot "GERADOR DE IMAGEM"
 
 **Pegar as referências para o gerar.ps1**
 ```
-menork.ps1 referencias -Tipo informativo -Produto CI9
+menork.ps1 referencias -Tipo informativo -Estilo Academia -Produto CI9
 ```
-Vem o campo `comando`, já no formato `-Referencias "caminho1","caminho2"` (no máximo 5 arquivos, caminho de cada arquivo, nunca de pasta). Use exatamente esse trecho no `gerar.ps1`. Tipos de referência: `informativo`, `tabela`, `capa`, `cena`.
+Vem o campo `comando`, já no formato `-Referencias "caminho1","caminho2"` (no máximo 5 arquivos, caminho de cada arquivo, nunca de pasta). Use exatamente esse trecho no `gerar.ps1`.
+Tipos de referência: `informativo`, `ia`, `capa`, `cena`, `tabela`.
+Informativos, fotos IA e cenas são separados por **estilo** (por exemplo Academia, Street, Sandália). Use o `-Estilo` que combina com o produto que você vai gerar; a resposta traz em `estilos_existentes` a lista de estilos cadastrados. Se não houver referência do estilo certo, rode sem `-Estilo` e avise o Menork.
 
 **Ver os erros que o Menork já reprovou**
 ```
