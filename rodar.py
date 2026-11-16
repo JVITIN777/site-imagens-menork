@@ -34,6 +34,16 @@ if __name__ == "__main__":
     elif "--atualizar" in sys.argv:
         buscar_atualizacao()
     else:
+        import socket
+        try:
+            porta_ja = json.loads((AQUI / "config.json").read_text(encoding="utf-8-sig")).get("porta", 8765)
+        except (OSError, ValueError):
+            porta_ja = 8765
+        with socket.socket() as teste:
+            teste.settimeout(1)
+            if teste.connect_ex(("127.0.0.1", int(porta_ja))) == 0:
+                print(f"O site ja esta ligado em http://localhost:{porta_ja} . Nao e preciso ligar de novo.", flush=True)
+                sys.exit(0)
         # Cada etapa roda num processo novo, para sempre usar os arquivos mais recentes.
         eu = [sys.executable, str(AQUI / "rodar.py")]
         while True:

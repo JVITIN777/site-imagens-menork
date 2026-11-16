@@ -34,6 +34,9 @@
 .pacotes{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px}
 .pacotes>div{border:1px solid var(--borda);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:10px}
 .pacotes ol{margin:0;padding-left:22px;font-size:13px;display:flex;flex-direction:column;gap:3px;overflow-wrap:anywhere}.pacotes small{color:var(--fraco)}
+.abas .aba{display:inline-flex;align-items:center}.abas .aba a{border-top-right-radius:0;border-bottom-right-radius:0}
+.x-aba{align-self:stretch;border:1px solid var(--borda);border-left:0;background:none;color:var(--apagado);border-radius:0 9px 9px 0;padding:0 9px;font-size:16px;cursor:pointer}
+.x-aba:hover{color:var(--vermelho);border-color:var(--vermelho)}.x-aba.confirmar{background:var(--vermelho);color:#230705;border-color:var(--vermelho);font-size:13px;font-weight:600}
 .cartao.anuncio{position:relative}.excluir-card{position:absolute;top:14px;right:14px;z-index:3;border:1px solid var(--borda-forte);background:rgba(13,13,14,.85);color:var(--texto);border-radius:8px;padding:5px 10px;font-size:13px;cursor:pointer;opacity:0;transition:opacity .12s}
 .cartao.anuncio:hover .excluir-card,.excluir-card:focus-visible,.excluir-card.confirmar{opacity:1}.excluir-card:hover{border-color:var(--vermelho);color:var(--vermelho)}.excluir-card.confirmar{background:var(--vermelho);border-color:var(--vermelho);color:#230705;font-weight:600}
 @media (hover:none){.excluir-card{opacity:1}}

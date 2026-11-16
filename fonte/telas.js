@@ -69,7 +69,7 @@ const TELAS = {
     const d = demandaDe(a), fam = a.familia || a.id;
     const irmaos = DB.anuncios.filter(x => (d && x.demanda === d.id) || (x.familia || x.id) === fam);
     const repetido = f => irmaos.filter(x => x.formato === f).length > 1;
-    return `${irmaos.length > 1 ? `<div class="abas">${irmaos.map(x => elo('/anuncios/' + x.id, esc(repetido(x.formato) ? x.nome : FORMATO[x.formato]), x.id === a.id ? 'ativo' : '')).join('')}${d ? `<span class="pequeno">Tarefa ${esc(d.tarefa)}</span>` : ''}</div>` : ''}
+    return `${irmaos.length > 1 ? `<div class="abas">${irmaos.map(x => `<span class="aba">${elo('/anuncios/' + x.id, esc(repetido(x.formato) ? x.nome : FORMATO[x.formato]), x.id === a.id ? 'ativo' : '')}<button type="button" class="x-aba" data-excluir-an="${x.id}" title="Excluir ${esc(x.nome)}">×</button></span>`).join('')}${d ? `<span class="pequeno">Tarefa ${esc(d.tarefa)}</span>` : ''}</div>` : ''}
     <div class="cabeca"><h1>${esc(a.nome)} <small id="resumo">Montando o anúncio</small></h1><div class="acoes">
       <button class="b claro" id="montar-auto" title="Preenche capa, fotos e cores vazias com as imagens aprovadas deste anúncio">Montar sozinho</button>
       <button class="b claro" id="copiar-anuncio" data-id="${a.id}" title="Cria cópias deste anúncio ou leva as fotos dele para outros anúncios">Copiar fotos para outros</button>

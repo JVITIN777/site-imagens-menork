@@ -78,13 +78,13 @@ document.addEventListener('change', async e => { const t = e.target; if (!t.data
 document.addEventListener('click', async e => {
   const b = e.target.closest('[data-excluir-an]'); if (!b) return;
   e.preventDefault(); e.stopPropagation();
-  if (!b.dataset.ok) { document.querySelectorAll('[data-excluir-an][data-ok]').forEach(x => { delete x.dataset.ok; x.textContent = 'Excluir'; x.classList.remove('confirmar'); });
-    b.dataset.ok = 1; b.textContent = 'Confirmar exclusão'; b.classList.add('confirmar'); return; }
+  if (!b.dataset.ok) { document.querySelectorAll('[data-excluir-an][data-ok]').forEach(x => { delete x.dataset.ok; x.textContent = x.dataset.texto || 'Excluir'; x.classList.remove('confirmar'); });
+    b.dataset.texto = b.textContent; b.dataset.ok = 1; b.textContent = b.classList.contains('x-aba') ? 'Excluir?' : 'Confirmar exclusão'; b.classList.add('confirmar'); return; }
   const id = +b.dataset.excluirAn, nome = DB.anuncios.find(a => a.id === id)?.nome || 'Anúncio';
   try { await SRV.excluirAnuncio(id); await RENDER(); window.menork.aviso(`${nome} excluído. As imagens continuam no catálogo.`); } catch (err) { window.menork.aviso(err.message); }
 }, true);
 document.addEventListener('click', e => { if (e.target.closest('[data-excluir-an]')) return;
-  document.querySelectorAll('[data-excluir-an][data-ok]').forEach(x => { delete x.dataset.ok; x.textContent = 'Excluir'; x.classList.remove('confirmar'); }); });
+  document.querySelectorAll('[data-excluir-an][data-ok]').forEach(x => { delete x.dataset.ok; x.textContent = x.dataset.texto || 'Excluir'; x.classList.remove('confirmar'); }); });
 
 // ---- copiar as fotos de um anuncio para outros
 document.addEventListener('click', e => {
