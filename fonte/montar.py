@@ -124,6 +124,7 @@ def pagina(estilos, banner, rodape, scripts, titulo, marca=MARCA):
 {estilos}
 </head>
 <body data-desfazer="60">
+<canvas id="agua" aria-hidden="true"></canvas>
 <aside class="lateral">
   <a class="marca-site" href="#" data-rota="/">{marca}<span>Menork<small>imagens</small></span></a>
   <form class="busca" data-busca="1"><svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="9" cy="9" r="6"/><path d="m14 14 4 4"/></svg><input type="search" name="q" placeholder="Buscar" aria-label="Buscar produto, cor, tipo, anúncio ou arquivo"></form>
@@ -142,7 +143,7 @@ dados=open('dados.js').read(); telas=open('telas.js').read(); extras=open('extra
 # ---- demonstracao (um arquivo so)
 html=pagina(f"<style>\n{css}{extra}</style>", '<div class="demo">Demonstração com imagens de exemplo. Tudo funciona, mas nada é salvo: ao recarregar a página, volta ao início.</div>\n',
             '<div class="pulso"><i></i><span>Demonstração</span></div>',
-            f"<script>\n{dados}\n{telas}\n{extras}\n{app.replace('/*API*/', API_DEMO)}\n{an}\nRENDER();\n</script>", "Imagens Menork (demonstração)")
+            f"<script>\n{open(R+'static/agua.js').read()}\n{dados}\n{telas}\n{extras}\n{app.replace('/*API*/', API_DEMO)}\n{an}\nRENDER();\n</script>", "Imagens Menork (demonstração)")
 open('demonstracao.html','w').write(html); print('demo', len(html))
 # ---- site de verdade: as mesmas telas, falando com o servidor
 def pedaco(ini, fim):
@@ -156,5 +157,5 @@ open(R+'static/site.js','w').write(site_js)
 open(R+'static/extra.css','w').write(extra.split('\n',3)[3])
 open(R+'templates/app.html','w').write(pagina(ICONE_SITE + '\n<link rel="stylesheet" href="/static/estilo.css?v={{ versao }}">\n<link rel="stylesheet" href="/static/extra.css?v={{ versao }}">', '',
             '<div class="pulso"><i></i><span>Lendo a pasta de entrada</span></div><a class="sair" href="/sair">Sair</a>',
-            '<script src="/static/site.js?v={{ versao }}"></script>', "Imagens Menork", MARCA_SITE))
+            '<script src="/static/agua.js?v={{ versao }}"></script>\n<script src="/static/site.js?v={{ versao }}"></script>', "Imagens Menork", MARCA_SITE))
 print('site', len(site_js))

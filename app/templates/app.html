@@ -9,6 +9,7 @@
 <link rel="stylesheet" href="/static/extra.css?v={{ versao }}">
 </head>
 <body data-desfazer="60">
+<canvas id="agua" aria-hidden="true"></canvas>
 <aside class="lateral">
   <a class="marca-site" href="#" data-rota="/">{% set lv = versao_logo() %}{% if lv %}<img class="logo" src="/logo?v={{ lv }}" alt="">{% else %}<svg viewBox="0 0 32 32" aria-hidden="true"><rect x="2" y="2" width="28" height="28" rx="7"/><path d="M8 21c0-5 3-7 6-7 1 2 3 3 6 3 3 0 4 2 4 4z"/></svg>{% endif %}<span>Menork<small>imagens</small></span></a>
   <form class="busca" data-busca="1"><svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="9" cy="9" r="6"/><path d="m14 14 4 4"/></svg><input type="search" name="q" placeholder="Buscar" aria-label="Buscar produto, cor, tipo, anúncio ou arquivo"></form>
@@ -60,6 +61,7 @@
 <div id="aviso" class="aviso" hidden></div>
 <div id="janela" class="visor janela" hidden><div class="janela-caixa"></div></div>
 <datalist id="dl-produtos"></datalist><datalist id="dl-cores"></datalist><datalist id="dl-anuncios"></datalist>
+<script src="/static/agua.js?v={{ versao }}"></script>
 <script src="/static/site.js?v={{ versao }}"></script>
 </body>
 </html>

@@ -2,6 +2,7 @@
 <html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Imagens Menork</title>{% if versao_logo() %}<link rel="icon" href="/logo?v={{ versao_logo() }}">{% endif %}<link rel="stylesheet" href="/static/estilo.css"></head>
 <body class="porta">
+<canvas id="agua" aria-hidden="true"></canvas>
 <form method="post" class="cartao-senha">
   {% if versao_logo() %}<img class="logo-grande" src="/logo?v={{ versao_logo() }}" alt="">{% endif %}
   <h1>Menork <small>imagens</small></h1>
@@ -11,4 +12,5 @@
   {% if criar %}<label>Repita a senha<input type="password" name="repetir" required></label>{% endif %}
   <button class="b grande">{{ 'Criar senha e entrar' if criar else 'Entrar' }}</button>
 </form>
+<script src="/static/agua.js"></script>
 </body></html>
