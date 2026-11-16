@@ -25,10 +25,10 @@ function arte(i) {
   return 'data:image/svg+xml,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${W}">${corpo}</svg>`);
 }
 
-const DB = { imgs: [], anuncios: [], links: [], cores: [], seq: 0, seqA: 0 };
+const DB = { imgs: [], anuncios: [], links: [], cores: [], fotosCor: [], seq: 0, seqA: 0 };
 const agora = () => new Date().toLocaleString('pt-BR').replace(',', '');
 function nova(o) { const i = Object.assign({ id: ++DB.seq, produto: '', cor: '', tipo: '', status: 'conferencia', v: DB.seq, largura: 1200, altura: 1200, criado_em: agora() }, o); if (!i.src) i.src = arte(i); if (!i.nome_original) i.nome_original = ((i.produto + i.tipo + '_' + i.cor + '_0' + (i.v % 9 + 1)).toLowerCase() + '_1111.png'); DB.imgs.push(i); return i; }
-function novoAnuncio(nome, extra = {}) { const k = /kit\s*([234])/i.exec(nome); const a = Object.assign({ id: ++DB.seqA, nome, formato: k ? 'kit' + k[1] : 'unitario', titulo: '', preco: '', preco_antigo: '', descricao: '' }, extra); DB.anuncios.push(a); return a; }
+function novoAnuncio(nome, extra = {}) { const k = /kit\s*([234])/i.exec(nome); const a = Object.assign({ id: ++DB.seqA, nome, formato: k ? 'kit' + k[1] : 'unitario', titulo: '', preco: '', preco_antigo: '', descricao: '', modo: 'shopee', tamanhos: '' }, extra); DB.anuncios.push(a); return a; }
 const IMG = id => DB.imgs.find(i => i.id === +id)?.src || '';
 const img = id => DB.imgs.find(i => i.id === +id);
 const viva = i => i && i.status !== 'reprovada';
@@ -231,15 +231,28 @@ function montagem(aid) {
   const dentro = new Set(DB.links.filter(l => l.an === aid).map(l => l.img));
   return { anuncio: Object.assign({}, a), produto, capa: capa ? resumo(img(capa.img)) : null, galeria: gal.map(l => resumo(img(l.img))),
     cores: cores.map(c => Object.assign(resumo(img(c.img)), { nome_cor: c.cor })), disponiveis: lig.filter(l => !usados.has(l.img)).map(l => resumo(img(l.img))),
-    sugestoes: produto ? DB.imgs.filter(i => i.produto === produto && i.status === 'aprovada' && !dentro.has(i.id)).map(resumo) : [] };
+    sugestoes: produto ? DB.imgs.filter(i => i.produto === produto && i.status === 'aprovada' && !dentro.has(i.id)).map(resumo) : [],
+    modo: a.modo || 'shopee', tamanhos: listaTamanhos(a.tamanhos), todas: lig.filter(ok).map(l => resumo(img(l.img))),
+    variacoes: cores.map(c => ({ cor: c.cor, capa: resumo(img(c.img)), fotos: DB.fotosCor.filter(f => f.an === aid && f.cor.toLowerCase() === c.cor.toLowerCase() && img(f.img)?.status === 'aprovada').sort((x, y) => x.pos - y.pos).map(f => resumo(img(f.img))) })) };
 }
+function listaTamanhos(t) {
+  const out = []; String(t || '').replace(/(\d{1,2})\s*(?:-|a|até|ate)\s*(\d{1,2})\b/gi, '$1~$2').split(/[,;\s]+/).forEach(p => { const f = /^(\d{1,2})~(\d{1,2})$/.exec(p); if (f && +f[1] < +f[2] && +f[2] <= +f[1] + 20) for (let x = +f[1]; x <= +f[2]; x++) out.push(String(x)); else if (p) out.push(p.replace('~', '-').slice(0, 12)); });
+  return out.filter((x, i) => out.findIndex(y => y.toLowerCase() === x.toLowerCase()) === i).slice(0, 40);
+}
+function fotosDaCor(aid, cor, ids) { ids = ids.filter(Boolean).slice(0, 10).map(Number); DB.fotosCor = DB.fotosCor.filter(f => !(f.an === aid && f.cor.toLowerCase() === cor.toLowerCase())); ids.forEach((i, pos) => { ligar(i, aid); DB.fotosCor.push({ an: aid, cor, img: i, pos }); }); }
 function montar(aid, d) {
   const a = DB.anuncios.find(x => x.id === aid), link = iid => DB.links.find(l => l.an === aid && l.img === iid);
   const aprovada = iid => { const i = img(iid); if (!i || i.status !== 'aprovada') throw new Error('Só imagem aprovada entra na estrutura do anúncio.'); ligar(iid, aid); return i; };
   const proxima = () => Math.max(0, ...DB.links.filter(l => l.an === aid && l.papel === 'galeria').map(l => l.pos)) + 1;
   const porCor = (i, nome) => { nome = (nome || i.cor || '').trim() || 'Cor ' + (DB.cores.filter(c => c.an === aid).length + 1); const ja = DB.cores.find(c => c.an === aid && c.cor.toLowerCase() === nome.toLowerCase()); if (ja) ja.img = i.id; else DB.cores.push({ an: aid, cor: nome, img: i.id, pos: Math.max(0, ...DB.cores.filter(c => c.an === aid).map(c => c.pos)) + 1 }); };
   const id = +d.imagem;
-  if (d.acao === 'dados') ['titulo', 'preco', 'preco_antigo', 'descricao'].forEach(c => { if (c in d) a[c] = String(d[c]).trim(); });
+  const corDe = c => { const x = DB.cores.find(k => k.an === aid && k.cor.toLowerCase() === String(c).trim().toLowerCase()); if (!x) throw new Error('Este anúncio não tem a cor ' + c + '.'); return x.cor; };
+  const daCor = c => DB.fotosCor.filter(f => f.an === aid && f.cor === c).sort((x, y) => x.pos - y.pos).map(f => f.img);
+  if (d.acao === 'dados') ['titulo', 'preco', 'preco_antigo', 'descricao', 'tamanhos'].forEach(c => { if (c in d) a[c] = String(d[c]).trim(); });
+  else if (d.acao === 'modo') a.modo = d.modo === 'ml' ? 'ml' : 'shopee';
+  else if (d.acao === 'slots_cor') { const c = corDe(d.cor); d.ids.forEach(i => i && aprovada(+i)); fotosDaCor(aid, c, d.ids); }
+  else if (d.acao === 'foto_cor') { const c = corDe(d.cor), l = daCor(c); if (l.length >= 10) throw new Error('As 10 fotos da cor ' + c + ' já estão preenchidas. Tire uma para colocar outra.'); aprovada(id); fotosDaCor(aid, c, [...l, id]); }
+  else if (d.acao === 'tirar_foto_cor') { const c = corDe(d.cor); fotosDaCor(aid, c, daCor(c).filter(i => i !== id)); }
   else if (d.acao === 'capa') { aprovada(id); DB.links.forEach(l => { if (l.an === aid && l.papel === 'capa') l.papel = ''; }); link(id).papel = 'capa'; }
   else if (d.acao === 'foto') { if (DB.links.filter(l => l.an === aid && l.papel === 'galeria' && img(l.img)?.status === 'aprovada').length >= 9) throw new Error('As 10 fotos já estão preenchidas. Tire uma para colocar outra.'); aprovada(id); Object.assign(link(id), { papel: 'galeria', pos: proxima() }); }
   else if (d.acao === 'tirar') { const l = link(id); if (l) l.papel = ''; }
@@ -247,14 +260,18 @@ function montar(aid, d) {
   else if (d.acao === 'slots') { const ids = d.ids.slice(0, 10).map(i => i ? +i : null); ids.forEach(i => { if (i) aprovada(i); });
     DB.links.forEach(l => { if (l.an === aid && (l.papel === 'capa' || l.papel === 'galeria')) { l.papel = ''; l.pos = 0; } });
     ids.forEach((i, n) => { if (i) Object.assign(link(i), n === 0 ? { papel: 'capa', pos: 0 } : { papel: 'galeria', pos: n }); }); }
-  else if (d.acao === 'cor') porCor(aprovada(id), d.cor);
-  else if (d.acao === 'tirar_cor') DB.cores = DB.cores.filter(c => !(c.an === aid && c.cor === d.cor));
-  else if (d.acao === 'renomear_cor') { const novo = String(d.novo || '').trim(); if (novo && novo.toLowerCase() !== d.cor.toLowerCase() && DB.cores.some(c => c.an === aid && c.cor.toLowerCase() === novo.toLowerCase())) throw new Error('Já existe uma cor com esse nome neste anúncio.'); if (novo) DB.cores.find(c => c.an === aid && c.cor === d.cor).cor = novo; }
+  else if (d.acao === 'cor') { const i = aprovada(id); porCor(i, d.cor); const nome = (d.cor || i.cor || '').trim(); if (nome && !DB.fotosCor.some(f => f.an === aid && f.cor.toLowerCase() === nome.toLowerCase())) DB.fotosCor.push({ an: aid, cor: nome, img: id, pos: 0 }); }
+  else if (d.acao === 'tirar_cor') { DB.cores = DB.cores.filter(c => !(c.an === aid && c.cor === d.cor)); DB.fotosCor = DB.fotosCor.filter(f => !(f.an === aid && f.cor === d.cor)); }
+  else if (d.acao === 'renomear_cor') { const novo = String(d.novo || '').trim(); if (novo && novo.toLowerCase() !== d.cor.toLowerCase() && DB.cores.some(c => c.an === aid && c.cor.toLowerCase() === novo.toLowerCase())) throw new Error('Já existe uma cor com esse nome neste anúncio.'); if (novo) { DB.cores.find(c => c.an === aid && c.cor === d.cor).cor = novo; DB.fotosCor.forEach(f => { if (f.an === aid && f.cor === d.cor) f.cor = novo; }); } }
   else if (d.acao === 'auto') {
     const m = montagem(aid), livres = [...m.disponiveis.filter(i => i.status === 'aprovada'), ...m.sugestoes], ordem = { ia: 0, informativo: 1, tabela: 2 }, unit = a.formato === 'unitario';
     const usar = (i, papel, pos = 0) => { ligar(i.id, aid); Object.assign(link(i.id), { papel, pos }); };
     if (!m.capa) { const c = livres.find(i => i.tipo === (unit ? 'capa' : 'capa_' + a.formato)); if (c) usar(c, 'capa'); }
     if (!m.galeria.length && unit) livres.filter(i => i.tipo in ordem).sort((x, y) => ordem[x.tipo] - ordem[y.tipo] || x.cor.localeCompare(y.cor) || x.id - y.id).slice(0, 9).forEach((i, n) => usar(i, 'galeria', n + 1));
     if (!m.cores.length && unit) { const vistas = new Set(); livres.forEach(i => { if (i.tipo === 'fb' && i.cor && !vistas.has(i.cor.toLowerCase())) { vistas.add(i.cor.toLowerCase()); ligar(i.id, aid); porCor(img(i.id)); } }); }
+    const todas = [...m.todas, ...m.sugestoes], oc = { capa: 0, fb: 1, ia: 2, informativo: 3, tabela: 4 };
+    montagem(aid).variacoes.forEach(v => { if (v.fotos.length) return; const cor = v.cor.toLowerCase();
+      const daqui = todas.filter(i => i.tipo in oc && i.status === 'aprovada' && ((i.cor || '').toLowerCase() === cor || (i.tipo === 'tabela' && !i.cor))).sort((x, y) => oc[x.tipo] - oc[y.tipo] || x.id - y.id);
+      fotosDaCor(aid, v.cor, [...new Set([v.capa.id, ...daqui.map(i => i.id)])]); });
   }
 }

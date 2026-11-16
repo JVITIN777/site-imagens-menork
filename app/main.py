@@ -166,7 +166,8 @@ def estado(request: Request):
                  "caminho": str(n.caminho_imagem(l)) if l["arquivo"] else ""} for l in linhas]
         anuncios = [{"id": a["id"], "nome": a["nome"], "formato": a["formato"], "titulo": a["titulo"], "preco": a["preco"],
                      "preco_antigo": a["preco_antigo"], "descricao": a["descricao"], "demanda": a["demanda_id"],
-                     "meta_ia": a["meta_ia"], "meta_capa": a["meta_capa"], "familia": a["familia"]}
+                     "meta_ia": a["meta_ia"], "meta_capa": a["meta_capa"], "familia": a["familia"],
+                     "modo": _modo(a["modo"]), "tamanhos": a["tamanhos"] or ""}
                     for a in c.execute("SELECT * FROM anuncios ORDER BY id")]
         links = [{"img": r[0], "an": r[1], "papel": r[2], "pos": r[3]} for r in
                  c.execute("SELECT imagem_id, anuncio_id, papel, posicao FROM imagem_anuncio")]
@@ -237,6 +238,11 @@ def copiar_fotos(c, origem, destino, levar_capa):
     for r in c.execute("SELECT cor, imagem_id, posicao FROM anuncio_cores WHERE anuncio_id=?", (origem,)).fetchall():
         n.vincular(c, [r["imagem_id"]], destino)
         c.execute("INSERT INTO anuncio_cores(anuncio_id,cor,imagem_id,posicao) VALUES(?,?,?,?)",
+                  (destino, r["cor"], r["imagem_id"], r["posicao"]))
+    c.execute("DELETE FROM fotos_cor WHERE anuncio_id=?", (destino,))
+    for r in c.execute("SELECT cor, imagem_id, posicao FROM fotos_cor WHERE anuncio_id=?", (origem,)).fetchall():
+        n.vincular(c, [r["imagem_id"]], destino)
+        c.execute("INSERT INTO fotos_cor(anuncio_id,cor,imagem_id,posicao) VALUES(?,?,?,?)",
                   (destino, r["cor"], r["imagem_id"], r["posicao"]))
 
 
@@ -371,6 +377,44 @@ def _img(r):
     return d
 
 
+# Como cada marketplace entende as variacoes de um calcado:
+#  Shopee: ate 9 fotos do anuncio (a 1a e a capa). Variacao 1 = Cor, cada cor com a sua capa da variacao
+#          (1 foto, aparece quando o cliente toca na cor). Variacao 2 = Tamanho. A Shopee cruza as duas.
+#  Mercado Livre: cada cor e uma variacao com as SUAS fotos (ate 10, a 1a e a principal daquela cor).
+#          O tamanho e o segundo atributo. O titulo vai ate 60 caracteres.
+MODOS = {"shopee": {"nome": "Shopee", "fotos": 9}, "ml": {"nome": "Mercado Livre", "fotos": 10, "titulo": 60}}
+
+
+def _modo(valor):
+    v = str(valor or "").strip().lower()
+    if v in ("ml", "mercado livre", "mercadolivre", "meli"):
+        return "ml"
+    return "shopee"
+
+
+def _modo_mk(mk, padrao):
+    k = str(mk or "").strip().upper()
+    if k in ("ML", "MERCADO LIVRE", "MERCADOLIVRE", "MELI"):
+        return "ml"
+    if k in ("SHP", "SHOPEE"):
+        return "shopee"
+    return _modo(padrao)
+
+
+def lista_tamanhos(texto):
+    """'33 a 36, 38' -> ['33','34','35','36','38']; aceita virgula, espaco e faixa com 'a' ou '-'."""
+    texto = re.sub(r"(\d{1,2})\s*(?:-|a|até|ate)\s*(\d{1,2})\b", r"\1~\2", str(texto or ""), flags=re.I)
+    saida = []
+    for parte in re.split(r"[,;\s]+", texto):  # 33/34 de chinelo e um tamanho so
+        faixa = re.fullmatch(r"(\d{1,2})~(\d{1,2})", parte)
+        if faixa and int(faixa[1]) < int(faixa[2]) <= int(faixa[1]) + 20:
+            saida += [str(x) for x in range(int(faixa[1]), int(faixa[2]) + 1)]
+        elif parte:
+            saida.append(parte.replace("~", "-")[:12])
+    vistos = set()
+    return [t for t in saida if not (t.lower() in vistos or vistos.add(t.lower()))][:40]
+
+
 def montagem(c, aid):
     """Estrutura completa de um anuncio: capa, fotos em ordem, cores e o que sobra."""
     a = c.execute("SELECT * FROM anuncios WHERE id=?", (aid,)).fetchone()
@@ -389,6 +433,13 @@ def montagem(c, aid):
         "WHERE ac.anuncio_id=? AND i.status='aprovada' AND i.arquivo<>'' ORDER BY ac.posicao, ac.rowid",
         (aid,)).fetchall()
     usados |= {r["id"] for r in cores}
+    por_cor = {}
+    for r in c.execute(f"SELECT {CAMPOS_IMG}, f.cor AS nome_cor, f.posicao AS pos_cor FROM fotos_cor f "
+                       "JOIN imagens i ON i.id=f.imagem_id WHERE f.anuncio_id=? AND i.status='aprovada' "
+                       "AND i.arquivo<>'' ORDER BY f.posicao", (aid,)).fetchall():
+        por_cor.setdefault(r["nome_cor"].lower(), []).append(r)
+    variacoes = [{"cor": r["nome_cor"], "capa": r, "fotos": por_cor.get(r["nome_cor"].lower(), [])} for r in cores]
+    usados |= {r["id"] for v in variacoes for r in v["fotos"]}
     produtos = [r["produto"] for r in ligadas if r["produto"]]
     produto = max(set(produtos), key=produtos.count) if produtos else ""
     if a["demanda_id"]:  # anuncio vindo de tarefa: o produto e o da tarefa
@@ -401,14 +452,19 @@ def montagem(c, aid):
             "AND i.id NOT IN (SELECT imagem_id FROM imagem_anuncio WHERE anuncio_id=?) "
             "ORDER BY i.tipo, i.cor, i.id LIMIT 60", (produto, aid)).fetchall()
     return {
-        "anuncio": {k: a[k] for k in ("id", "nome", "formato", "titulo", "preco", "preco_antigo", "descricao")},
+        "anuncio": dict({k: a[k] for k in ("id", "nome", "formato", "titulo", "preco", "preco_antigo", "descricao")},
+                        modo=_modo(a["modo"]), tamanhos=a["tamanhos"] or ""),
+        "modo": _modo(a["modo"]),
+        "tamanhos": lista_tamanhos(a["tamanhos"]),
+        "variacoes": [{"cor": v["cor"], "capa": _img(v["capa"]), "fotos": [_img(r) for r in v["fotos"]]} for v in variacoes],
         "produto": produto,
         "capa": _img(capa) if capa else None,
         "galeria": [_img(r) for r in galeria],
         "cores": [dict(_img(r), nome_cor=r["nome_cor"]) for r in cores],
         "disponiveis": [_img(r) for r in ligadas if r["id"] not in usados],
+        "todas": [_img(r) for r in ligadas if ok(r)],
         "sugestoes": [_img(r) for r in sugestoes],
-        "linhas": {"capa": capa, "galeria": galeria, "cores": cores, "sugestoes": list(sugestoes),
+        "linhas": {"capa": capa, "galeria": galeria, "cores": cores, "sugestoes": list(sugestoes), "variacoes": variacoes,
                    "resto": [r for r in ligadas if r["id"] not in usados and ok(r)]},
     }
 
@@ -459,10 +515,31 @@ async def api_montar(aid: int, request: Request):
                       "ON CONFLICT(anuncio_id,cor) DO UPDATE SET imagem_id=excluded.imagem_id",
                       (aid, nome, img["id"], pos))
 
+        modo = _modo(c.execute("SELECT modo FROM anuncios WHERE id=?", (aid,)).fetchone()[0])
+        limite = MODOS["shopee"]["fotos"] - 1  # fotos alem da capa no modo Shopee
+
+        def fotos_da_cor(cor, ids):
+            ids = [int(i) if i else None for i in ids[:MODOS["ml"]["fotos"]]]
+            for i in ids:
+                if i:
+                    aprovada(i)
+            c.execute("DELETE FROM fotos_cor WHERE anuncio_id=? AND cor=?", (aid, cor))
+            for pos, i in enumerate(x for x in ids if x):
+                c.execute("INSERT OR REPLACE INTO fotos_cor(anuncio_id,cor,imagem_id,posicao) VALUES(?,?,?,?)",
+                          (aid, cor, i, pos))
+
+        def cor_existe(cor):
+            r = c.execute("SELECT cor FROM anuncio_cores WHERE anuncio_id=? AND cor=?", (aid, str(cor).strip())).fetchone()
+            if not r:
+                raise HTTPException(400, f"Este anúncio não tem a cor {cor!r}.")
+            return r[0]
+
         if oque == "dados":
-            for campo in ("titulo", "preco", "preco_antigo", "descricao"):
+            for campo in ("titulo", "preco", "preco_antigo", "descricao", "tamanhos"):
                 if campo in d:
-                    c.execute(f"UPDATE anuncios SET {campo}=? WHERE id=?", (str(d[campo]).strip(), aid))
+                    c.execute(f"UPDATE anuncios SET {campo}=? WHERE id=?", (str(d[campo]).strip()[:4000], aid))
+        elif oque == "modo":
+            c.execute("UPDATE anuncios SET modo=? WHERE id=?", (_modo(d.get("modo")), aid))
         elif oque == "capa":
             aprovada(int(d["imagem"]))
             c.execute("UPDATE imagem_anuncio SET papel='' WHERE anuncio_id=? AND papel='capa'", (aid,))
@@ -470,8 +547,8 @@ async def api_montar(aid: int, request: Request):
         elif oque == "foto":
             aprovada(int(d["imagem"]))
             if c.execute("SELECT COUNT(*) FROM imagem_anuncio WHERE anuncio_id=? AND papel='galeria'",
-                         (aid,)).fetchone()[0] >= 9:
-                raise HTTPException(400, "As 10 fotos já estão preenchidas. Tire uma para colocar outra.")
+                         (aid,)).fetchone()[0] >= limite:
+                raise HTTPException(400, f"As {limite + 1} fotos já estão preenchidas. Tire uma para colocar outra.")
             papel(int(d["imagem"]), "galeria", proxima())
         elif oque == "tirar":
             papel(int(d["imagem"]), "")
@@ -479,8 +556,8 @@ async def api_montar(aid: int, request: Request):
             for pos, iid in enumerate(d["ids"], 1):
                 c.execute("UPDATE imagem_anuncio SET posicao=? WHERE imagem_id=? AND anuncio_id=? "
                           "AND papel='galeria'", (pos, int(iid), aid))
-        elif oque == "slots":  # as 10 fotos: a primeira e a capa, as outras seguem a ordem
-            ids = [int(i) if i else None for i in d["ids"][:10]]
+        elif oque == "slots":  # as fotos do anuncio: a primeira e a capa, as outras seguem a ordem
+            ids = [int(i) if i else None for i in d["ids"][:limite + 1]]
             for i in ids:
                 if i:
                     aprovada(i)
@@ -489,10 +566,28 @@ async def api_montar(aid: int, request: Request):
             for pos, i in enumerate(ids):
                 if i:
                     papel(i, "capa" if pos == 0 else "galeria", pos)
-        elif oque == "cor":
-            por_cor(aprovada(int(d["imagem"])), d.get("cor", ""))
+        elif oque == "cor":  # nova cor, ou troca a capa da variacao de uma cor
+            img = aprovada(int(d["imagem"]))
+            por_cor(img, d.get("cor", ""))
+            nome = (d.get("cor") or img["cor"] or "").strip()
+            if nome and not c.execute("SELECT 1 FROM fotos_cor WHERE anuncio_id=? AND cor=?", (aid, nome)).fetchone():
+                c.execute("INSERT INTO fotos_cor(anuncio_id,cor,imagem_id,posicao) VALUES(?,?,?,0)", (aid, nome, img["id"]))
+        elif oque == "slots_cor":  # Mercado Livre: as fotos de uma cor, a 1a e a principal
+            fotos_da_cor(cor_existe(d["cor"]), d.get("ids", []))
+        elif oque == "foto_cor":
+            cor = cor_existe(d["cor"])
+            atuais = [r[0] for r in c.execute("SELECT imagem_id FROM fotos_cor WHERE anuncio_id=? AND cor=? ORDER BY posicao",
+                                              (aid, cor))]
+            if len(atuais) >= MODOS["ml"]["fotos"]:
+                raise HTTPException(400, f"As 10 fotos da cor {cor} já estão preenchidas. Tire uma para colocar outra.")
+            fotos_da_cor(cor, atuais + [int(d["imagem"])])
+        elif oque == "tirar_foto_cor":
+            cor = cor_existe(d["cor"])
+            fotos_da_cor(cor, [r[0] for r in c.execute("SELECT imagem_id FROM fotos_cor WHERE anuncio_id=? AND cor=? "
+                                                         "AND imagem_id<>? ORDER BY posicao", (aid, cor, int(d["imagem"])))])
         elif oque == "tirar_cor":
             c.execute("DELETE FROM anuncio_cores WHERE anuncio_id=? AND cor=?", (aid, d["cor"]))
+            c.execute("DELETE FROM fotos_cor WHERE anuncio_id=? AND cor=?", (aid, d["cor"]))
         elif oque == "renomear_cor":
             novo = str(d.get("novo", "")).strip()
             if novo and novo.lower() != d["cor"].lower():
@@ -500,6 +595,7 @@ async def api_montar(aid: int, request: Request):
                     raise HTTPException(400, "Já existe uma cor com esse nome neste anúncio.")
             if novo:
                 c.execute("UPDATE anuncio_cores SET cor=? WHERE anuncio_id=? AND cor=?", (novo, aid, d["cor"]))
+                c.execute("UPDATE fotos_cor SET cor=? WHERE anuncio_id=? AND cor=?", (novo, aid, d["cor"]))
         elif oque == "auto":
             m = montagem(c, aid)
             formato = m["anuncio"]["formato"]
@@ -517,15 +613,32 @@ async def api_montar(aid: int, request: Request):
             if not m["galeria"] and formato == "unitario":
                 fotos = sorted((r for r in livres if r["tipo"] in ORDEM_AUTO),
                                key=lambda r: (ORDEM_AUTO[r["tipo"]], r["cor"], r["id"]))
-                for pos, r in enumerate(fotos[:9], 1):
+                for pos, r in enumerate(fotos[:limite], 1):
                     usar(r, "galeria", pos)
             if not m["cores"] and formato == "unitario":
                 vistas = set()
-                for r in livres:
-                    if r["tipo"] == "fb" and r["cor"] and r["cor"].lower() not in vistas:
+                capa_ = montagem(c, aid)["linhas"]["capa"]  # a capa do anuncio tambem serve para a cor dela
+                for r in sorted(livres + ([capa_] if capa_ else []), key=lambda r: (r["tipo"] != "capa", r["id"])):
+                    if r["tipo"] in ("capa", "fb") and r["cor"] and r["cor"].lower() not in vistas:
                         vistas.add(r["cor"].lower())
                         n.vincular(c, [r["id"]], aid)
                         por_cor(r)
+            # Mercado Livre: cada cor recebe as suas fotos (principal, fundo branco, IA, informativos, tabela)
+            todas = m["linhas"]["resto"] + m["linhas"]["sugestoes"] + m["linhas"]["galeria"] + \
+                ([m["linhas"]["capa"]] if m["linhas"]["capa"] else [])
+            ordem_cor = {"capa": 0, "fb": 1, "ia": 2, "informativo": 3, "tabela": 4}
+            for v in montagem(c, aid)["linhas"]["variacoes"]:
+                if v["fotos"]:
+                    continue
+                cor = v["cor"].lower()
+                daqui = [r for r in todas if r["tipo"] in ordem_cor and r["status"] == "aprovada"
+                         and ((r["cor"] or "").lower() == cor or (r["tipo"] == "tabela" and not r["cor"]))]
+                daqui.sort(key=lambda r: (ordem_cor[r["tipo"]], r["id"]))
+                ids, vistos_ = [], set()
+                for r in [v["capa"]] + daqui:
+                    if r["id"] not in vistos_:
+                        vistos_.add(r["id"]); ids.append(r["id"])
+                fotos_da_cor(v["cor"], ids)
         else:
             raise HTTPException(400, "Ação desconhecida.")
         return _sem_linhas(montagem(c, aid))
@@ -542,14 +655,19 @@ def _metas(c, a):
                   "capa": a["meta_capa"] if a["meta_capa"] is not None else 1}
 
 
-def checagem(c, aid, m=None):
-    """A lista unica do que falta num anuncio. O pacote e o comando faltas usam esta mesma resposta."""
+def checagem(c, aid, m=None, modo=None):
+    """A lista unica do que falta num anuncio. O pacote e o comando faltas usam esta mesma resposta.
+    modo: 'shopee' ou 'ml'; sem modo, vale o modo escolhido no anuncio."""
     a = c.execute("SELECT * FROM anuncios WHERE id=?", (aid,)).fetchone()
     if not a:
         raise HTTPException(404)
     d, metas = _metas(c, a)
     m = m or montagem(c, aid)
+    modo = _modo(modo or a["modo"])
+    ml = modo == "ml"
     L, produto, kit = m["linhas"], m["produto"], a["formato"] != "unitario"
+    V = L["variacoes"]
+    fotos_ml = [r for v in V for r in v["fotos"]]
     ligadas = c.execute(f"SELECT {CAMPOS_IMG} FROM imagens i JOIN imagem_anuncio x ON x.imagem_id=i.id "
                         "WHERE x.anuncio_id=? AND i.status<>'reprovada' AND i.arquivo<>''", (aid,)).fetchall()
     pend = [r for r in ligadas if r["status"] in n.PENDENTES]
@@ -570,12 +688,19 @@ def checagem(c, aid, m=None):
 
     tipo_capa = "capa_" + a["formato"] if kit else "capa"
     capas = [r for r in ligadas if r["tipo"] == tipo_capa]
-    if not L["capa"]:
+    if ml:
+        if not V:
+            falta("cores", "Falta pelo menos 1 cor (no Mercado Livre cada cor é uma variação com as suas fotos)",
+                  esperando=sum(r["tipo"] == "fb" for r in pend))
+        for v in V:
+            if not v["fotos"]:
+                falta("fotos_cor", f"Falta a foto principal da cor {v['cor']} (espaço 1 da cor)", v["cor"])
+    elif not L["capa"]:
         falta(tipo_capa, "Falta escolher a capa (espaço 1)", esperando=sum(r["status"] in n.PENDENTES for r in capas))
     nas_fotos = {r["id"] for r in L["galeria"]}
     if kit:
         fb = a["formato"] + "_fb"
-        if not any(r["tipo"] == fb for r in L["galeria"] + L["cores"]):
+        if not any(r["tipo"] == fb for r in L["galeria"] + L["cores"] + fotos_ml):
             falta(fb, f"Falta o fundo branco do {n.FORMATO_NOME[a['formato']]} nas fotos ou em Cores",
                   esperando=sum(r["tipo"] == fb for r in pend))
     else:
@@ -587,26 +712,54 @@ def checagem(c, aid, m=None):
             falta("cor", "Nenhuma cor definida: coloque neste anúncio imagens com produto e cor preenchidos")
         nomes = {"ia": ("foto IA", "fotos IA"), "informativo": ("informativo", "informativos"),
                  "tabela": ("tabela de medidas", "tabelas de medidas")}
+        if ml:  # no Mercado Livre as metas valem dentro das fotos de cada cor
+            cores = [v["cor"] for v in V] or cores
+        da_cor = {v["cor"].lower(): v["fotos"] for v in V}
         for cor in cores:
+            onde = da_cor.get(cor.lower(), []) if ml else L["galeria"]
+            nas = {r["id"] for r in onde}
             for tipo, (um, varios) in nomes.items():
-                q = metas[tipo] - sum(r["tipo"] == tipo and r["cor"] == cor for r in L["galeria"])
+                q = metas[tipo] - sum(r["tipo"] == tipo and (ml or (r["cor"] or "").lower() == cor.lower()) for r in onde)
                 if q > 0:
-                    fora = sum(r["id"] not in nas_fotos for r in do_produto(tipo, cor, ("aprovada",)))
-                    falta(tipo, f"{'Falta 1 ' + um if q == 1 else f'Faltam {q} ' + varios} da cor {cor} nas fotos do anúncio",
+                    fora = sum(r["id"] not in nas for r in do_produto(tipo, cor, ("aprovada",)))
+                    qtos = 'Falta 1 ' + um if q == 1 else f'Faltam {q} ' + varios
+                    falta(tipo, f"{qtos} nas fotos da cor {cor}" if ml else f"{qtos} da cor {cor} nas fotos do anúncio",
                           cor, q, len(do_produto(tipo, cor, n.PENDENTES)), fora)
-        precisa = len(cores) * (metas["ia"] + metas["informativo"] + metas["tabela"])
-        if precisa > 9:
-            falta("limite", f"As metas pedem {precisa} fotos além da capa, mas o anúncio comporta 9. "
-                            "Diminua as metas deste anúncio ou faça um anúncio por cor", faltam=precisa - 9)
-        if not L["cores"]:
-            falta("cores", "Falta pelo menos 1 foto em Cores (variações)",
-                  esperando=sum(r["tipo"] == "fb" for r in pend))
+        por_cor_ = metas["ia"] + metas["informativo"] + metas["tabela"]
+        cabe = MODOS["ml"]["fotos"] - 1 if ml else MODOS["shopee"]["fotos"] - 1
+        precisa = por_cor_ if ml else len(cores) * por_cor_
+        if precisa > cabe:
+            falta("limite", (f"As metas pedem {precisa} fotos por cor além da principal, mas o Mercado Livre aceita {cabe}. "
+                             "Diminua as metas deste anúncio") if ml else
+                  (f"As metas pedem {precisa} fotos além da capa, mas a Shopee aceita {cabe}. "
+                   "Diminua as metas, faça um anúncio por cor ou use o modo Mercado Livre, que tem fotos por cor"),
+                  faltam=precisa - cabe)
+        if not ml:
+            com_capa = {r["nome_cor"].lower() for r in L["cores"]} | {(r["cor"] or "").lower() for r in L["cores"]}
+            if not L["cores"]:
+                falta("cores", "Falta a capa da variação de pelo menos 1 cor (Variação 1: Cor)",
+                      esperando=sum(r["tipo"] == "fb" for r in pend))
+            else:
+                for cor in cores:
+                    if cor.lower() not in com_capa:
+                        falta("cores", f"Falta a capa da variação da cor {cor}", cor)
     for campo, nome in (("titulo", "o título"), ("preco", "o preço"), ("descricao", "a descrição")):
         if not (a[campo] or "").strip():
             falta(campo, f"Falta preencher {nome}")
-    if L["capa"]:  # a mesma capa em dois anuncios
+    if not m["tamanhos"]:
+        falta("tamanhos", "Falta preencher os tamanhos (Variação 2: Tamanho)")
+    if ml and len((a["titulo"] or "").strip()) > MODOS["ml"]["titulo"]:
+        falta("titulo", f"O título tem {len(a['titulo'].strip())} caracteres; no Mercado Livre o limite é {MODOS['ml']['titulo']}")
+    if not ml and len(L["galeria"]) > MODOS["shopee"]["fotos"] - 1:
+        falta("limite", f"A Shopee aceita {MODOS['shopee']['fotos']} fotos e este anúncio tem {len(L['galeria']) + 1}: tire "
+                        f"{len(L['galeria']) + 1 - MODOS['shopee']['fotos']}", faltam=len(L["galeria"]) + 1 - MODOS["shopee"]["fotos"])
+    principal = (V[0]["fotos"][0] if V and V[0]["fotos"] else None) if ml else L["capa"]
+    if principal:  # a mesma capa em dois anuncios
         outros = [r[0] for r in c.execute("SELECT an.nome FROM imagem_anuncio x JOIN anuncios an ON an.id=x.anuncio_id "
-                                          "WHERE x.imagem_id=? AND x.papel='capa' AND x.anuncio_id<>?", (L["capa"]["id"], aid))]
+                                          "WHERE x.imagem_id=? AND x.papel='capa' AND x.anuncio_id<>? UNION "
+                                          "SELECT an.nome FROM fotos_cor f JOIN anuncios an ON an.id=f.anuncio_id "
+                                          "WHERE f.imagem_id=? AND f.posicao=0 AND f.anuncio_id<>?",
+                                          (principal["id"], aid, principal["id"], aid))]
         if outros:
             falta("capa_repetida", f"A capa é a mesma do anúncio {', '.join(outros[:3])}: troque a capa")
     if (a["titulo"] or "").strip():
@@ -617,36 +770,57 @@ def checagem(c, aid, m=None):
     if pend:
         falta("conferencia", f"{len(pend)} imagem(ns) do anúncio ainda em conferência: aprove ou reprove", faltam=len(pend))
     return {"anuncio": a["nome"], "id": aid, "formato": a["formato"], "produto": produto, "tarefa": d["tarefa"] if d else "",
+            "modo": modo, "marketplace": MODOS[modo]["nome"], "tamanhos": m["tamanhos"],
+            "variacoes": [{"cor": v["cor"], "fotos": len(v["fotos"])} for v in V],
             "completo": not itens, "faltas": itens, "metas": metas,
             "capas_a_produzir": {"meta": metas["capa"], "aprovadas": sum(r["status"] == "aprovada" for r in capas),
                                  "esperando_aprovacao": sum(r["status"] in n.PENDENTES for r in capas)}}
 
 
 def pacote(aid, mk="", por="você", forcar=False):
-    """ZIP do anuncio: fotos na ordem (01 = capa), cores e o texto. So sai se a checagem passar."""
+    """ZIP do anuncio no jeito do marketplace. So sai se a checagem passar.
+    Shopee: 01 = capa ate 09, variacoes/ com a capa de cada cor. Mercado Livre: uma pasta por cor, 01 = principal."""
     with n.con() as c:
         m = montagem(c, aid)
-        chk = checagem(c, aid, m)
+        modo = _modo_mk(mk, m["modo"])
+        chk = checagem(c, aid, m, modo)
     L, a = m["linhas"], m["anuncio"]
     ordem = ([L["capa"]] if L["capa"] else []) + L["galeria"]
     if not chk["completo"] and not forcar:
-        raise HTTPException(409, {"erro": "Anúncio incompleto. O pacote NÃO foi montado.",
+        raise HTTPException(409, {"erro": f"Anúncio incompleto para {MODOS[modo]['nome']}. O pacote NÃO foi montado.",
                                   "faltas": [i["texto"] for i in chk["faltas"]]})
     if not ordem and not L["cores"]:
         raise HTTPException(409, {"erro": "Este anúncio não tem nenhuma imagem aprovada colocada.", "faltas": []})
     prefixo = (_pedaco(mk).lower() + "_" if mk else "") + _pedaco(a["nome"]).lower()
+    ext = lambda r: Path(r["arquivo"]).suffix.lower()
+    tam = m["tamanhos"]
     mem, nomes = io.BytesIO(), []
     with zipfile.ZipFile(mem, "w", zipfile.ZIP_STORED) as z:
-        for pos, r in enumerate(ordem, 1):
-            capa = "_capa" if L["capa"] and pos == 1 else ""
-            nomes.append(f"{prefixo}_{pos:02d}{capa}{Path(r['arquivo']).suffix.lower()}")
-            z.write(n.caminho_imagem(r), nomes[-1])
-        for r in L["cores"]:
-            nomes.append(f"cores/{prefixo}_cor_{_pedaco(r['nome_cor']).lower()}{Path(r['arquivo']).suffix.lower()}")
-            z.write(n.caminho_imagem(r), nomes[-1])
-        texto = [f"Anúncio: {a['nome']}", f"Marketplace: {mk or 'geral'}", f"Título: {a['titulo']}", f"Preço: {a['preco']}",
-                 f"Preço antigo: {a['preco_antigo']}", "Cores: " + ", ".join(r["nome_cor"] for r in L["cores"]),
-                 "", "Descrição:", a["descricao"]]
+        if modo == "ml":
+            for v in L["variacoes"]:
+                pasta = _pedaco(v["cor"]).lower()
+                for pos, r in enumerate(v["fotos"], 1):
+                    nomes.append(f"{pasta}/{prefixo}_{pasta}_{pos:02d}{'_principal' if pos == 1 else ''}{ext(r)}")
+                    z.write(n.caminho_imagem(r), nomes[-1])
+            variacoes = [f"{v['cor']} / {t}" for v in L["variacoes"] for t in (tam or ["(sem tamanho)"])]
+            texto = [f"Anúncio: {a['nome']}", "Marketplace: Mercado Livre", f"Título: {a['titulo']}",
+                     f"Preço: {a['preco']}", f"Preço antigo: {a['preco_antigo']}", "",
+                     "Variações (Cor x Tamanho). As fotos de cada cor estão na pasta com o nome da cor:",
+                     *[f"- {x}" for x in variacoes], "", "Descrição:", a["descricao"]]
+        else:
+            for pos, r in enumerate(ordem, 1):
+                capa = "_capa" if L["capa"] and pos == 1 else ""
+                nomes.append(f"{prefixo}_{pos:02d}{capa}{ext(r)}")
+                z.write(n.caminho_imagem(r), nomes[-1])
+            for r in L["cores"]:
+                nomes.append(f"variacoes/{prefixo}_capa_variacao_{_pedaco(r['nome_cor']).lower()}{ext(r)}")
+                z.write(n.caminho_imagem(r), nomes[-1])
+            texto = [f"Anúncio: {a['nome']}", "Marketplace: Shopee", f"Título: {a['titulo']}", f"Preço: {a['preco']}",
+                     f"Preço antigo: {a['preco_antigo']}", "",
+                     "Variação 1 - Cor (cada uma com a sua capa na pasta variacoes): " + ", ".join(r["nome_cor"] for r in L["cores"]),
+                     "Variação 2 - Tamanho: " + (", ".join(tam) or "(sem tamanho)"),
+                     f"Combinações: {len(L['cores'])} cor(es) x {len(tam) or 1} tamanho(s) = {len(L['cores']) * (len(tam) or 1)}",
+                     "", "Descrição:", a["descricao"]]
         z.writestr("anuncio.txt", "\r\n".join(texto))
         nomes.append("anuncio.txt")
     guardado = ""
@@ -1192,9 +1366,17 @@ async def acao(request: Request):
                     "WHERE x.anuncio_id=? AND x.papel='galeria' AND i.status='aprovada' AND i.arquivo<>''",
                     (r["anuncio_id"],)).fetchall()
                 ja = sum(f["tipo"] == r["tipo"] and f["cor"] == r["cor"] for f in nas_fotos)
-                if len(nas_fotos) < 9 and ja < metas[r["tipo"]]:  # so ate a meta daquela cor, e enquanto couber
+                if len(nas_fotos) < MODOS["shopee"]["fotos"] - 1 and ja < metas[r["tipo"]]:  # so ate a meta da cor, e enquanto couber
                     c.execute("UPDATE imagem_anuncio SET papel='galeria', posicao=? WHERE imagem_id=? AND anuncio_id=?",
                               (max((f["posicao"] for f in nas_fotos), default=0) + 1, r["id"], r["anuncio_id"]))
+                # Mercado Livre: entra tambem nas fotos da cor dela, se a cor ja existe no anuncio
+                da_cor = c.execute("SELECT i.tipo, f.posicao, f.imagem_id FROM fotos_cor f JOIN imagens i ON i.id=f.imagem_id "
+                                   "WHERE f.anuncio_id=? AND f.cor=? ORDER BY f.posicao", (r["anuncio_id"], r["cor"])).fetchall()
+                if r["cor"] and da_cor and len(da_cor) < MODOS["ml"]["fotos"] and r["id"] not in {f["imagem_id"] for f in da_cor} \
+                        and sum(f["tipo"] == r["tipo"] for f in da_cor) < metas[r["tipo"]]:
+                    c.execute("INSERT OR IGNORE INTO fotos_cor(anuncio_id,cor,imagem_id,posicao) VALUES(?,"
+                              "(SELECT cor FROM anuncio_cores WHERE anuncio_id=? AND cor=?),?,?)",
+                              (r["anuncio_id"], r["anuncio_id"], r["cor"], r["id"], da_cor[-1]["posicao"] + 1))
         elif oque == "reprovar":
             c.execute(f"UPDATE imagens SET status='reprovada', decidido_em=?, apagar_em=?, motivo=?, "
                       f"origem_decisao='você' WHERE id IN ({marcas})",
@@ -1232,6 +1414,8 @@ async def acao(request: Request):
             c.execute(f"DELETE FROM imagem_anuncio WHERE anuncio_id=? AND imagem_id IN ({marcas})",
                       [int(d["anuncio_id"]), *ids])
             c.execute(f"DELETE FROM anuncio_cores WHERE anuncio_id=? AND imagem_id IN ({marcas})",
+                      [int(d["anuncio_id"]), *ids])
+            c.execute(f"DELETE FROM fotos_cor WHERE anuncio_id=? AND imagem_id IN ({marcas})",
                       [int(d["anuncio_id"]), *ids])
         else:
             raise HTTPException(400, "Ação desconhecida.")

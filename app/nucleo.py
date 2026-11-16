@@ -150,6 +150,10 @@ def iniciar_banco():
               anuncio_id INTEGER REFERENCES anuncios(id) ON DELETE CASCADE,
               cor TEXT COLLATE NOCASE, imagem_id INTEGER REFERENCES imagens(id) ON DELETE CASCADE,
               posicao INTEGER DEFAULT 0, PRIMARY KEY(anuncio_id, cor));
+            CREATE TABLE IF NOT EXISTS fotos_cor(
+              anuncio_id INTEGER REFERENCES anuncios(id) ON DELETE CASCADE,
+              cor TEXT COLLATE NOCASE, imagem_id INTEGER REFERENCES imagens(id) ON DELETE CASCADE,
+              posicao INTEGER DEFAULT 0, PRIMARY KEY(anuncio_id, cor, posicao));
             CREATE TABLE IF NOT EXISTS vistos(caminho TEXT PRIMARY KEY, tamanho INTEGER, mtime REAL);
             CREATE TABLE IF NOT EXISTS demandas(
               id INTEGER PRIMARY KEY, tarefa_id TEXT UNIQUE, tarefa TEXT, produto TEXT, info TEXT DEFAULT '',
@@ -175,7 +179,8 @@ def iniciar_banco():
                               ("preco_antigo", "TEXT DEFAULT ''"), ("descricao", "TEXT DEFAULT ''")],
                  "imagem_anuncio": [("papel", "TEXT DEFAULT ''"), ("posicao", "INTEGER DEFAULT 0")]}
         novas["anuncios"] += [("demanda_id", "INTEGER"), ("meta_ia", "INTEGER"), ("meta_capa", "INTEGER"),
-                              ("familia", "INTEGER"), ("id_externo", "TEXT DEFAULT ''")]
+                              ("familia", "INTEGER"), ("id_externo", "TEXT DEFAULT ''"),
+                              ("modo", "TEXT DEFAULT 'shopee'"), ("tamanhos", "TEXT DEFAULT ''")]
         novas["imagens"] = [("motivo", "TEXT DEFAULT ''"), ("origem_decisao", "TEXT DEFAULT ''"), ("alertas", "TEXT DEFAULT ''"),
                             ("ref", "INTEGER DEFAULT 0"), ("conta", "TEXT DEFAULT ''"), ("dhash", "TEXT DEFAULT ''"),
                             ("estilo", "TEXT DEFAULT ''")]
@@ -618,6 +623,7 @@ def apagar_reprovadas():
                 c.execute("UPDATE imagens SET arquivo='' WHERE id=?", (l["id"],))
                 c.execute("DELETE FROM imagem_anuncio WHERE imagem_id=?", (l["id"],))
                 c.execute("DELETE FROM anuncio_cores WHERE imagem_id=?", (l["id"],))
+                c.execute("DELETE FROM fotos_cor WHERE imagem_id=?", (l["id"],))
         except OSError as e:
             registrar(f"nao consegui apagar a imagem {l['id']}: {e}")
 

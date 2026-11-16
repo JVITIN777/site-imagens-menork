@@ -29,6 +29,11 @@ menork.ps1 anuncios
 menork.ps1 faltas -Anuncio "CI9 unitário"
 ```
 A resposta traz `completo` (verdadeiro ou falso) e a lista `faltas`. É a mesma conferência que libera ou barra o pacote. Ela olha: capa escolhida; fotos IA, informativos e tabela de cada cor **colocados nas fotos do anúncio**; pelo menos 1 foto em Cores; título, preço e descrição; nenhuma imagem do anúncio ainda em conferência.
+
+Cada anúncio está num modo, que vem em `modo` (`shopee` ou `ml`) na resposta do `faltas`:
+- **Shopee**: até 9 fotos no anúncio, a 1ª é a capa. Variação 1 = Cor: **cada cor precisa da sua capa da variação** (de preferência uma capa com o tipo `capa` e aquela cor). Variação 2 = Tamanho.
+- **Mercado Livre**: cada cor tem as **suas próprias fotos** (até 10, a 1ª é a principal). As metas de IA, informativo e tabela valem dentro das fotos de cada cor. Título até 60 caracteres. Variação 2 = Tamanho.
+Em qualquer modo, mande sempre `-Cor` certo: é por ela que a imagem cai na variação certa.
 Em cada item, `esperando_aprovacao` diz quantas já estão na fila do Menork e `aprovadas_fora_do_anuncio` quantas já existem aprovadas mas ainda não foram colocadas: nesses dois casos não gere de novo.
 
 **Ver e atender os pedidos do Menork**

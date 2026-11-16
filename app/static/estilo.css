@@ -283,3 +283,22 @@ html{background:#060607}body{background:transparent!important}
 .cartao,.bloco,.arvore,.slots-col,.troca,.vazio{background:rgba(20,20,21,.82);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}
 .cartao:hover{background:rgba(30,30,32,.9)}
 .visor-caixa,.janela-caixa{background:rgba(20,20,21,.97)}
+
+/* modos Mercado Livre e Shopee no anuncio */
+.abas-cor{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 10px}
+.abas-cor button{display:flex;align-items:center;gap:6px;border:1px solid var(--borda);background:var(--relevo);color:var(--fraco);border-radius:8px;padding:3px 9px 3px 3px;cursor:pointer;font-size:13px}
+.abas-cor button img{width:26px;height:26px;object-fit:contain;background:#f6f5f1;border-radius:5px}
+.abas-cor button small{color:var(--apagado)}
+.abas-cor button.ativo{border-color:var(--luz);color:var(--texto);font-weight:600}
+.peca.var-cor{position:relative}.peca.var-cor.escolhida{outline:2px solid var(--luz);outline-offset:2px}
+.peca.var-cor.alvo{outline:2px dashed var(--luz);outline-offset:2px}
+.peca .etiqueta{position:absolute;top:6px;left:6px;z-index:1;padding:2px 8px;border-radius:10px;background:var(--luz);color:var(--luz-tinta);font:600 11px/18px var(--corpo);font-style:normal}
+.peca .botoes .pequeno{width:100%;margin:0}
+.chips-tam{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 0}
+.chips-tam span{padding:3px 10px;border-radius:12px;border:1px solid var(--borda-forte);font-size:13px}
+#conta-titulo.passou{color:#ff8a7a;font-weight:600}
+.tela.mk-shopee{--pv:#d9480f}.tela.mk-ml{--pv:#2968c8}
+.tela .tams div{flex-wrap:wrap}
+.tela .tams i{font-style:normal;flex:none;min-width:44px;padding:6px 10px;border:1.5px solid #dcdcd8;border-radius:6px;background:#fff;text-align:center;font-size:13px}
+.peca .botoes.escolha{flex-wrap:wrap;gap:5px}.peca .botoes.escolha button{flex:1 1 auto;min-width:0}
+.campo-tam{display:grid;gap:6px;max-width:460px;color:var(--fraco);font-size:14px}.campo-tam input{width:100%}
