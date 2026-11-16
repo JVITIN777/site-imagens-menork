@@ -1,0 +1,13 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Imagens Menork</title><link rel="stylesheet" href="/static/estilo.css"></head>
+<body class="porta">
+<form method="post" class="cartao-senha">
+  <h1>Menork <small>imagens</small></h1>
+  {% if criar %}<p>Primeiro acesso: crie a senha do site.</p>{% else %}<p>Digite a senha para entrar.</p>{% endif %}
+  {% if erro %}<div class="alerta">{{ erro }}</div>{% endif %}
+  <label>Senha<input type="password" name="senha" autofocus required></label>
+  {% if criar %}<label>Repita a senha<input type="password" name="repetir" required></label>{% endif %}
+  <button class="b grande">{{ 'Criar senha e entrar' if criar else 'Entrar' }}</button>
+</form>
+</body></html>

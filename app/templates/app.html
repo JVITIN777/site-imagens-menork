@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Imagens Menork</title>
+<link rel="stylesheet" href="/static/estilo.css?v={{ versao }}">
+<link rel="stylesheet" href="/static/extra.css?v={{ versao }}">
+</head>
+<body data-desfazer="60">
+<aside class="lateral">
+  <a class="marca-site" href="#" data-rota="/"><svg viewBox="0 0 32 32" aria-hidden="true"><rect x="2" y="2" width="28" height="28" rx="7"/><path d="M8 21c0-5 3-7 6-7 1 2 3 3 6 3 3 0 4 2 4 4z"/></svg><span>Menork<small>imagens</small></span></a>
+  <form class="busca" data-busca="1"><svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="9" cy="9" r="6"/><path d="m14 14 4 4"/></svg><input type="search" name="q" placeholder="Buscar" aria-label="Buscar produto, cor, tipo, anúncio ou arquivo"></form>
+  <nav><a href="#" data-rota="/" data-tela="fila"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="m4 10 4 4 8-9"/></svg><span>Fila de aprovação</span><b class="bolha" id="bolha"></b></a><a href="#" data-rota="/demandas" data-tela="demandas"><svg viewBox="0 0 20 20" aria-hidden="true"><rect x="4" y="3" width="12" height="14" rx="2"/><path d="M7 7h6M7 10h6M7 13h3"/></svg><span>Demandas</span></a><a href="#" data-rota="/anuncios" data-tela="anuncios"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 6h14l-1 11H4z"/><path d="M7 6a3 3 0 0 1 6 0"/></svg><span>Anúncios</span></a><a href="#" data-rota="/catalogo" data-tela="catalogo"><svg viewBox="0 0 20 20" aria-hidden="true"><rect x="3" y="3" width="6" height="6" rx="1"/><rect x="11" y="3" width="6" height="6" rx="1"/><rect x="3" y="11" width="6" height="6" rx="1"/><rect x="11" y="11" width="6" height="6" rx="1"/></svg><span>Catálogo</span></a><a href="#" data-rota="/capas" data-tela="capas"><svg viewBox="0 0 20 20" aria-hidden="true"><rect x="3" y="3" width="14" height="14" rx="2"/><path d="m3 13 4-4 4 4 2-2 4 4"/></svg><span>Histórico de capas</span></a><a href="#" data-rota="/referencias" data-tela="referencias"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="m10 3 2.2 4.5 4.8.7-3.5 3.4.8 4.9L10 14.2l-4.3 2.3.8-4.9L3 8.2l4.8-.7z"/></svg><span>Referências</span></a><a href="#" data-rota="/erros" data-tela="erros"><svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="7"/><path d="m7.5 7.5 5 5m0-5-5 5"/></svg><span>Lista de erros</span></a><a href="#" data-rota="/painel" data-tela="painel"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 17V9m5 8V3m5 14v-6m4 6V6"/></svg><span>Painel</span></a><a href="#" data-rota="/medidas" data-tela="medidas"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 13 13 3l4 4L7 17z"/><path d="m6 10 2 2m1-5 2 2m1-5 2 2"/></svg><span>Medidas</span></a></nav>
+  <div class="rodape-lateral"><div class="pulso"><i></i><span>Lendo a pasta de entrada</span></div><a class="sair" href="/sair">Sair</a></div>
+</aside>
+<div class="palco">
+<main></main>
+</div>
+<div id="barra" class="barra" hidden>
+  <b><span id="barra-qtd">0</span> selecionada(s)</b>
+  <button class="b verde" data-lote="aprovar">Aprovar</button>
+  <button class="b vermelho" data-lote="reprovar">Reprovar</button>
+  <span class="sep"></span>
+  <input id="l-produto" list="dl-produtos" placeholder="Produto" size="8">
+  <input id="l-cor" list="dl-cores" placeholder="Cor" size="10">
+  <select id="l-tipo"><option value="">Tipo…</option><option value="fb">Fundo branco</option><option value="kit2_fb">Kit 2 fundo branco</option><option value="kit3_fb">Kit 3 fundo branco</option><option value="kit4_fb">Kit 4 fundo branco</option><option value="ia">Foto IA</option><option value="informativo">Informativo</option><option value="tabela">Tabela de medidas</option><option value="capa">Capa</option><option value="capa_kit2">Capa kit 2</option><option value="capa_kit3">Capa kit 3</option><option value="capa_kit4">Capa kit 4</option></select>
+  <input id="l-anuncio" list="dl-anuncios" placeholder="Anúncio" size="14">
+  <button class="b" data-lote="classificar">Aplicar</button>
+  <span class="sep"></span>
+  <button class="b claro" id="barra-todas">Selecionar todas</button>
+  <button class="b claro" id="barra-limpar">Limpar</button>
+</div>
+
+<div id="visor" class="visor" hidden>
+  <div class="visor-caixa">
+    <button class="fechar" id="v-fechar" title="Fechar (Esc)">×</button>
+    <div class="visor-fotos">
+      <figure><figcaption id="v-titulo">Imagem</figcaption><a id="v-link"><img id="v-img" alt=""></a></figure>
+      <figure id="v-fb-bloco"><figcaption>Fundo branco <span id="v-fb-cor"></span></figcaption><img id="v-fb" alt=""><div id="v-fb-opcoes" class="fb-opcoes"></div></figure>
+    </div>
+    <aside class="visor-lado">
+      <div id="v-status" class="etiqueta"></div>
+      <p class="pequeno" id="v-arquivo"></p><div id="v-extra" class="v-extra"></div>
+      <label>Produto<input id="v-produto" list="dl-produtos"></label>
+      <label>Cor<input id="v-cor" list="dl-cores"></label>
+      <label>Tipo de imagem<select id="v-tipo"><option value="">(sem tipo)</option><option value="fb">Fundo branco</option><option value="kit2_fb">Kit 2 fundo branco</option><option value="kit3_fb">Kit 3 fundo branco</option><option value="kit4_fb">Kit 4 fundo branco</option><option value="ia">Foto IA</option><option value="informativo">Informativo</option><option value="tabela">Tabela de medidas</option><option value="capa">Capa</option><option value="capa_kit2">Capa kit 2</option><option value="capa_kit3">Capa kit 3</option><option value="capa_kit4">Capa kit 4</option></select></label>
+      <label>Colocar no anúncio<input id="v-anuncio" list="dl-anuncios" placeholder="nome do anúncio"></label>
+      <div id="v-anuncios" class="fichas"></div>
+      <button class="b" id="v-salvar">Salvar dados</button>
+      <div class="decisao">
+        <button class="b verde grande" id="v-aprovar">Aprovar <kbd>A</kbd></button>
+        <button class="b vermelho grande" id="v-reprovar">Reprovar <kbd>R</kbd></button>
+      </div>
+      <div class="passos"><button class="b claro" id="v-ant">← Anterior</button><button class="b claro" id="v-prox">Próxima →</button></div>
+    </aside>
+  </div>
+</div>
+<div id="aviso" class="aviso" hidden></div>
+<div id="janela" class="visor janela" hidden><div class="janela-caixa"></div></div>
+<datalist id="dl-produtos"></datalist><datalist id="dl-cores"></datalist><datalist id="dl-anuncios"></datalist>
+<script src="/static/site.js?v={{ versao }}"></script>
+</body>
+</html>

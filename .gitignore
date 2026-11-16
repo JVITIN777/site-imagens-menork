@@ -1,0 +1,6 @@
+config.json
+dados/
+repositorio/
+.venv/
+__pycache__/
+*.pyc

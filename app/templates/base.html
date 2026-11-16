@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block titulo %}Imagens Menork{% endblock %}</title>
+<link rel="stylesheet" href="/static/estilo.css">
+</head>
+<body data-desfazer="{{ desfazer }}">
+<aside class="lateral">
+  <a class="marca-site" href="/"><svg viewBox="0 0 32 32" aria-hidden="true"><rect x="2" y="2" width="28" height="28" rx="7"/><path d="M8 21c0-5 3-7 6-7 1 2 3 3 6 3 3 0 4 2 4 4z"/></svg><span>Menork<small>imagens</small></span></a>
+  <form class="busca" action="/catalogo">
+    <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="9" cy="9" r="6"/><path d="m14 14 4 4"/></svg>
+    <input type="search" name="q" placeholder="Buscar" aria-label="Buscar produto, cor, tipo, anúncio ou arquivo" value="{{ f.q if f and f.q is defined else '' }}">
+  </form>
+  <nav>
+    <a href="/" class="{{ 'ativo' if atual=='fila' }}"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="m4 10 4 4 8-9"/></svg><span>Fila de aprovação</span>{% if pendentes %}<b class="bolha">{{ pendentes }}</b>{% endif %}</a>
+    <a href="/catalogo" class="{{ 'ativo' if atual=='catalogo' }}"><svg viewBox="0 0 20 20" aria-hidden="true"><rect x="3" y="3" width="6" height="6" rx="1"/><rect x="11" y="3" width="6" height="6" rx="1"/><rect x="3" y="11" width="6" height="6" rx="1"/><rect x="11" y="11" width="6" height="6" rx="1"/></svg><span>Catálogo</span></a>
+    <a href="/capas" class="{{ 'ativo' if atual=='capas' }}"><svg viewBox="0 0 20 20" aria-hidden="true"><rect x="3" y="3" width="14" height="14" rx="2"/><path d="m3 13 4-4 4 4 2-2 4 4"/></svg><span>Histórico de capas</span></a>
+    <a href="/anuncios" class="{{ 'ativo' if atual in ('anuncios','anuncio') }}"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 6h14l-1 11H4z"/><path d="M7 6a3 3 0 0 1 6 0"/></svg><span>Anúncios</span></a>
+  </nav>
+  <div class="rodape-lateral">
+    <div class="pulso {{ 'ruim' if estado.erro }}"><i></i><span>{% if estado.erro %}Pasta de entrada fora do ar{% elif estado.ultima_leitura %}Pasta lida às {{ estado.ultima_leitura[11:16] }}{% else %}Lendo a pasta de entrada{% endif %}</span></div>
+    <a class="sair" href="/sair">Sair</a>
+  </div>
+</aside>
+<div class="palco">
+{% if estado.erro %}<div class="alerta">{{ estado.erro }}. O site continua aberto, mas não está recebendo imagens novas.</div>{% endif %}
+<main>{% block conteudo %}{% endblock %}</main>
+</div>
+
+<div id="barra" class="barra" hidden>
+  <b><span id="barra-qtd">0</span> selecionada(s)</b>
+  <button class="b verde" data-lote="aprovar">Aprovar</button>
+  <button class="b vermelho" data-lote="reprovar">Reprovar</button>
+  <span class="sep"></span>
+  <input id="l-produto" list="dl-produtos" placeholder="Produto" size="8">
+  <input id="l-cor" list="dl-cores" placeholder="Cor" size="10">
+  <select id="l-tipo"><option value="">Tipo…</option>{% for k, v in tipos %}<option value="{{ k }}">{{ v }}</option>{% endfor %}</select>
+  <input id="l-anuncio" list="dl-anuncios" placeholder="Anúncio" size="14">
+  <button class="b" data-lote="classificar">Aplicar</button>
+  <span class="sep"></span>
+  <button class="b claro" id="barra-todas">Selecionar todas</button>
+  <button class="b claro" id="barra-limpar">Limpar</button>
+</div>
+
+<div id="visor" class="visor" hidden>
+  <div class="visor-caixa">
+    <button class="fechar" id="v-fechar" title="Fechar (Esc)">×</button>
+    <div class="visor-fotos">
+      <figure><figcaption id="v-titulo">Imagem</figcaption><a id="v-link" target="_blank"><img id="v-img" alt=""></a></figure>
+      <figure id="v-fb-bloco"><figcaption>Fundo branco <span id="v-fb-cor"></span></figcaption><img id="v-fb" alt=""><div id="v-fb-opcoes" class="fb-opcoes"></div></figure>
+    </div>
+    <aside class="visor-lado">
+      <div id="v-status" class="etiqueta"></div>
+      <p class="pequeno" id="v-arquivo"></p>
+      <label>Produto<input id="v-produto" list="dl-produtos"></label>
+      <label>Cor<input id="v-cor" list="dl-cores"></label>
+      <label>Tipo de imagem<select id="v-tipo"><option value="">(sem tipo)</option>{% for k, v in tipos %}<option value="{{ k }}">{{ v }}</option>{% endfor %}</select></label>
+      <label>Colocar no anúncio<input id="v-anuncio" list="dl-anuncios" placeholder="nome do anúncio"></label>
+      <div id="v-anuncios" class="fichas"></div>
+      <button class="b" id="v-salvar">Salvar dados</button>
+      <div class="decisao">
+        <button class="b verde grande" id="v-aprovar">Aprovar <kbd>A</kbd></button>
+        <button class="b vermelho grande" id="v-reprovar">Reprovar <kbd>R</kbd></button>
+      </div>
+      <div class="passos"><button class="b claro" id="v-ant">← Anterior</button><button class="b claro" id="v-prox">Próxima →</button></div>
+    </aside>
+  </div>
+</div>
+<div id="aviso" class="aviso" hidden></div>
+<datalist id="dl-produtos">{% for p in lista_produtos %}<option value="{{ p }}">{% endfor %}</datalist>
+<datalist id="dl-cores">{% for p in lista_cores %}<option value="{{ p }}">{% endfor %}</datalist>
+<datalist id="dl-anuncios">{% for p in lista_anuncios %}<option value="{{ p }}">{% endfor %}</datalist>
+<script src="/static/app.js"></script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

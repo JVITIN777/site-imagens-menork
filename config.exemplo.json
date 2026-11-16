@@ -1,0 +1,16 @@
+{
+  "pasta_entrada": "",
+  "pasta_repositorio": "",
+  "modo_entrada": "copiar",
+  "apagar_original_ao_reprovar": true,
+  "importar_a_partir_de": "",
+  "pastas_ignoradas": ["REPROVADAS"],
+  "host": "127.0.0.1",
+  "porta": 8765,
+  "intervalo_segundos": 10,
+  "segundos_para_desfazer": 60,
+  "clickup_token": "",
+  "clickup_lista": "",
+  "chave_bots": "",
+  "atualizar_sozinho": true
+}
