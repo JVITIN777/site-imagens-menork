@@ -4,3 +4,4 @@ repositorio/
 .venv/
 __pycache__/
 *.pyc
+fonte/demonstracao.html

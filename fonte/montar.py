@@ -1,0 +1,157 @@
+import re
+import os
+os.chdir(os.path.dirname(os.path.abspath(__file__)))
+R='../app/'
+css=open(R+'static/estilo.css').read()
+app=open(R+'static/app.js').read(); an=open(R+'static/anuncio.js').read()
+def troca(s, a, b, n=1):
+    assert s.count(a)>=n, a; return s.replace(a,b)
+def img(s):
+    for pasta, fn in (('img', 'GRANDE'), ('mini', 'IMG')):
+        s = re.sub(r"/%s/\$\{([\w.]+)\}" % pasta, r"${%s(\1)}" % fn, s)
+        s = re.sub(r"'/%s/' \+ ([\w.]+)" % pasta, r"%s(\1)" % fn, s)
+    return s
+app=img(app); an=img(an)
+# api: marcador, trocado depois pela versao da demonstracao ou pela do site
+i=app.index('  async function api('); f=app.index('  // ---- avisos')
+API_REAL=app[i:f]
+app=app[:i]+"/*API*/\n\n"+app[f:]
+app=troca(app,"try { await api('/api/acao', d); location.reload(); }","try { await api('/api/acao', d); RENDER(); }")
+i=app.index("      if (window.ANUNCIO_ID)"); f=app.index("    } catch (e) { aviso(e.message); }\n  };\n  document.addEventListener('keydown'")
+app=app[:i]+"      const id = atual.id; RENDER(); abrir(id);\n"+app[f:]
+app=troca(app,"$('#enviar')?.addEventListener('change', async e => {","document.addEventListener('change', async e => {\n    if (e.target.id !== 'enviar') return;")
+app=troca(app,"$('#ler-agora')?.addEventListener('click', async () => {","document.addEventListener('click', async e => {\n    if (!e.target.closest('#ler-agora')) return;")
+app=troca(app,"if (r.erros.length) alert('Não consegui ler: ' + r.erros.join(', '));","")
+app,k=re.subn(r"sessionStorage\.setItem\('recado', (.+?)\);\s*location\.reload\(\);", r"RENDER(); aviso(\1);", app); assert k==2,k
+app=troca(app,"  try { const r = sessionStorage.getItem('reabrir'); if (r) { sessionStorage.removeItem('reabrir'); if (cartao(r)) abrir(+r); } } catch (e) {}\n","")
+app=troca(app,"  try { const r = sessionStorage.getItem('recado'); if (r) { sessionStorage.removeItem('recado'); aviso(r); } } catch (e) {}\n","")
+app=troca(app,"  async function decidir(ids, acao) {\n    try { await api('/api/acao', { ids, acao }); }","  async function decidir(ids, acao, motivo) {\n    if (acao === 'reprovar' && !motivo) { motivo = await window.PEDIR_MOTIVO(ids.length); if (!motivo) return false; }\n    try { await api('/api/acao', { ids, acao, motivo }); }")
+app=troca(app,"    await decidir([id], acao);\n","    if (await decidir([id], acao) === false) return;\n")
+app=troca(app,"if (visor.hidden || e.target.matches('input,select,textarea')) return;","if (visor.hidden || !document.getElementById('janela').hidden || e.target.matches('input,select,textarea')) return;")
+app=troca(app,"    $('#v-aprovar').hidden = d.status === 'aprovada';","    $('#v-aprovar').hidden = d.status === 'aprovada'; $('#v-reprovar').hidden = d.status === 'reprovada'; window.AO_ABRIR?.(d);")
+an=troca(an,"function desenhar() { desenharEditor(); desenharPrevia(); }","function desenhar() { desenharEditor(); desenharPrevia(); window.AO_DESENHAR?.(ID); }")
+assert 'location.' not in app and 'sessionStorage' not in app and 'alert(' not in app, [l for l in app.split('\n') if 'location.' in l]
+# anuncio.js -> funcao
+an=troca(an,"(() => {\n  const { api, aviso, abrir } = window.menork;\n  const ID = window.ANUNCIO_ID, editor","window.ANUNCIO = (ID) => {\n  const { api, aviso, abrir } = window.menork;\n  const editor")
+an=troca(an,"document.addEventListener('menork:mudou', carregar);","window.AO_MUDAR = carregar;")
+an=troca(an,"if (acao === 'desvincular') return api('/api/acao', { ids: [imagem], acao, anuncio_id: ID }).then(carregar);","if (acao === 'desvincular') return api('/api/acao', { ids: [imagem], acao, anuncio_id: ID }).then(() => document.dispatchEvent(new Event('menork:mudou')));")
+assert an.rstrip().endswith('})();'); an=an.rstrip()[:-5]+'};\n'
+base=open(R+'templates/base.html').read()
+i=base.index('<div id="barra"'); f=base.index('<datalist')
+sobras=base[i:f]
+sobras=re.sub(r"\{% for k, v in tipos %\}.*?\{% endfor %\}", "__TIPOS__", sobras)
+import json
+tipos=''.join(f'<option value="{k}">{v}</option>' for k,v in [('fb','Fundo branco'),('kit2_fb','Kit 2 fundo branco'),('kit3_fb','Kit 3 fundo branco'),('kit4_fb','Kit 4 fundo branco'),('ia','Foto IA'),('informativo','Informativo'),('tabela','Tabela de medidas'),('capa','Capa'),('capa_kit2','Capa kit 2'),('capa_kit3','Capa kit 3'),('capa_kit4','Capa kit 4')])
+sobras=sobras.replace('__TIPOS__',tipos); assert '{%' not in sobras and '{{' not in sobras
+sobras=sobras.replace('<a id="v-link" target="_blank">','<a id="v-link">')
+sobras=troca(sobras,'<p class="pequeno" id="v-arquivo"></p>','<p class="pequeno" id="v-arquivo"></p><div id="v-extra" class="v-extra"></div>')
+sobras+='<div id="janela" class="visor janela" hidden><div class="janela-caixa"></div></div>\n'
+app=app.replace(" $('#v-link').href = GRANDE(id);","")
+ic={'demandas':'<rect x="4" y="3" width="12" height="14" rx="2"/><path d="M7 7h6M7 10h6M7 13h3"/>','referencias':'<path d="m10 3 2.2 4.5 4.8.7-3.5 3.4.8 4.9L10 14.2l-4.3 2.3.8-4.9L3 8.2l4.8-.7z"/>','erros':'<circle cx="10" cy="10" r="7"/><path d="m7.5 7.5 5 5m0-5-5 5"/>','painel':'<path d="M3 17V9m5 8V3m5 14v-6m4 6V6"/>','medidas':'<path d="M3 13 13 3l4 4L7 17z"/><path d="m6 10 2 2m1-5 2 2m1-5 2 2"/>','fila':'<path d="m4 10 4 4 8-9"/>','catalogo':'<rect x="3" y="3" width="6" height="6" rx="1"/><rect x="11" y="3" width="6" height="6" rx="1"/><rect x="3" y="11" width="6" height="6" rx="1"/><rect x="11" y="11" width="6" height="6" rx="1"/>','capas':'<rect x="3" y="3" width="14" height="14" rx="2"/><path d="m3 13 4-4 4 4 2-2 4 4"/>','anuncios':'<path d="M3 6h14l-1 11H4z"/><path d="M7 6a3 3 0 0 1 6 0"/>'}
+nav=''.join(f'<a href="#" data-rota="{r}" data-tela="{t}"><svg viewBox="0 0 20 20" aria-hidden="true">{ic[t]}</svg><span>{n}</span>{b}</a>' for t,r,n,b in [('fila','/','Fila de aprovação','<b class="bolha" id="bolha"></b>'),('demandas','/demandas','Demandas',''),('anuncios','/anuncios','Anúncios',''),('catalogo','/catalogo','Catálogo',''),('capas','/capas','Histórico de capas',''),('referencias','/referencias','Referências',''),('erros','/erros','Lista de erros',''),('painel','/painel','Painel',''),('medidas','/medidas','Medidas','')])
+extra='''
+.demo{background:#2a2410;color:#f3d48a;border-bottom:1px solid #5a4a14;padding:9px 34px;font-size:13px}
+@media (max-width:1000px){.demo{padding:8px 14px}}
+.legenda .alerta-mini,.legenda .motivo{color:var(--vermelho);font-weight:600}
+.legenda .ref-mini{color:var(--luz)}
+.ok-mini{color:var(--verde)!important;font-weight:600}.alerta-mini{color:var(--vermelho)!important;font-weight:600}
+.abas{display:flex;gap:6px;align-items:center;margin-bottom:16px;flex-wrap:wrap}
+.abas a{padding:8px 18px;border:1px solid var(--borda);border-radius:9px;color:var(--fraco);font:600 16px var(--titulo)}
+.abas a:hover{color:var(--texto);border-color:var(--borda-forte)}.abas a.ativo{background:var(--luz);color:var(--luz-tinta);border-color:var(--luz)}
+.abas .pequeno{margin-left:8px}
+.demanda{margin-bottom:14px}.demanda h2{align-items:center}
+.mkts{display:flex;gap:6px;flex-wrap:wrap;margin-left:auto}.mkts i{font:500 12px var(--corpo);font-style:normal;border:1px solid var(--borda-forte);border-radius:12px;padding:2px 10px;color:var(--texto)}
+.dem-grade{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.3fr);gap:22px}
+.dem-grade h3{font:600 13px var(--corpo);color:var(--fraco);margin:0 0 6px}.dem-grade h3:not(:first-child){margin-top:14px}.dem-grade h3 small{font-weight:400}
+.dem-grade pre{margin:0;white-space:pre-wrap;font:14px/1.5 var(--corpo);background:var(--chao);border:1px solid var(--borda);border-radius:9px;padding:11px 13px}
+.dem-grade code{font:12px/1.4 Consolas,monospace;color:var(--fraco);overflow-wrap:anywhere}
+.entendeu{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+.entendeu label{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--fraco)}.entendeu input{color:var(--texto);width:100%}
+.dem-ads{display:flex;gap:8px;flex-wrap:wrap}.dem-ads small{font-weight:400;margin-left:4px}
+@media (max-width:900px){.dem-grade{grid-template-columns:1fr}}
+.faixa-bots{margin:-6px 0 14px;padding:10px 14px;border:1px solid #6b2a25;background:#2a1716;border-radius:10px;color:#ffc9c3;font-size:14px}
+.faixa-bots a{color:#fff;text-decoration:underline;margin-left:6px}
+.v-extra{display:flex;flex-direction:column;gap:8px}.v-extra:empty{display:none}
+.nota{border:1px solid var(--borda);border-left:3px solid var(--fraco);border-radius:8px;padding:9px 11px;display:flex;flex-direction:column;gap:2px;font-size:13px}
+.nota b{font-size:14px}.nota span{color:var(--fraco)}
+.nota.ruim{border-left-color:var(--vermelho);background:rgba(240,102,91,.08)}.nota.ruim b{color:var(--vermelho)}
+.nota.boa{border-left-color:var(--verde)}.nota.boa b{color:var(--verde)}
+.nota.par{flex-direction:row;gap:10px;align-items:center}.nota.par img{width:64px;height:64px;border-radius:6px;background:#fff;flex:none}.nota.par div{display:flex;flex-direction:column;gap:2px}
+.medidas-mini{display:flex;flex-wrap:wrap;gap:4px 10px}.medidas-mini i{font-style:normal;color:var(--texto)}
+.janela{z-index:60}
+.janela-caixa{background:var(--painel);border:1px solid var(--borda-forte);border-radius:16px;padding:24px;width:min(760px,100%);max-height:100%;overflow:auto;display:flex;flex-direction:column;gap:14px;box-shadow:0 30px 90px rgba(0,0,0,.7)}
+.janela-caixa h2{font:700 24px var(--titulo);margin:0}.janela-caixa h3{font:600 17px var(--titulo);margin:0 0 6px}.janela-caixa p{margin:0}
+.janela-caixa>.b{align-self:flex-start}
+.motivos{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:9px}
+.motivos .b{justify-content:flex-start;padding:12px 14px;font-size:16px;white-space:normal;text-align:left}
+.pacotes{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px}
+.pacotes>div{border:1px solid var(--borda);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:10px}
+.pacotes ol{margin:0;padding-left:22px;font-size:13px;display:flex;flex-direction:column;gap:3px;overflow-wrap:anywhere}.pacotes small{color:var(--fraco)}
+.faltas{margin:0}.faltas h3{font:600 15px var(--titulo);margin:14px 0 6px}.faltas .pedir{margin-top:12px}.linha-capas{margin:10px 0 0}.pacotes-feitos{margin:0;padding-left:20px;font-size:14px;display:flex;flex-direction:column;gap:4px}.pacotes-feitos a{color:var(--luz);text-decoration:underline}.pacotes-feitos b{margin-right:6px}.janela-caixa .nota span{color:var(--texto)}.metas{display:flex;gap:14px;align-items:center;flex-wrap:wrap;margin-bottom:12px;font-size:14px}.metas label{display:flex;gap:8px;align-items:center}.metas input{width:64px;padding:6px 8px}
+.comando textarea{font:13px/1.5 Consolas,monospace;margin-bottom:10px}.comando code{font-family:Consolas,monospace;color:var(--texto)}.comando{margin-bottom:18px}
+.ref.escolhida .cartao{border-color:var(--luz);box-shadow:0 0 0 1px var(--luz)}.caminho .acoes .b{flex:1;padding:8px 10px;font-size:14px}.faltas ul,.demandas ul{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:3px}
+.faltas li::marker,.demandas li::marker{color:var(--luz)}
+.completo{margin:0;color:var(--verde);font-weight:600}
+.dois-blocos{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:14px;margin:14px 0 20px}
+.demandas{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:18px}
+.demandas a b{font:600 17px var(--titulo)}.demandas a:hover b{color:var(--luz)}.demandas>div{display:flex;flex-direction:column;gap:6px;font-size:14px}
+.tabela{width:100%;border-collapse:collapse;font-size:14px}
+.tabela td,.tabela th{padding:8px 6px;border-bottom:1px solid var(--borda);text-align:left;vertical-align:middle}
+.tabela th{color:var(--fraco);font-weight:500;font-size:13px}.tabela tr:last-child td{border-bottom:0}
+.ponto{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:9px;background:var(--fraco)}
+.ponto.boa{background:var(--verde)}.ponto.ruim{background:var(--vermelho)}.ponto.andando{background:var(--azul)}
+.aviso-txt{color:var(--luz)}
+.barras{display:flex;flex-direction:column;gap:6px}
+.barras a{display:grid;grid-template-columns:minmax(150px,1.3fr) 1fr 28px;gap:10px;align-items:center;padding:5px 8px;border-radius:7px;font-size:14px}
+.barras a:hover,.barras a.ativo{background:var(--relevo)}
+.barras i{height:10px;border-radius:5px;background:var(--vermelho);min-width:4px}.barras b{text-align:right;font-family:var(--titulo)}
+.ref{display:flex;flex-direction:column;gap:8px}
+.caminho{display:flex;flex-direction:column;gap:6px}
+.caminho code{font:12px/1.4 Consolas,monospace;color:var(--fraco);background:var(--painel);border:1px solid var(--borda);border-radius:8px;padding:8px;overflow-wrap:anywhere;user-select:all}
+.medidas .bloco{display:flex;flex-direction:column;gap:10px}.medidas .b{align-self:flex-start}.medidas td .b{padding:4px 10px}
+'''
+API_DEMO="  const api = (url, corpo, formulario) => FAKE(url, corpo, formulario);"
+def pagina(estilos, banner, rodape, scripts, titulo):
+    return f"""<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{titulo}</title>
+{estilos}
+</head>
+<body data-desfazer="60">
+<aside class="lateral">
+  <a class="marca-site" href="#" data-rota="/"><svg viewBox="0 0 32 32" aria-hidden="true"><rect x="2" y="2" width="28" height="28" rx="7"/><path d="M8 21c0-5 3-7 6-7 1 2 3 3 6 3 3 0 4 2 4 4z"/></svg><span>Menork<small>imagens</small></span></a>
+  <form class="busca" data-busca="1"><svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="9" cy="9" r="6"/><path d="m14 14 4 4"/></svg><input type="search" name="q" placeholder="Buscar" aria-label="Buscar produto, cor, tipo, anúncio ou arquivo"></form>
+  <nav>{nav}</nav>
+  <div class="rodape-lateral">{rodape}</div>
+</aside>
+<div class="palco">
+{banner}<main></main>
+</div>
+{sobras}<datalist id="dl-produtos"></datalist><datalist id="dl-cores"></datalist><datalist id="dl-anuncios"></datalist>
+{scripts}
+</body>
+</html>
+"""
+dados=open('dados.js').read(); telas=open('telas.js').read(); extras=open('extras.js').read()
+# ---- demonstracao (um arquivo so)
+html=pagina(f"<style>\n{css}{extra}</style>", '<div class="demo">Demonstração com imagens de exemplo. Tudo funciona, mas nada é salvo: ao recarregar a página, volta ao início.</div>\n',
+            '<div class="pulso"><i></i><span>Demonstração</span></div>',
+            f"<script>\n{dados}\n{telas}\n{extras}\n{app.replace('/*API*/', API_DEMO)}\n{an}\nRENDER();\n</script>", "Imagens Menork (demonstração)")
+open('demonstracao.html','w').write(html); print('demo', len(html))
+# ---- site de verdade: as mesmas telas, falando com o servidor
+def pedaco(ini, fim):
+    a=dados.index(ini); return dados[a:dados.index(fim, a)]
+linha=lambda ini: next(l for l in dados.split('\n') if l.startswith(ini))
+comuns='\n'.join([pedaco('const TIPOS = ', 'const TINTAS'), linha('const MOTIVOS = '), linha('const META = '), linha('const MKT = '), linha('const FORMATO = '),
+                  pedaco('const resumo = i =>', 'function montar(aid, d) {'), pedaco('const demandaDe = a =>', 'const GRANDE = IMG;')])
+site_js='\n'.join(["'use strict';", comuns, open('dados_site.js').read(), telas, extras, app.replace('/*API*/', API_REAL), an, "RENDER().catch(e => window.menork.aviso(e.message));"])
+assert 'FAKE' not in site_js and 'arte(' not in site_js and 'TAREFAS_NOVAS' not in site_js
+open(R+'static/site.js','w').write(site_js)
+open(R+'static/extra.css','w').write(extra.split('\n',3)[3])
+open(R+'templates/app.html','w').write(pagina('<link rel="stylesheet" href="/static/estilo.css?v={{ versao }}">\n<link rel="stylesheet" href="/static/extra.css?v={{ versao }}">', '',
+            '<div class="pulso"><i></i><span>Lendo a pasta de entrada</span></div><a class="sair" href="/sair">Sair</a>',
+            '<script src="/static/site.js?v={{ versao }}"></script>', "Imagens Menork"))
+print('site', len(site_js))
