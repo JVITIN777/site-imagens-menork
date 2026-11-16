@@ -17,6 +17,7 @@ i=app.index('  async function api('); f=app.index('  // ---- avisos')
 API_REAL=app[i:f]
 app=app[:i]+"/*API*/\n\n"+app[f:]
 app=troca(app,"      if (estilo) await api('/api/acao', { ids, acao: 'estilo', estilo });\n      location.reload();","      if (estilo) await api('/api/acao', { ids, acao: 'estilo', estilo });\n      RENDER();")
+app=troca(app,"        aviso(msg); location.reload(); } catch (e) { aviso(e.message); }","        await RENDER(); aviso(msg, null, null, 8); } catch (e) { aviso(e.message); }")
 i=app.index("      if (window.ANUNCIO_ID)"); f=app.index("    } catch (e) { aviso(e.message); }\n  };\n  document.addEventListener('keydown'")
 app=app[:i]+"      const id = atual.id; RENDER(); abrir(id);\n"+app[f:]
 app=troca(app,"$('#enviar')?.addEventListener('change', async e => {","document.addEventListener('change', async e => {\n    if (e.target.id !== 'enviar') return;")

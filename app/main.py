@@ -956,6 +956,9 @@ async def acao(request: Request):
                 n.vincular(c, ids, aid)
         elif oque == "referencia":
             c.execute(f"UPDATE imagens SET ref=1-ref WHERE id IN ({marcas}) AND status='aprovada'", ids)
+        elif oque in ("ref_sim", "ref_nao"):
+            c.execute(f"UPDATE imagens SET ref=? WHERE id IN ({marcas}) AND status='aprovada'",
+                      [1 if oque == "ref_sim" else 0, *ids])
         elif oque == "estilo":
             estilo = " ".join(str(d.get("estilo", "")).split())[:40]
             estilo = estilo[:1].upper() + estilo[1:]

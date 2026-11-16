@@ -450,6 +450,14 @@ document.addEventListener('click', e => {
   $('#barra-limpar')?.addEventListener('click', () => { $$('.cartao.marcado').forEach(c => { c.classList.remove('marcado'); $('input', c).checked = false; }); atualizarBarra(); });
   $$('[data-lote]').forEach(b => b.addEventListener('click', async () => {
     const ids = marcados(), acao = b.dataset.lote; if (!ids.length) return;
+    if (acao === 'ref_sim' || acao === 'ref_nao') {
+      const aprovadas = ids.filter(id => cartao(id)?.dataset.status === 'aprovada');
+      if (!aprovadas.length) return aviso('Só imagem aprovada pode virar referência. Aprove primeiro.');
+      try { await api('/api/acao', { ids: aprovadas, acao });
+        const msg = `${aprovadas.length} imagem(ns) ${acao === 'ref_sim' ? 'agora são referência dos bots' : 'saíram das referências'}.` + (aprovadas.length < ids.length ? ` ${ids.length - aprovadas.length} não aprovada(s) ficaram de fora.` : '');
+        await RENDER(); aviso(msg, null, null, 8); } catch (e) { aviso(e.message); }
+      return;
+    }
     if (acao !== 'classificar') return decidir(ids, acao);
     const d = { ids, acao, produto: $('#l-produto').value, cor: $('#l-cor').value, tipo: $('#l-tipo').value, anuncio: $('#l-anuncio').value };
     const estilo = ($('#l-estilo')?.value || '').trim();

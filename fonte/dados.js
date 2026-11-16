@@ -192,6 +192,7 @@ function acao(d) {
   else if (d.acao === 'reprovar') L.forEach(i => { i.antes = i.status; i.status = 'reprovada'; i.motivo = d.motivo || 'Sem motivo'; i.origem = 'você'; });
   else if (d.acao === 'desfazer') L.forEach(i => { i.status = i.produto && i.tipo ? 'conferencia' : 'gerada'; delete i.motivo; });
   else if (d.acao === 'referencia') L.forEach(i => { i.ref = !i.ref; });
+  else if (d.acao === 'ref_sim' || d.acao === 'ref_nao') L.forEach(i => { if (i.status === 'aprovada') i.ref = d.acao === 'ref_sim'; });
   else if (d.acao === 'estilo') L.forEach(i => { const e = String(d.estilo || '').trim().replace(/\s+/g, ' '); i.estilo = e ? e[0].toUpperCase() + e.slice(1) : ''; });
   else if (d.acao === 'classificar') {
     L.forEach(i => { for (const c of ['produto', 'cor', 'tipo']) if (c in d && (d[c] || d.limpar)) i[c] = c === 'produto' ? d[c].trim().toUpperCase() : d[c].trim(); if (i.status !== 'aprovada' && i.status !== 'reprovada') i.status = i.produto && i.tipo ? 'conferencia' : 'gerada'; });
