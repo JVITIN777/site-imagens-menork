@@ -73,7 +73,7 @@ Comandos (respostas em JSON):
   instrucoes                                                (mostra as regras atuais; rode no comeco de cada rodada)
   enviar      -Arquivo <png/jpg> -Produto CI9 -Cor Caramelo -Tipo ia [-Anuncio "CI9 unitario"] [-Conta "Conta 1"] [-Conferida] [-Alertas "Sola diferente","Sem logo"]
   reprovada   -Arquivo <png/jpg> -Motivo "Sola errada" -Bot CONFERENTE [-Produto -Cor -Tipo -Conta]
-  referencias -Tipo informativo|ia|capa|cena|tabela [-Estilo Academia] [-Produto CI9] [-Max 5]
+  referencias -Tipo informativo|cena|capa|tabela [-Estilo Academia] [-Produto CI9] [-Max 5]
   erros       [-Produto CI9]
   anuncios
   faltas      -Anuncio "CI9 unitario"

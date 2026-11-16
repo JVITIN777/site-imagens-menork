@@ -58,8 +58,13 @@
     const ids = marcados(), acao = b.dataset.lote; if (!ids.length) return;
     if (acao !== 'classificar') return decidir(ids, acao);
     const d = { ids, acao, produto: $('#l-produto').value, cor: $('#l-cor').value, tipo: $('#l-tipo').value, anuncio: $('#l-anuncio').value };
-    if (!d.produto && !d.cor && !d.tipo && !d.anuncio) return aviso('Preencha produto, cor, tipo ou anúncio antes de aplicar.');
-    try { await api('/api/acao', d); location.reload(); } catch (e) { aviso(e.message); }
+    const estilo = ($('#l-estilo')?.value || '').trim();
+    if (!d.produto && !d.cor && !d.tipo && !d.anuncio && !estilo) return aviso('Preencha produto, cor, tipo, anúncio ou estilo antes de aplicar.');
+    try {
+      if (d.produto || d.cor || d.tipo || d.anuncio) await api('/api/acao', d);
+      if (estilo) await api('/api/acao', { ids, acao: 'estilo', estilo });
+      location.reload();
+    } catch (e) { aviso(e.message); }
   }));
 
   // ---- visor
