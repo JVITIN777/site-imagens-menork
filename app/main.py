@@ -852,6 +852,60 @@ async def enviar(aid: int, request: Request):
     return enviar_anuncio(aid, "você", bool(d.get("forcar")))
 
 
+# ------------------------------------- lojas dos clientes (lidas do sistema do usuario)
+def _ler_sistema(caminho):
+    i = integ()
+    if not i["url"] or not i["chave"]:
+        raise HTTPException(400, f"Configure o {i['nome']} em Integrações para ver as lojas dos clientes.")
+    status, texto = _chamar("GET", i["url"] + caminho, i["chave"], timeout=40)
+    if status == 404:
+        raise HTTPException(502, f"O {i['nome']} ainda não tem o endereço {caminho.split('?')[0]}. Veja o INTEGRACAO.md.")
+    if status in (401, 403):
+        raise HTTPException(502, f"O {i['nome']} recusou a chave ({status}).")
+    if not 200 <= status < 300:
+        raise HTTPException(502, f"O {i['nome']} respondeu {status}: {texto[:160]}")
+    try:
+        return json.loads(texto)
+    except ValueError:
+        raise HTTPException(502, f"O {i['nome']} respondeu algo que não é JSON.")
+
+
+def _txt(v, limite=200):
+    return str(v if v is not None else "").strip()[:limite]
+
+
+def _link(v):
+    v = _txt(v, 600)
+    return v if re.match(r"^https?://", v) else ""
+
+
+@app.get("/api/lojas")
+def lojas():
+    d = _ler_sistema("/menork/clientes")
+    clientes = []
+    for cl in (d.get("clientes") or [])[:500]:
+        lojas_ = [{"id": _txt(l.get("id"), 80), "nome": _txt(l.get("nome")), "marketplace": _txt(l.get("marketplace"), 20).upper(),
+                   "url": _link(l.get("url")), "anuncios": l.get("anuncios") if isinstance(l.get("anuncios"), int) else None}
+                  for l in (cl.get("lojas") or [])[:100] if _txt(l.get("id"))]
+        clientes.append({"id": _txt(cl.get("id"), 80), "nome": _txt(cl.get("nome")), "lojas": lojas_})
+    return {"sistema": integ()["nome"], "clientes": clientes}
+
+
+@app.get("/api/lojas/{loja}/anuncios")
+def lojas_anuncios(loja: str, pagina: int = 1, busca: str = ""):
+    import urllib.parse
+    q = urllib.parse.urlencode({"pagina": max(1, pagina), "por_pagina": 48, "busca": busca.strip()[:100]})
+    d = _ler_sistema(f"/menork/lojas/{urllib.parse.quote(loja, safe='')}/anuncios?{q}")
+    def num(v):
+        return v if isinstance(v, (int, float)) else None
+    anuncios = [{"id": _txt(a.get("id"), 80), "titulo": _txt(a.get("titulo"), 300), "preco": _txt(a.get("preco"), 30),
+                 "status": _txt(a.get("status"), 30), "foto": _link(a.get("foto")), "link": _link(a.get("link")),
+                 "vendas": num(a.get("vendas")), "estoque": num(a.get("estoque"))}
+                for a in (d.get("anuncios") or [])[:200]]
+    return {"anuncios": anuncios, "total": d.get("total") if isinstance(d.get("total"), int) else len(anuncios),
+            "pagina": max(1, pagina)}
+
+
 @app.post("/bot/enviar-sistema")
 async def bot_enviar_sistema(request: Request):
     d = await request.json()

@@ -152,6 +152,8 @@ const SRV = {
       const nv = novoAnuncio(`${base} ${String(n).padStart(2, '0')}`, { formato: a.formato, titulo: d.titulo ? a.titulo : '', preco: a.preco, preco_antigo: a.preco_antigo, descricao: a.descricao, demanda: a.demanda, familia: fam, meta_ia: a.meta_ia, meta_capa: a.meta_capa });
       leva(nv.id); novos.push(nv.nome); n++; }
     return { novos, atualizados: d.destinos.filter(x => x !== d.id).length }; },
+  lojas: async () => ({ clientes: [{ id: '1', nome: 'Cliente Exemplo', lojas: [{ id: 'l1', nome: 'Loja Exemplo Calçados', marketplace: 'ML', url: '' }, { id: 'l2', nome: 'Exemplo Shoes', marketplace: 'SHP', url: '' }] }, { id: '2', nome: 'Outra Cliente', lojas: [{ id: 'l3', nome: 'Outra Store', marketplace: 'SHEIN', url: '' }] }] }),
+  anunciosLoja: async loja => { const base = DB.imgs.filter(i => i.tipo === 'capa' || i.tipo === 'ia').slice(0, 9); return { total: base.length, anuncios: base.map((i, k) => ({ id: 'MLB' + (900000 + k), titulo: (i.produto || 'Calçado') + ' modelo exemplo ' + (k + 1), preco: (59.9 + k * 10).toFixed(2).replace('.', ','), status: 'ativo', foto: IMG(i.id), link: '', vendas: k * 3, estoque: 20 - k })) }; },
   salvarIntegracao: async d => { Object.assign(DB.integracao, { nome: d.nome || 'B2X', url: d.url, rascunho: d.rascunho }); if (d.chave) DB.integracao.tem_chave = true; if (d.apagar_chave) DB.integracao.tem_chave = false; },
   testarIntegracao: async () => ({ msg: 'Na demonstração não há sistema de verdade para testar.' }),
   enviarSistema: async aid => { (DB.envios[aid] ||= []).unshift({ quando: agora(), por: 'você', ok: true, id: 'B2X-' + (1000 + aid) }); return { msg: 'Na demonstração nada é enviado de verdade.' }; },

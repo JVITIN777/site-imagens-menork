@@ -73,3 +73,40 @@ Responda `200` ou `201` com um JSON que tenha o **código do anúncio no seu sis
 O site guarda esse código e o manda de volta em `id_externo` nos próximos envios do mesmo anúncio.
 
 Em caso de erro, responda `4xx` ou `5xx` com uma mensagem curta no corpo: ela aparece para o Menork na tela do anúncio.
+
+## 3. GET `/menork/clientes`
+
+Usado pela aba **Lojas** do site de imagens. Devolva os clientes e as lojas de cada um:
+
+```json
+{
+  "clientes": [
+    {
+      "id": "12",
+      "nome": "Nome do cliente",
+      "lojas": [
+        {"id": "55", "nome": "Nome da loja", "marketplace": "ML", "url": "https://link-da-loja-no-marketplace", "anuncios": 120}
+      ]
+    }
+  ]
+}
+```
+
+`marketplace` usa as mesmas siglas de cima (ML, SHP, SHEIN, TIKTOK…). `url` e `anuncios` (quantidade) são opcionais.
+
+## 4. GET `/menork/lojas/{id da loja}/anuncios?pagina=1&por_pagina=48&busca=texto`
+
+Devolva os anúncios daquela loja, de 48 em 48. `busca` vem vazio ou com um texto para filtrar pelo título.
+
+```json
+{
+  "total": 120,
+  "anuncios": [
+    {"id": "MLB123456", "titulo": "Tênis Feminino…", "preco": "89,90", "status": "ativo",
+     "foto": "https://link-publico-da-foto-principal", "link": "https://link-do-anuncio-no-marketplace",
+     "vendas": 12, "estoque": 30}
+  ]
+}
+```
+
+`foto` e `link` precisam ser endereços completos (`https://…`). `vendas` e `estoque` são opcionais.

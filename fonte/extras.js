@@ -166,7 +166,58 @@ document.addEventListener('click', async e => {
 });
 
 // ---- telas novas
+// ---- lojas dos clientes (lidas do sistema do usuario)
+const LOJAS = { clientes: null, erro: '', anuncios: {}, carregando: false };
+async function carregarLojas(forcar) {
+  if (LOJAS.carregando || (LOJAS.clientes && !forcar)) return; LOJAS.carregando = true; LOJAS.erro = '';
+  try { LOJAS.clientes = (await SRV.lojas()).clientes; } catch (e) { LOJAS.erro = e.message; LOJAS.clientes = null; }
+  LOJAS.carregando = false; if (ROTA.startsWith('/lojas')) RENDER();
+}
+async function carregarAnuncios(loja, busca, pagina) {
+  const ch = loja + '|' + busca; const atual = LOJAS.anuncios[ch];
+  if (atual && atual.carregando) return;
+  LOJAS.anuncios[ch] = { ...(atual || { lista: [], total: 0 }), carregando: true, erro: '' };
+  try { const r = await SRV.anunciosLoja(loja, busca, pagina);
+    LOJAS.anuncios[ch] = { lista: pagina > 1 ? [...(atual?.lista || []), ...r.anuncios] : r.anuncios, total: r.total, pagina, carregando: false };
+  } catch (e) { LOJAS.anuncios[ch] = { lista: atual?.lista || [], total: 0, pagina, carregando: false, erro: e.message }; }
+  if (ROTA.startsWith('/lojas')) RENDER();
+}
+document.addEventListener('submit', e => { const f = e.target; if (f.id !== 'busca-loja') return; e.preventDefault(); IR(rota('/lojas', { loja: f.dataset.loja, busca: f.busca.value.trim() })); });
+document.addEventListener('click', e => {
+  if (e.target.closest('#recarregar-lojas')) { LOJAS.anuncios = {}; carregarLojas(true); }
+  const m = e.target.closest('[data-mais-loja]'); if (m) { const [, busca = ''] = [0, ...(m.dataset.busca ? [m.dataset.busca] : [])]; carregarAnuncios(m.dataset.maisLoja, m.dataset.busca || '', (+m.dataset.pagina || 1) + 1); }
+});
+
 Object.assign(TELAS, {
+  lojas(q) {
+    const i = INTEG(), nome = esc(i.nome || 'sistema');
+    if (!i.url || !i.tem_chave) return `<div class="cabeca"><h1>Lojas dos clientes</h1></div><div class="vazio"><h2>Ligue o ${nome} primeiro</h2><p>As lojas e os anúncios vêm do ${nome}. Configure o endereço e a chave em ${elo('/integracoes', 'Integrações')}.</p></div>`;
+    if (!LOJAS.clientes && !LOJAS.erro) { carregarLojas(); return `<div class="cabeca"><h1>Lojas dos clientes</h1></div><div class="vazio"><h2>Buscando os clientes no ${nome}…</h2></div>`; }
+    if (LOJAS.erro) return `<div class="cabeca"><h1>Lojas dos clientes</h1><div class="acoes"><button class="b claro" id="recarregar-lojas">Tentar de novo</button></div></div><div class="vazio"><h2>Não consegui ler as lojas</h2><p>${esc(LOJAS.erro)}</p></div>`;
+    const todas = LOJAS.clientes.flatMap(c => c.lojas.map(l => ({ ...l, cliente: c.nome })));
+    const loja = todas.find(l => l.id === q.loja) || null, busca = q.busca || '';
+    const lista = `<aside class="bloco lojas-lista">${LOJAS.clientes.map(c => `<details ${c.lojas.some(l => l.id === q.loja) || LOJAS.clientes.length <= 3 ? 'open' : ''}><summary>${esc(c.nome)} <small>${c.lojas.length} loja(s)</small></summary>
+      ${c.lojas.map(l => elo(rota('/lojas', { loja: l.id }), `<span class="mk">${esc(MKT[l.marketplace] ? l.marketplace : (l.marketplace || '—'))}</span>${esc(l.nome)}`, l.id === q.loja ? 'ativo' : '')).join('') || '<p class="pequeno">Sem lojas.</p>'}</details>`).join('') || '<p class="pequeno">Nenhum cliente no sistema.</p>'}</aside>`;
+    let direita;
+    if (!loja) direita = `<div class="vazio"><h2>Escolha uma loja</h2><p>Clique numa loja de um cliente, à esquerda, para ver os anúncios dela.</p></div>`;
+    else {
+      const ch = loja.id + '|' + busca, st = LOJAS.anuncios[ch];
+      if (!st) carregarAnuncios(loja.id, busca, 1);
+      const itens = st?.lista || [];
+      direita = `<div class="cabeca"><h1>${esc(loja.nome)} <small>${esc(loja.cliente)} · ${esc(MKT[loja.marketplace] || loja.marketplace)}${st && !st.carregando ? ` · ${st.total} anúncio(s)` : ''}</small></h1>
+        ${loja.url ? `<div class="acoes"><a class="b claro" href="${esc(loja.url)}" target="_blank" rel="noopener">Abrir a loja no ${esc(MKT[loja.marketplace] || 'marketplace')}</a></div>` : ''}</div>
+        <form class="busca-loja" id="busca-loja" data-loja="${esc(loja.id)}"><input type="search" name="busca" value="${esc(busca)}" placeholder="Buscar pelo título nesta loja"><button class="b claro">Buscar</button></form>
+        ${st?.erro ? `<div class="vazio"><h2>Não consegui ler os anúncios</h2><p>${esc(st.erro)}</p></div>` : ''}
+        ${itens.length ? `<div class="grade anuncios-loja">${itens.map(a => `<div class="cartao">${a.foto ? `<div class="foto"><img loading="lazy" src="${esc(a.foto)}" alt="" referrerpolicy="no-referrer"></div>` : '<div class="foto sem-foto">Sem foto</div>'}
+          <div class="legenda"><b title="${esc(a.titulo)}">${esc(a.titulo)}</b>${a.preco ? `<span class="preco-loja">R$ ${esc(a.preco)}</span>` : ''}
+          <span>${[a.status, a.vendas != null ? a.vendas + ' venda(s)' : '', a.estoque != null ? a.estoque + ' em estoque' : ''].filter(Boolean).map(esc).join(' · ')}</span>
+          <span class="pequeno">${esc(a.id)}</span>${a.link ? `<a class="abrir" href="${esc(a.link)}" target="_blank" rel="noopener">Abrir no marketplace</a>` : ''}</div></div>`).join('')}</div>` : (st && !st.carregando && !st.erro ? `<div class="vazio"><h2>Nenhum anúncio${busca ? ' com esse título' : ''}</h2></div>` : '')}
+        ${st?.carregando ? `<p class="dica">Buscando anúncios no ${nome}…</p>` : ''}
+        ${st && !st.carregando && itens.length < st.total ? `<div class="acoes"><button class="b claro" data-mais-loja="${esc(loja.id)}" data-busca="${esc(busca)}" data-pagina="${st.pagina}">Carregar mais (${st.total - itens.length} restantes)</button></div>` : ''}`;
+    }
+    return `<div class="cabeca"><h1>Lojas dos clientes <small>${todas.length} loja(s) de ${LOJAS.clientes.length} cliente(s), lidas do ${nome}</small></h1><div class="acoes"><button class="b claro" id="recarregar-lojas">Atualizar</button></div></div>
+      <div class="lojas-tela">${lista}<section>${direita}</section></div>`;
+  },
   integracoes() {
     const i = INTEG();
     return `<div class="cabeca"><h1>Integrações <small>ligue o site ao seu sistema para enviar anúncios prontos</small></h1></div>
