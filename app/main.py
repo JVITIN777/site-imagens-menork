@@ -165,7 +165,8 @@ def estado(request: Request):
                  "caminho": str(n.caminho_imagem(l)) if l["arquivo"] else ""} for l in linhas]
         anuncios = [{"id": a["id"], "nome": a["nome"], "formato": a["formato"], "titulo": a["titulo"], "preco": a["preco"],
                      "preco_antigo": a["preco_antigo"], "descricao": a["descricao"], "demanda": a["demanda_id"],
-                     "meta_ia": a["meta_ia"], "meta_capa": a["meta_capa"]} for a in c.execute("SELECT * FROM anuncios ORDER BY id")]
+                     "meta_ia": a["meta_ia"], "meta_capa": a["meta_capa"], "familia": a["familia"]}
+                    for a in c.execute("SELECT * FROM anuncios ORDER BY id")]
         links = [{"img": r[0], "an": r[1], "papel": r[2], "pos": r[3]} for r in
                  c.execute("SELECT imagem_id, anuncio_id, papel, posicao FROM imagem_anuncio")]
         cores = [{"an": r[0], "cor": r[1], "img": r[2], "pos": r[3]} for r in
@@ -214,6 +215,56 @@ async def anuncio_novo(request: Request):
         if d.get("formato") in n.FORMATO_NOME:
             c.execute("UPDATE anuncios SET formato=? WHERE id=?", (d["formato"], aid))
     return {"id": aid}
+
+
+def copiar_fotos(c, origem, destino, levar_capa):
+    """Leva as fotos (e as cores) de um anuncio para outro. Nao toca em titulo, preco, descricao nem metas."""
+    papeis = ("'capa','galeria'" if levar_capa else "'galeria'")
+    c.execute(f"UPDATE imagem_anuncio SET papel='', posicao=0 WHERE anuncio_id=? AND papel IN ({papeis})", (destino,))
+    for r in c.execute("SELECT imagem_id, papel, posicao FROM imagem_anuncio WHERE anuncio_id=? AND papel IN "
+                       f"({papeis})", (origem,)).fetchall():
+        n.vincular(c, [r["imagem_id"]], destino)
+        c.execute("UPDATE imagem_anuncio SET papel=?, posicao=? WHERE imagem_id=? AND anuncio_id=?",
+                  (r["papel"], r["posicao"], r["imagem_id"], destino))
+    c.execute("DELETE FROM anuncio_cores WHERE anuncio_id=?", (destino,))
+    for r in c.execute("SELECT cor, imagem_id, posicao FROM anuncio_cores WHERE anuncio_id=?", (origem,)).fetchall():
+        n.vincular(c, [r["imagem_id"]], destino)
+        c.execute("INSERT INTO anuncio_cores(anuncio_id,cor,imagem_id,posicao) VALUES(?,?,?,?)",
+                  (destino, r["cor"], r["imagem_id"], r["posicao"]))
+
+
+@app.post("/api/anuncio-copiar")
+async def anuncio_copiar(request: Request):
+    """Cria copias de um anuncio e/ou aplica as fotos dele em anuncios que ja existem."""
+    d = await request.json()
+    origem = int(d["id"])
+    levar_capa = bool(d.get("capa"))
+    with n.con() as c:
+        a = c.execute("SELECT * FROM anuncios WHERE id=?", (origem,)).fetchone()
+        if not a:
+            raise HTTPException(404)
+        familia = a["familia"] or a["id"]
+        c.execute("UPDATE anuncios SET familia=? WHERE id=?", (familia, origem))
+        feitos, novos = [], []
+        for destino in [int(x) for x in d.get("destinos", []) if int(x) != origem]:
+            if c.execute("SELECT 1 FROM anuncios WHERE id=?", (destino,)).fetchone():
+                copiar_fotos(c, origem, destino, levar_capa)  # anuncio que ja existe: so as imagens
+                c.execute("UPDATE anuncios SET familia=? WHERE id=?", (familia, destino))
+                feitos.append(destino)
+        base = re.sub(r"\s+\d{1,3}$", "", a["nome"]).strip()
+        numero = 2
+        for _ in range(max(0, min(50, int(d.get("novos", 0))))):
+            while c.execute("SELECT 1 FROM anuncios WHERE lower(nome)=lower(?)", (f"{base} {numero:02d}",)).fetchone():
+                numero += 1
+            nome = f"{base} {numero:02d}"
+            aid = c.execute("INSERT INTO anuncios(nome,formato,titulo,preco,preco_antigo,descricao,criado_em,demanda_id,"
+                            "meta_ia,meta_capa,familia) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+                            (nome, a["formato"], a["titulo"] if d.get("titulo") else "", a["preco"], a["preco_antigo"],
+                             a["descricao"], n.agora(), a["demanda_id"], a["meta_ia"], a["meta_capa"], familia)).lastrowid
+            copiar_fotos(c, origem, aid, levar_capa)
+            novos.append(nome)
+            numero += 1
+    return {"novos": novos, "atualizados": len(feitos)}
 
 
 @app.post("/api/anuncio-excluir")
@@ -546,6 +597,16 @@ def checagem(c, aid, m=None):
     for campo, nome in (("titulo", "o título"), ("preco", "o preço"), ("descricao", "a descrição")):
         if not (a[campo] or "").strip():
             falta(campo, f"Falta preencher {nome}")
+    if L["capa"]:  # a mesma capa em dois anuncios
+        outros = [r[0] for r in c.execute("SELECT an.nome FROM imagem_anuncio x JOIN anuncios an ON an.id=x.anuncio_id "
+                                          "WHERE x.imagem_id=? AND x.papel='capa' AND x.anuncio_id<>?", (L["capa"]["id"], aid))]
+        if outros:
+            falta("capa_repetida", f"A capa é a mesma do anúncio {', '.join(outros[:3])}: troque a capa")
+    if (a["titulo"] or "").strip():
+        iguais = [r[0] for r in c.execute("SELECT nome FROM anuncios WHERE id<>? AND lower(trim(titulo))=lower(trim(?))",
+                                          (aid, a["titulo"]))]
+        if iguais:
+            falta("titulo_repetido", f"O título é igual ao do anúncio {', '.join(iguais[:3])}: troque o título")
     if pend:
         falta("conferencia", f"{len(pend)} imagem(ns) do anúncio ainda em conferência: aprove ou reprove", faltam=len(pend))
     return {"anuncio": a["nome"], "id": aid, "formato": a["formato"], "produto": produto, "tarefa": d["tarefa"] if d else "",

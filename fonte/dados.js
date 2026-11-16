@@ -127,6 +127,8 @@ function faltas(aid) {
     if (!m.cores.length) r.push('Falta pelo menos 1 foto em Cores (variações)' + sobra(pend.filter(i => i.tipo === 'fb').length, 0));
   }
   for (const [campo, nome] of [['titulo', 'o título'], ['preco', 'o preço'], ['descricao', 'a descrição']]) if (!(a[campo] || '').trim()) r.push('Falta preencher ' + nome);
+  if (m.capa) { const o = DB.links.filter(l => l.img === m.capa.id && l.papel === 'capa' && l.an !== aid).map(l => DB.anuncios.find(x => x.id === l.an)?.nome).filter(Boolean); if (o.length) r.push(`A capa é a mesma do anúncio ${o.slice(0, 3).join(', ')}: troque a capa`); }
+  if ((a.titulo || '').trim()) { const o = DB.anuncios.filter(x => x.id !== aid && (x.titulo || '').trim().toLowerCase() === a.titulo.trim().toLowerCase()).map(x => x.nome); if (o.length) r.push(`O título é igual ao do anúncio ${o.slice(0, 3).join(', ')}: troque o título`); }
   if (pend.length) r.push(`${pend.length} imagem(ns) do anúncio ainda em conferência: aprove ou reprove`);
   return { produto: p, itens: r, metaIA: mt.ia, metaCapa: mt.capa, kit, tarefa: mt.d?.tarefa || '', info: mt.informativo, tab: mt.tabela,
     capas: { meta: mt.capa, aprovadas: capas.filter(i => i.status === 'aprovada').length, esperando_aprovacao: capas.filter(pendente).length } };
@@ -137,6 +139,17 @@ const PACOTES = () => [];
 const PEDIDO = aid => (DB.pedidos ||= {})[aid];
 const SRV = {
   carregar: async () => {},
+  copiar: async d => { const a = DB.anuncios.find(x => x.id === d.id), fam = a.familia || a.id; a.familia = fam;
+    const papeis = d.capa ? ['capa', 'galeria'] : ['galeria'];
+    const leva = destino => { DB.links.forEach(l => { if (l.an === destino && papeis.includes(l.papel)) { l.papel = ''; l.pos = 0; } });
+      DB.links.filter(l => l.an === d.id && papeis.includes(l.papel)).forEach(l => { ligar(l.img, destino); Object.assign(DB.links.find(x => x.an === destino && x.img === l.img), { papel: l.papel, pos: l.pos }); });
+      DB.cores = DB.cores.filter(c => c.an !== destino).concat(DB.cores.filter(c => c.an === d.id).map(c => ({ ...c, an: destino }))); DB.cores.filter(c => c.an === destino).forEach(c => ligar(c.img, destino)); };
+    d.destinos.filter(x => x !== d.id).forEach(leva);
+    const base = a.nome.replace(/\s+\d{1,3}$/, ''), novos = []; let n = 2;
+    for (let k = 0; k < Math.min(50, d.novos); k++) { while (DB.anuncios.some(x => x.nome.toLowerCase() === `${base} ${String(n).padStart(2, '0')}`.toLowerCase())) n++;
+      const nv = novoAnuncio(`${base} ${String(n).padStart(2, '0')}`, { formato: a.formato, titulo: d.titulo ? a.titulo : '', preco: a.preco, preco_antigo: a.preco_antigo, descricao: a.descricao, demanda: a.demanda, familia: fam, meta_ia: a.meta_ia, meta_capa: a.meta_capa });
+      leva(nv.id); novos.push(nv.nome); n++; }
+    return { novos, atualizados: d.destinos.filter(x => x !== d.id).length }; },
   pedir: async aid => { const a = DB.anuncios.find(x => x.id === aid), f = faltas(aid), n = Object.keys(DB.pedidos ||= {}).length + 1;
     const texto = [`PEDIDO DO MENORK nº ${n}: completar o anúncio "${a.nome}"${f.produto ? ' (produto ' + f.produto + ')' : ''}`, 'O que falta:', ...f.itens.map(t => '- ' + t), '', 'Mande cada imagem com menork.ps1 enviar, dizendo -Produto, -Cor, -Tipo e -Anuncio.'].join('\n');
     DB.pedidos[aid] = { id: n, status: 'aberto', bot: '', quando: agora(), atualizado: agora(), texto }; return texto; },

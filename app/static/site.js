@@ -48,6 +48,8 @@ function faltas(aid) {
     if (!m.cores.length) r.push('Falta pelo menos 1 foto em Cores (variações)' + sobra(pend.filter(i => i.tipo === 'fb').length, 0));
   }
   for (const [campo, nome] of [['titulo', 'o título'], ['preco', 'o preço'], ['descricao', 'a descrição']]) if (!(a[campo] || '').trim()) r.push('Falta preencher ' + nome);
+  if (m.capa) { const o = DB.links.filter(l => l.img === m.capa.id && l.papel === 'capa' && l.an !== aid).map(l => DB.anuncios.find(x => x.id === l.an)?.nome).filter(Boolean); if (o.length) r.push(`A capa é a mesma do anúncio ${o.slice(0, 3).join(', ')}: troque a capa`); }
+  if ((a.titulo || '').trim()) { const o = DB.anuncios.filter(x => x.id !== aid && (x.titulo || '').trim().toLowerCase() === a.titulo.trim().toLowerCase()).map(x => x.nome); if (o.length) r.push(`O título é igual ao do anúncio ${o.slice(0, 3).join(', ')}: troque o título`); }
   if (pend.length) r.push(`${pend.length} imagem(ns) do anúncio ainda em conferência: aprove ou reprove`);
   return { produto: p, itens: r, metaIA: mt.ia, metaCapa: mt.capa, kit, tarefa: mt.d?.tarefa || '', info: mt.informativo, tab: mt.tabela,
     capas: { meta: mt.capa, aprovadas: capas.filter(i => i.status === 'aprovada').length, esperando_aprovacao: capas.filter(pendente).length } };
@@ -87,6 +89,7 @@ const SRV = {
   medidas: (produto, linhas) => mandar('/api/medidas', { produto, linhas }),
   buscarClickup: async () => (await mandar('/api/clickup', {})).msg,
   pacote: async (aid, mk, forcar) => { location.href = `/anuncios/${aid}/zip?mk=${encodeURIComponent(mk)}${forcar ? '&forcar=1' : ''}`; setTimeout(() => window.AO_DESENHAR?.(aid), 2500); },
+  copiar: d => mandar('/api/anuncio-copiar', d),
   pedir: async aid => (await mandar('/api/pedido', { an: aid })).texto,
 };
 function PAINEL_EXTRA() {
@@ -179,10 +182,13 @@ const TELAS = {
   },
   anuncio(q, id) {
     const a = DB.anuncios.find(x => x.id === id); if (!a) return TELAS.anuncios();
-    const d = demandaDe(a), irmaos = d ? DB.anuncios.filter(x => x.demanda === d.id) : [];
-    return `${irmaos.length > 1 ? `<div class="abas">${irmaos.map(x => elo('/anuncios/' + x.id, FORMATO[x.formato], x.id === a.id ? 'ativo' : '')).join('')}<span class="pequeno">Tarefa ${esc(d.tarefa)}</span></div>` : ''}
+    const d = demandaDe(a), fam = a.familia || a.id;
+    const irmaos = DB.anuncios.filter(x => (d && x.demanda === d.id) || (x.familia || x.id) === fam);
+    const repetido = f => irmaos.filter(x => x.formato === f).length > 1;
+    return `${irmaos.length > 1 ? `<div class="abas">${irmaos.map(x => elo('/anuncios/' + x.id, esc(repetido(x.formato) ? x.nome : FORMATO[x.formato]), x.id === a.id ? 'ativo' : '')).join('')}${d ? `<span class="pequeno">Tarefa ${esc(d.tarefa)}</span>` : ''}</div>` : ''}
     <div class="cabeca"><h1>${esc(a.nome)} <small id="resumo">Montando o anúncio</small></h1><div class="acoes">
       <button class="b claro" id="montar-auto" title="Preenche capa, fotos e cores vazias com as imagens aprovadas deste anúncio">Montar sozinho</button>
+      <button class="b claro" id="copiar-anuncio" data-id="${a.id}" title="Cria cópias deste anúncio ou leva as fotos dele para outros anúncios">Copiar fotos para outros</button>
       <label class="b claro">Enviar imagens<input type="file" id="enviar" data-anuncio="${esc(a.nome)}" multiple accept="image/*" hidden></label>
       <button class="b verde" id="baixar-zip" data-id="${a.id}">Exportar</button><button class="b claro" id="excluir-anuncio" data-id="${a.id}">Excluir</button></div></div>
     <div class="montagem"><div class="editor"><div class="bloco faltas" id="faltas"></div><section id="editor" class="editor"></section></div><aside class="previa">
@@ -298,6 +304,29 @@ document.addEventListener('change', async e => { const t = e.target; if (!t.data
   if (t.dataset.dem) { await SRV.meta({ dem: +t.dataset.dem, chave: t.dataset.meta, valor }); return RENDER(); }
   await SRV.meta({ an: +t.dataset.an, chave: t.dataset.meta, valor }); window.AO_DESENHAR(+t.dataset.an); });
 document.addEventListener('change', async e => { const t = e.target; if (!t.dataset.demProd) return; await SRV.produtoDemanda(+t.dataset.demProd, t.value.trim().toUpperCase()); RENDER(); });
+
+// ---- copiar as fotos de um anuncio para outros
+document.addEventListener('click', e => {
+  const b = e.target.closest('#copiar-anuncio'); if (!b) return; const aid = +b.dataset.id, a = DB.anuncios.find(x => x.id === aid), f = faltas(aid);
+  const outros = DB.anuncios.filter(x => x.id !== aid).sort((x, y) => (faltas(y.id).produto === f.produto) - (faltas(x.id).produto === f.produto) || x.nome.localeCompare(y.nome));
+  abrirJanela(`<h2>Copiar as fotos de ${esc(a.nome)}</h2>
+    <p class="pequeno">Leva as fotos 2 a 10 e as cores deste anúncio. Nos anúncios que já existem, só as imagens mudam: título, preço, descrição e metas ficam como estão.</p>
+    <form id="form-copiar" data-id="${aid}" class="form-copiar">
+      <label class="linha">Criar <input type="number" name="novos" min="0" max="50" value="${outros.length ? 0 : 9}"> anúncio(s) novo(s) iguais a este <span class="pequeno">(${esc(a.nome.replace(/\s+\d{1,3}$/, ''))} 02, 03…, com o mesmo preço e descrição)</span></label>
+      <label class="linha"><input type="checkbox" name="titulo"> Nos novos, copiar também o título <span class="pequeno">(o site avisa enquanto ele estiver repetido)</span></label>
+      ${outros.length ? `<h3>Levar as fotos para anúncios que já existem</h3><div class="lista-destinos">${outros.map(x => `<label><input type="checkbox" name="destino" value="${x.id}"> ${esc(x.nome)} <small>${esc(FORMATO[x.formato])}</small></label>`).join('')}</div>` : ''}
+      <label class="linha"><input type="checkbox" name="capa"> Levar a capa também <span class="pequeno">(deixe desmarcado para escolher uma capa diferente em cada um)</span></label>
+      <div class="acoes"><button class="b">Copiar</button><button type="button" class="b claro" data-fechar>Cancelar</button></div>
+    </form>`);
+});
+document.addEventListener('submit', async e => {
+  const f = e.target; if (f.id !== 'form-copiar') return; e.preventDefault();
+  const dados = { id: +f.dataset.id, novos: +f.novos.value || 0, titulo: f.titulo.checked, capa: f.capa.checked, destinos: [...f.querySelectorAll('[name=destino]:checked')].map(x => +x.value) };
+  if (!dados.novos && !dados.destinos.length) return window.menork.aviso('Escolha quantos anúncios novos criar ou marque algum anúncio que já existe.');
+  try { const r = await SRV.copiar(dados); fecharJanela(); await RENDER();
+    window.menork.aviso([r.novos.length ? `${r.novos.length} anúncio(s) criado(s): ${r.novos.slice(0, 3).join(', ')}${r.novos.length > 3 ? '…' : ''}` : '', r.atualizados ? `fotos levadas para ${r.atualizados} anúncio(s)` : ''].filter(Boolean).join('; ') + '. Agora troque a capa e o título de cada um.', null, null, 12);
+  } catch (err) { window.menork.aviso(err.message); }
+});
 
 // ---- exportar por marketplace
 function EXPORTAR(aid) {

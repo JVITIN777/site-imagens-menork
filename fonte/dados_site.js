@@ -32,6 +32,7 @@ const SRV = {
   medidas: (produto, linhas) => mandar('/api/medidas', { produto, linhas }),
   buscarClickup: async () => (await mandar('/api/clickup', {})).msg,
   pacote: async (aid, mk, forcar) => { location.href = `/anuncios/${aid}/zip?mk=${encodeURIComponent(mk)}${forcar ? '&forcar=1' : ''}`; setTimeout(() => window.AO_DESENHAR?.(aid), 2500); },
+  copiar: d => mandar('/api/anuncio-copiar', d),
   pedir: async aid => (await mandar('/api/pedido', { an: aid })).texto,
 };
 function PAINEL_EXTRA() {
