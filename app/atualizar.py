@@ -38,6 +38,18 @@ def _baixar(url):
         return r.read()
 
 
+def _commit(repo, ramo):
+    """Codigo exato da ultima versao publicada, pela API do GitHub (nao fica guardada em cache)."""
+    try:
+        req = urllib.request.Request(f"https://api.github.com/repos/{repo}/commits/{ramo}",
+                                     headers={"User-Agent": "site-imagens-menork", "Accept": "application/vnd.github.sha"})
+        with urllib.request.urlopen(req, timeout=30) as r:
+            sha = r.read().decode("ascii").strip()
+        return sha if re.fullmatch(r"[0-9a-f]{40}", sha) else ""
+    except Exception:
+        return ""  # sem a API (limite de consultas, rede): usa o caminho comum
+
+
 def _enderecos():
     repo, ramo = str(n.CFG["atualizar_repo"]).strip(), str(n.CFG["atualizar_ramo"]).strip() or "main"
     base = str(n.CFG["atualizar_endereco"]).strip().rstrip("/")
@@ -45,12 +57,17 @@ def _enderecos():
         return f"{base}/versao.txt", f"{base}/site.zip"
     if not repo:
         return None, None
-    return (f"https://raw.githubusercontent.com/{repo}/{ramo}/versao.txt?t={int(time.time())}",
-            f"https://codeload.github.com/{repo}/zip/refs/heads/{ramo}")
+    ref = _commit(repo, ramo) or ramo  # pelo codigo exato, o GitHub entrega sempre a versao nova, sem atraso
+    return (f"https://raw.githubusercontent.com/{repo}/{ref}/versao.txt",
+            f"https://codeload.github.com/{repo}/zip/{ref}")
+
+
+_ultimo_zip = {"url": ""}
 
 
 def versao_remota():
-    url, _ = _enderecos()
+    url, zipurl = _enderecos()
+    _ultimo_zip["url"] = zipurl or ""
     info.update(checada_em=n.agora(), erro="")
     if not url:
         info["erro"] = "Atualização desligada: falta atualizar_repo no config.json."
@@ -123,11 +140,15 @@ def atualizar():
     if not tem_nova():
         return None
     antiga = versao_local()
-    pacote = _baixar(_enderecos()[1])
+    pacote = _baixar(_ultimo_zip["url"] or _enderecos()[1])  # o mesmo codigo cuja versao acabou de ser lida
     with tempfile.TemporaryDirectory() as tmp:
         zipfile.ZipFile(io.BytesIO(pacote)).extractall(tmp)
         raizes = [d for d in Path(tmp).iterdir() if d.is_dir()]
         origem = raizes[0] if len(raizes) == 1 and not (Path(tmp) / "versao.txt").exists() else Path(tmp)
+        baixada = versao_local(origem)
+        if _numero(baixada) <= _numero(antiga):  # o GitHub entregou um pacote antigo: nao troca nada
+            info["erro"] = "O GitHub ainda está entregando a versão anterior. Tente de novo em alguns minutos."
+            return None
         _guardar_atual()
         _aplicar(origem)
     n.registrar(f"site atualizado da versão {antiga} para a {versao_local()}")
