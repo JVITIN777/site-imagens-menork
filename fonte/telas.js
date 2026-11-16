@@ -77,7 +77,7 @@ const TELAS = {
       ${INTEG().url ? `<button class="b" id="enviar-sistema" data-id="${a.id}">Enviar para o ${esc(INTEG().nome)}</button>` : ''}
       <button class="b verde" id="baixar-zip" data-id="${a.id}">Exportar</button><button class="b claro" id="excluir-anuncio" data-id="${a.id}">Excluir</button></div></div>
     <div class="montagem"><div class="editor"><div class="bloco faltas" id="faltas"></div><section id="editor" class="editor"></section></div><aside class="previa">
-      <div class="troca" role="group" aria-label="Marketplace do anúncio"><button data-modo="ml">Mercado Livre</button><button data-modo="shopee">Shopee</button></div>
+      <div class="troca" role="group" aria-label="Marketplace do anúncio"><button data-modo="ml"><span class="mk-marca ml"><img src="/marca-mk/ml" alt="" onerror="this.remove()"></span>Mercado Livre</button><button data-modo="shopee"><span class="mk-marca shopee"><img src="/marca-mk/shopee" alt="" onerror="this.remove()"></span>Shopee</button></div>
       <div class="celular"><div class="tela" id="tela"></div></div><p class="pequeno" id="dica-previa">Prévia de como o anúncio aparece no celular. Deslize as fotos e toque nas cores.</p></aside></div>`;
   },
 };

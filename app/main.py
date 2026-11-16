@@ -67,6 +67,18 @@ async def porteiro(request: Request, call_next):
 
 
 # ---------------------------------------------------------------------- senha
+@app.get("/marca-mk/{qual}")
+def marca_mk(qual: str):
+    """Logo de marketplace que o Menork colocou em dados/ (logo_ml.png, logo_shopee.png). Nunca vai para o repositorio."""
+    if qual not in ("ml", "shopee"):
+        raise HTTPException(404)
+    p = next((n.pasta_dados() / f"logo_{qual}{e}" for e in (".png", ".svg", ".webp", ".jpg", ".jpeg")
+              if (n.pasta_dados() / f"logo_{qual}{e}").exists()), None)
+    if not p:
+        raise HTTPException(404)
+    return FileResponse(p, headers={"Cache-Control": "max-age=3600"})
+
+
 @app.get("/logo")
 def logo():
     p = arquivo_logo()
