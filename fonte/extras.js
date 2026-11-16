@@ -4,16 +4,24 @@ function abrirJanela(html) { jan().querySelector('.janela-caixa').innerHTML = ht
 function fecharJanela(valor = null) { jan().hidden = true; const f = window._fimJanela; window._fimJanela = null; f?.(valor); }
 window.PEDIR_MOTIVO = n => new Promise(res => { window._fimJanela = res;
   abrirJanela(`<h2>Por que reprovar${n > 1 ? ` estas ${n} imagens` : ''}?</h2><p class="pequeno">O motivo entra na lista de erros que os bots consultam para não repetir.</p>
-    <div class="motivos">${MOTIVOS.map((m, k) => `<button class="b claro" data-motivo="${m}"><kbd>${(k + 1) % 10}</kbd> ${m}</button>`).join('')}</div><button class="b claro" data-fechar>Cancelar <kbd>Esc</kbd></button>`); });
+    <div class="motivos">${MOTIVOS.map((m, k) => `<button class="b claro" data-motivo="${m}"><kbd>${(k + 1) % 10}</kbd> ${m}</button>`).join('')}</div>
+    <form class="motivo-livre" id="motivo-livre"><label for="motivo-texto">Ou escreva o motivo com as suas palavras</label>
+      <div class="acoes"><input id="motivo-texto" maxlength="200" placeholder="Ex.: o cadarço saiu de outra cor" autocomplete="off"><button class="b vermelho">Reprovar com este motivo</button></div>
+      <p class="pequeno">Se escrever aqui e depois clicar num dos motivos de cima, os dois vão juntos (ex.: "Sola errada: sola ficou lisa").</p></form>
+    <button class="b claro" data-fechar>Cancelar <kbd>Esc</kbd></button>`); });
+const textoMotivo = () => (document.getElementById('motivo-texto')?.value || '').trim().replace(/\s+/g, ' ');
+document.addEventListener('submit', e => { if (e.target.id !== 'motivo-livre') return; e.preventDefault(); e.stopImmediatePropagation();
+  const t = textoMotivo(); if (!t) return document.getElementById('motivo-texto').focus(); fecharJanela(t); }, true);
 document.addEventListener('click', e => {
   if (jan().hidden) return;
-  const m = e.target.closest('[data-motivo]'); if (m) return fecharJanela(m.dataset.motivo);
+  const m = e.target.closest('[data-motivo]'); if (m) { const t = textoMotivo(); return fecharJanela(t ? `${m.dataset.motivo}: ${t}` : m.dataset.motivo); }
   if (e.target === jan() || e.target.closest('[data-fechar]')) fecharJanela();
 });
 document.addEventListener('keydown', e => {
   if (jan().hidden) return;
   e.stopImmediatePropagation();
   if (e.key === 'Escape') return fecharJanela();
+  if (e.target.matches('input,textarea,select')) return;  // digitando o motivo: os numeros sao texto
   if (window._fimJanela && /^[0-9]$/.test(e.key)) { const m = MOTIVOS[(+e.key + 9) % 10]; if (m) fecharJanela(m); }
 }, true);
 async function copiar(texto, ok = 'Copiado.') { try { await navigator.clipboard.writeText(texto); window.menork.aviso(ok); } catch (e) { window.menork.aviso('Não consegui copiar sozinho. Selecione o texto e use Ctrl+C.'); } }

@@ -29,6 +29,7 @@
 .janela-caixa h2{font:700 24px var(--titulo);margin:0}.janela-caixa h3{font:600 17px var(--titulo);margin:0 0 6px}.janela-caixa p{margin:0}
 .janela-caixa>.b{align-self:flex-start}
 .motivos{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:9px}
+.motivo-livre{display:flex;flex-direction:column;gap:7px;border-top:1px solid var(--borda);padding-top:14px}.motivo-livre label{font-size:14px;color:var(--fraco)}.motivo-livre input{flex:1;min-width:220px;color:var(--texto);font-size:15px;padding:10px 12px}.motivo-livre .acoes{flex-wrap:nowrap}.motivo-livre .pequeno{margin:0}
 .motivos .b{justify-content:flex-start;padding:12px 14px;font-size:16px;white-space:normal;text-align:left}
 .pacotes{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px}
 .pacotes>div{border:1px solid var(--borda);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:10px}

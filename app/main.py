@@ -711,7 +711,7 @@ async def _receber(request, reprovada=False):
                         atualizada = True
         if reprovada and novo:
             c.execute("UPDATE imagens SET status='reprovada', motivo=?, origem_decisao=?, decidido_em=?, apagar_em=? WHERE id=?",
-                      (str(q.get("motivo") or "Sem motivo")[:80], (q.get("bot") or "bot").strip(), n.agora(), time.time(), iid))
+                      (" ".join(str(q.get("motivo") or "Sem motivo").split())[:200], (q.get("bot") or "bot").strip(), n.agora(), time.time(), iid))
         linha = c.execute("SELECT status FROM imagens WHERE id=?", (iid,)).fetchone()
         linha = c.execute("SELECT * FROM imagens WHERE id=?", (iid,)).fetchone()
     aviso = "" if novo else ("Esta imagem já existia no site: os dados foram atualizados." if atualizada
@@ -934,7 +934,7 @@ async def acao(request: Request):
             c.execute(f"UPDATE imagens SET status='reprovada', decidido_em=?, apagar_em=?, motivo=?, "
                       f"origem_decisao='você' WHERE id IN ({marcas})",
                       [n.agora(), time.time() + int(n.CFG["segundos_para_desfazer"]),
-                       str(d.get("motivo") or "Sem motivo")[:80], *ids])
+                       " ".join(str(d.get("motivo") or "Sem motivo").split())[:200], *ids])
         elif oque == "desfazer":
             for l in c.execute(f"SELECT * FROM imagens WHERE id IN ({marcas}) AND arquivo<>''", ids).fetchall():
                 c.execute("UPDATE imagens SET status=?, decidido_em=NULL, apagar_em=NULL, motivo='', "
