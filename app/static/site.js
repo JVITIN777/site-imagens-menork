@@ -172,7 +172,7 @@ const TELAS = {
   },
   anuncios() {
     const cart = a => { const m = montagem(a.id), rosto = m.capa || m.galeria[0] || m.disponiveis[0], n = (m.capa ? 1 : 0) + m.galeria.length, fl = faltas(a.id).itens.length;
-      return `<a class="cartao anuncio" href="#" data-rota="/anuncios/${a.id}">${rosto ? `<div class="foto"><img src="${IMG(rosto.id)}" alt=""></div>` : '<div class="foto sem-foto">Sem imagem</div>'}
+      return `<a class="cartao anuncio" href="#" data-rota="/anuncios/${a.id}"><button type="button" class="excluir-card" data-excluir-an="${a.id}" title="Excluir este anúncio">Excluir</button>${rosto ? `<div class="foto"><img src="${IMG(rosto.id)}" alt=""></div>` : '<div class="foto sem-foto">Sem imagem</div>'}
       <div class="legenda"><b>${esc(a.nome)}</b><span>${FORMATO[a.formato]}</span><span>${n} foto(s) na ordem, ${m.cores.length} cor(es)</span><span class="${fl ? 'alerta-mini' : 'ok-mini'}">${fl ? fl + ' pendência(s)' : 'Completo'}</span></div></a>`; };
     const soltos = DB.anuncios.filter(a => !demandaDe(a));
     return `<div class="cabeca"><h1>Anúncios <small>${DB.anuncios.length}</small></h1><form class="acoes" id="novo-anuncio"><input name="nome" placeholder="Nome do anúncio novo" required>
@@ -304,6 +304,18 @@ document.addEventListener('change', async e => { const t = e.target; if (!t.data
   if (t.dataset.dem) { await SRV.meta({ dem: +t.dataset.dem, chave: t.dataset.meta, valor }); return RENDER(); }
   await SRV.meta({ an: +t.dataset.an, chave: t.dataset.meta, valor }); window.AO_DESENHAR(+t.dataset.an); });
 document.addEventListener('change', async e => { const t = e.target; if (!t.dataset.demProd) return; await SRV.produtoDemanda(+t.dataset.demProd, t.value.trim().toUpperCase()); RENDER(); });
+
+// ---- excluir anuncio direto da lista (dois cliques: excluir e confirmar)
+document.addEventListener('click', async e => {
+  const b = e.target.closest('[data-excluir-an]'); if (!b) return;
+  e.preventDefault(); e.stopPropagation();
+  if (!b.dataset.ok) { document.querySelectorAll('[data-excluir-an][data-ok]').forEach(x => { delete x.dataset.ok; x.textContent = 'Excluir'; x.classList.remove('confirmar'); });
+    b.dataset.ok = 1; b.textContent = 'Confirmar exclusão'; b.classList.add('confirmar'); return; }
+  const id = +b.dataset.excluirAn, nome = DB.anuncios.find(a => a.id === id)?.nome || 'Anúncio';
+  try { await SRV.excluirAnuncio(id); await RENDER(); window.menork.aviso(`${nome} excluído. As imagens continuam no catálogo.`); } catch (err) { window.menork.aviso(err.message); }
+}, true);
+document.addEventListener('click', e => { if (e.target.closest('[data-excluir-an]')) return;
+  document.querySelectorAll('[data-excluir-an][data-ok]').forEach(x => { delete x.dataset.ok; x.textContent = 'Excluir'; x.classList.remove('confirmar'); }); });
 
 // ---- copiar as fotos de um anuncio para outros
 document.addEventListener('click', e => {
