@@ -575,3 +575,16 @@ body.porta{background:#050505!important}
 .gasto-barra{flex-basis:100%;height:3px;border-radius:2px;background:var(--relevo);overflow:hidden}
 .gasto-barra u{display:block;height:100%;background:var(--verde)}
 .gasto-barra u.alto{background:var(--vermelho)}
+.lt-grade{display:grid;grid-template-columns:minmax(220px,1fr) minmax(0,1.6fr);gap:12px;margin:8px 0}
+.lt-pares{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px;max-height:44vh;overflow:auto}
+.lt-pares li{padding:8px 10px;border:1px solid var(--borda);border-radius:10px;cursor:pointer;background:var(--chao);display:flex;flex-direction:column;gap:3px}
+.lt-pares li.ativo{border-color:var(--luz)}
+.lt-pares li span{font-size:12px;color:var(--fraco);display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.lt-pares li img{width:24px;height:24px;border-radius:4px;object-fit:cover}
+.lt-pares li em{font-style:normal;color:var(--vermelho)}
+.lt-pares .x{border:0;background:transparent;color:var(--fraco);cursor:pointer;font-size:14px}
+.lt-lista{max-height:40vh}
+.lt-lista .tf-item{background:var(--chao);color:inherit;text-align:left;font:inherit}
+.lt-res{display:flex;flex-direction:column;gap:6px;max-height:60vh;overflow:auto}
+.lt-cor{display:inline-flex;gap:4px;align-items:center;margin:2px 8px 2px 0}
+@media (max-width:900px){.lt-grade{grid-template-columns:1fr}}

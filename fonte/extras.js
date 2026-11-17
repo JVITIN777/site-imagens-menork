@@ -978,7 +978,7 @@ window.PEDIDOS_PUBLICAR = () => {
     : `<li><b class="${p.status === 'feito' ? 'ok-mini' : 'alerta-mini'}">${{ aberto: 'Esperando o Grok', pego: 'Grok publicando', feito: 'Feito' }[p.status] || esc(p.status)}</b> ${esc(nome(p.anuncio_id))} → ${esc(p.loja_nome || '')} (${esc(p.marketplace || '')})${p.bot ? ' · ' + esc(p.bot) : ''}${p.resposta ? ' · ' + esc(p.resposta) : ''}</li>`;
   return `<div class="bloco pedidos-pub"><h2>Mandados para o Grok <small>${abertos.length} em andamento</small><button class="b claro mini" id="atualizar-pub">Atualizar</button></h2><ul class="envios-feitos">${abertos.map(linha).join('')}${feitos.map(linha).join('')}</ul></div>`;
 };
-window.BARRA_SEL_AN = () => SEL_AN.size ? `<div class="barra-sel-an"><b>${SEL_AN.size} anúncio(s) marcado(s)</b><button class="b verde" id="mandar-grok">Mandar para o Grok publicar</button><button class="b" id="mandar-grok-pedido" title="Escreva o que o Grok deve fazer com estes anúncios, por exemplo substituir anúncios que já estão na loja">Mandar para o Grok com pedido</button><button class="b claro" id="marcar-familia" title="Marca também os outros anúncios da mesma família">Marcar a família</button><button class="b claro" id="limpar-sel-an">Limpar</button></div>` : '';
+window.BARRA_SEL_AN = () => SEL_AN.size ? `<div class="barra-sel-an"><b>${SEL_AN.size} anúncio(s) marcado(s)</b><button class="b verde" id="mandar-grok">Mandar para o Grok publicar</button><button class="b" id="trocar-lote" title="Trocar só as fotos de anúncios que já estão numa loja, todos de uma vez">Trocar fotos na loja</button><button class="b" id="mandar-grok-pedido" title="Escreva o que o Grok deve fazer com estes anúncios, por exemplo substituir anúncios que já estão na loja">Mandar para o Grok com pedido</button><button class="b claro" id="marcar-familia" title="Marca também os outros anúncios da mesma família">Marcar a família</button><button class="b claro" id="limpar-sel-an">Limpar</button></div>` : '';
 async function pubJanela() {
   if (!LOJAS.clientes) { b2Carregando('Buscando as lojas no B2X…'); await carregarLojas(); if (!LOJAS.clientes) return b2Erro(new Error(LOJAS.erro || 'Não consegui ler as lojas.')); }
   const ads = [...SEL_AN].map(id => DB.anuncios.find(a => a.id === id)).filter(Boolean);
@@ -1200,3 +1200,88 @@ document.addEventListener('submit', e => {
   const f = e.target, d = Object.fromEntries(new FormData(f)); d.id = f.dataset.id;
   b2post('/api/gastos/contas', d).then(r => { GC.lista = r.contas; GC.editando = null; RENDER(); window.menork.aviso('Conta salva. Lendo o gasto…'); setTimeout(() => gastoLer(true), 300); }).catch(err => window.menork.aviso(err.message));
 });
+
+// ---- trocar SÓ as fotos de vários anúncios da loja de uma vez (cada anúncio do site → um anúncio da loja)
+const LT = { loja: '', pares: [], lista: null, busca: '', ativo: 0, res: null };
+function ltLoja() { return todasLojas().find(l => l.id === LT.loja); }
+async function ltJanela() {
+  if (!LOJAS.clientes) { b2Carregando('Buscando as lojas no B2X…'); await carregarLojas(); if (!LOJAS.clientes) return b2Erro(new Error(LOJAS.erro || 'Não consegui ler as lojas.')); }
+  const ids = [...SEL_AN];
+  if (LT.pares.map(p => p.aid).join() !== ids.join()) { LT.pares = ids.map(aid => ({ aid, alvo: null })); LT.res = null; }
+  const lojas = todasLojas().filter(l => ['shopee', 'mercadolivre'].includes(l.canal));
+  if (!lojas.some(l => l.id === LT.loja)) { LT.loja = ''; LT.lista = null; }
+  const nomeAd = aid => DB.anuncios.find(a => a.id === aid)?.nome || '#' + aid;
+  if (LT.ativo >= LT.pares.length) LT.ativo = 0;
+  const prontos = LT.pares.filter(p => p.alvo).length;
+  b2Tela(`<h2>Trocar fotos na loja <small>${LT.pares.length} anúncio(s) · só as fotos</small></h2>
+    <div class="campo-b2"><span>Loja</span>${seletorLoja('lt-loja', lojas, LT.loja)}</div>
+    ${!LT.loja ? '' : `<p class="pequeno">Clique num anúncio do site (à esquerda) e depois no anúncio da loja que vai receber as fotos dele.</p>
+    <div class="lt-grade"><ol class="lt-pares">${LT.pares.map((p, i) => `<li class="${i === LT.ativo ? 'ativo' : ''}" data-lt-ativo="${i}"><b>${esc(nomeAd(p.aid))}</b><span>→ ${p.alvo ? `${p.alvo.foto ? `<img src="${esc(p.alvo.foto)}" alt="">` : ''}${esc(p.alvo.titulo.slice(0, 50))} <small>${esc(p.alvo.id)}</small> <button type="button" class="x" data-lt-tirar="${i}" title="Tirar">×</button>` : '<em>escolha na loja</em>'}</span></li>`).join('')}</ol>
+    <div><form id="lt-busca" class="b2-linha"><input name="busca" value="${esc(LT.busca)}" placeholder="Buscar na loja pelo título ou código"><button class="b claro">Buscar</button></form>
+      <div class="tf-lista lt-lista">${LT.lista === null ? '<p class="pequeno">Carregando os anúncios da loja…</p>' : LT.lista.length ? LT.lista.map(x => { const usado = LT.pares.findIndex(p => p.alvo?.id === x.id); return `<button type="button" class="tf-item ${usado >= 0 ? 'escolhido' : ''}" data-lt-alvo="${esc(x.id)}">${x.foto ? `<img src="${esc(x.foto)}" alt="" onerror="this.style.visibility='hidden'">` : '<span class="tf-semfoto"></span>'}<span><b>${esc(x.titulo)}</b><small>${esc(x.id)}${x.preco ? ' · R$ ' + esc(x.preco) : ''}${usado >= 0 ? ' · ← ' + esc(nomeAd(LT.pares[usado].aid)) : ''}</small></span></button>`; }).join('') : '<p class="pequeno">Nada encontrado.</p>'}</div></div></div>`}
+    <p class="pequeno">Muda só as fotos${ltLoja()?.canal === 'shopee' ? ' (as 9 do anúncio e a capa de cada cor)' : ltLoja() ? ' (as fotos de cada cor)' : ''}. Título, preço, descrição e estoque ficam como estão. Primeiro simula; nada muda até você confirmar.</p>
+    <div class="acoes"><button class="b verde" id="lt-simular" ${prontos && LT.loja ? '' : 'disabled'}>Simular ${prontos || ''} troca(s)</button><button class="b claro" data-fechar>Cancelar</button></div>`);
+  if (LT.loja && LT.lista === null) ltBuscar();
+}
+async function ltBuscar() {
+  const loja = LT.loja;
+  try { const r = await SRV.anunciosLoja(loja, LT.busca, 1, false); if (loja !== LT.loja) return; LT.lista = r.anuncios || []; } catch (err) { LT.lista = []; window.menork.aviso(err.message); }
+  if (document.getElementById('lt-simular')) ltJanela();
+}
+async function ltSimular(manter) {
+  const l = ltLoja(), pares = LT.pares.filter(p => p.alvo), nomeAd = aid => DB.anuncios.find(a => a.id === aid)?.nome || '#' + aid;
+  LT.res = LT.res && manter ? LT.res : {};
+  for (let i = 0; i < pares.length; i++) {
+    const p = pares[i]; b2Carregando(`Simulando ${i + 1} de ${pares.length}: ${nomeAd(p.aid)}… (sobe as fotos, pode levar um minuto)`);
+    const r = LT.res[p.aid] = LT.res[p.aid] || {};
+    try {
+      if (!r.cores) { const d = await b2get(`/api/b2x/anuncio?loja=${encodeURIComponent(l.id)}&anuncio=${encodeURIComponent(p.alvo.id)}&canal=${l.canal}`); r.cores = d.cores; r.familia = d.familia;
+        r.nossas = (await b2get('/api/anuncios/' + p.aid)).variacoes.map(v => v.cor);
+        r.mapa = Object.fromEntries(r.cores.map(c => [c, r.nossas.find(x => semAc(x) === semAc(c)) || ''])); }
+      const mapa = Object.fromEntries(Object.entries(r.mapa).filter(([, v]) => v));
+      const s = await b2post('/api/b2x/fotos/simular', { aid: p.aid, loja: l.id, anuncio: p.alvo.id, canal: l.canal, mapa, galeria: l.canal === 'shopee', ajustar_modo: true });
+      Object.assign(r, { token: s.token, envios: s.envios, ok: s.pode_confirmar, erro: '' });
+    } catch (err) { Object.assign(r, { token: null, ok: false, erro: err.message }); }
+  }
+  ltResultado();
+}
+function ltResultado(final) {
+  const pares = LT.pares.filter(p => p.alvo), nomeAd = aid => DB.anuncios.find(a => a.id === aid)?.nome || '#' + aid;
+  const okN = pares.filter(p => LT.res[p.aid]?.ok).length;
+  b2Tela(`<h2>${final ? 'Resultado' : 'Simulação'} <small>${final ? '' : 'nada foi trocado ainda'}</small></h2>
+    <div class="lt-res">${pares.map(p => { const r = LT.res[p.aid] || {}, sem = (r.cores || []).filter(c => !r.mapa?.[c]);
+      return `<div class="nota ${(final ? r.feito : r.ok) ? '' : 'ruim'}"><b>${esc(nomeAd(p.aid))} → ${esc(p.alvo.titulo.slice(0, 50))} (${esc(p.alvo.id)}): ${final ? (r.feito ? 'fotos trocadas' : 'não trocado') : r.ok ? 'pronto' : 'não dá para trocar'}</b>
+        ${r.erro ? `<span>${esc(r.erro)}</span>` : ''}${(final ? r.final || [] : r.envios || []).filter(e => !e.ok && e.erro).map(e => `<span>${esc(e.rotulo)}: ${esc(e.erro)}</span>`).join('')}
+        ${!final && sem.length ? `<span>Cores da loja sem par no site (ficam com as fotos antigas): ${sem.map(c => `<label class="lt-cor">${esc(c)} → <select data-lt-cor="${p.aid}" data-cor="${esc(c)}"><option value="">não mexer</option>${(r.nossas || []).map(x => `<option>${esc(x)}</option>`).join('')}</select></label>`).join(' ')}</span>` : ''}</div>`; }).join('')}</div>
+    <div class="acoes">${final ? '<button class="b" data-fechar>Fechar</button>' : `${okN ? `<button class="b verde" id="lt-confirmar">Confirmar e trocar ${okN} agora</button>` : ''}<button class="b claro" id="lt-resimular">Simular de novo</button><button class="b claro" id="lt-voltar">Voltar</button>`}</div>`);
+}
+async function ltConfirmar() {
+  const pares = LT.pares.filter(p => p.alvo && LT.res[p.aid]?.ok);
+  for (let i = 0; i < pares.length; i++) {
+    const r = LT.res[pares[i].aid]; b2Carregando(`Trocando ${i + 1} de ${pares.length}…`);
+    try { const f = await b2post('/api/b2x/fotos/confirmar', { token: r.token }); r.final = f.envios; r.feito = f.envios.some(e => e.ok); }
+    catch (err) { r.feito = false; r.erro = err.message; }
+  }
+  ltResultado(true); SEL_AN.clear(); LT.pares = []; LT.res = LT.res; await SRV.carregar(); RENDER();
+}
+document.addEventListener('click', e => {
+  if (e.target.closest('#trocar-lote')) return ltJanela();
+  if (e.target.closest('#lt-simular')) return ltSimular(false);
+  if (e.target.closest('#lt-resimular')) return ltSimular(true);
+  if (e.target.closest('#lt-confirmar')) return ltConfirmar();
+  if (e.target.closest('#lt-voltar')) return ltJanela();
+  const t = e.target.closest('[data-lt-tirar]'); if (t) { e.stopPropagation(); LT.pares[+t.dataset.ltTirar].alvo = null; LT.ativo = +t.dataset.ltTirar; return ltJanela(); }
+  const a = e.target.closest('[data-lt-ativo]'); if (a) { LT.ativo = +a.dataset.ltAtivo; return ltJanela(); }
+  const al = e.target.closest('[data-lt-alvo]'); if (al) {
+    const x = LT.lista.find(i => i.id === al.dataset.ltAlvo); if (!x) return;
+    LT.pares.forEach(p => { if (p.alvo?.id === x.id) p.alvo = null; });
+    LT.pares[LT.ativo].alvo = x; if (LT.res) delete LT.res[LT.pares[LT.ativo].aid];
+    const prox = LT.pares.findIndex(p => !p.alvo); if (prox >= 0) LT.ativo = prox;
+    return ltJanela();
+  }
+});
+document.addEventListener('change', e => {
+  if (e.target.id === 'lt-loja') { LT.loja = e.target.value; LT.lista = null; LT.busca = ''; LT.pares.forEach(p => p.alvo = null); LT.res = null; LT.ativo = 0; return ltJanela(); }
+  const c = e.target.closest('[data-lt-cor]'); if (c) { const r = LT.res[+c.dataset.ltCor]; if (r) r.mapa[c.dataset.cor] = c.value; }
+});
+document.addEventListener('submit', e => { if (e.target.id !== 'lt-busca') return; e.preventDefault(); LT.busca = e.target.busca.value.trim(); LT.lista = null; ltJanela(); });

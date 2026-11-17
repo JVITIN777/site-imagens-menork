@@ -329,6 +329,9 @@ async def fotos_simular(request: Request):
     d = await request.json()
     aid, loja, anuncio_id, canal = int(d["aid"]), str(d["loja"]), str(d["anuncio"]), str(d.get("canal", ""))
     mapa = {str(k): str(v) for k, v in (d.get("mapa") or {}).items() if v}  # cor no marketplace -> cor no site
+    if d.get("ajustar_modo") and canal in ("shopee", "mercadolivre"):  # troca em lote: o modo segue a loja escolhida
+        with n.con() as c:
+            c.execute("UPDATE anuncios SET modo=? WHERE id=?", ("ml" if canal == "mercadolivre" else "shopee", aid))
     m = _anuncio_local(aid)
     L = m["linhas"]
     variacoes = {v["cor"].lower(): v for v in L["variacoes"]}
