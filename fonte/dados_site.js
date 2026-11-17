@@ -36,7 +36,7 @@ const SRV = {
   pacote: async (aid, mk, forcar) => { location.href = `/anuncios/${aid}/zip?mk=${encodeURIComponent(mk)}${forcar ? '&forcar=1' : ''}`; setTimeout(() => window.AO_DESENHAR?.(aid), 2500); },
   copiar: d => mandar('/api/anuncio-copiar', d),
   lojas: async () => { const r = await fetch('/api/lojas'); const j = await r.json().catch(() => ({})); if (!r.ok) throw new Error(j.detail || 'Não deu certo.'); return j; },
-  anunciosLoja: async (loja, busca, pagina) => { const r = await fetch(`/api/lojas/${encodeURIComponent(loja)}/anuncios?pagina=${pagina}&busca=${encodeURIComponent(busca)}`); const j = await r.json().catch(() => ({})); if (!r.ok) throw new Error(j.detail || 'Não deu certo.'); return j; },
+  anunciosLoja: async (loja, busca, pagina, aoVivo) => { const r = await fetch(`/api/lojas/${encodeURIComponent(loja)}/anuncios?pagina=${pagina}&busca=${encodeURIComponent(busca)}${aoVivo ? '&fotos_ao_vivo=1' : ''}`); const j = await r.json().catch(() => ({})); if (!r.ok) throw new Error(j.detail || 'Não deu certo.'); return j; },
   salvarIntegracao: d => mandar('/api/integracao', d),
   testarIntegracao: () => mandar('/api/integracao/testar', {}),
   enviarSistema: (aid, forcar) => mandar(`/api/anuncios/${aid}/enviar`, { forcar }),

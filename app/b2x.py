@@ -198,24 +198,65 @@ def lojas(canal: str = ""):
     return {"lojas": saida, "sistema": config()["nome"]}
 
 
+def _primeira_foto(x):
+    for k in ("capa_url", "imagem_url", "foto_url"):
+        if str(x.get(k) or "").startswith("http"):
+            return x[k]
+    for k in ("fotos_urls", "fotos_anuncio", "fotos"):
+        for f in x.get(k) or []:
+            u = f if isinstance(f, str) else (f.get("url") or "") if isinstance(f, dict) else ""
+            if str(u).startswith("http"):
+                return u
+    return ""
+
+
 @rota.get("/api/b2x/anuncios")
-def anuncios(loja: str, busca: str = "", pagina: int = 1):
-    q = {"loja": loja, "pagina": max(1, pagina)}
+def anuncios(loja: str, busca: str = "", pagina: int = 1, fotos_ao_vivo: int = 0):
+    """Anuncios de uma loja. Pede detalhe=1: so assim o B2X manda capa_url e fotos_urls (a lista curta nao tem foto).
+    fotos_ao_vivo=1 (botao Atualizar) faz o B2X ler as fotos agora no marketplace (Shopee, ate 100)."""
+    q = {"loja": loja, "pagina": max(1, pagina), "detalhe": 1}
     if busca.strip():
         q["busca"] = busca.strip()[:100]
-    status, d = chamar("GET", "/v1/anuncios?" + urllib.parse.urlencode(q))
+    if fotos_ao_vivo:
+        q["fotos_ao_vivo"] = 1
+    status, d = chamar("GET", "/v1/anuncios?" + urllib.parse.urlencode(q), timeout=150)
     _ok(status, d, "Ler os anúncios")
-    cols = d.get("colunas") or ["id", "preco", "promo", "estoque", "desconto_%", "variacoes_sem_estoque", "titulo", "alterado_em", "status"]
     itens = []
-    for it in d.get("itens") or []:
+    cols = d.get("colunas") or ["id", "preco", "promo", "estoque", "desconto_%", "variacoes_sem_estoque", "titulo", "alterado_em", "status"]
+    for it in d.get("itens") or []:  # se o B2X devolver a lista curta mesmo assim (sem foto)
         x = dict(zip(cols, it)) if isinstance(it, list) else it
         itens.append({"id": str(x.get("id") or x.get("anuncio_id") or ""), "titulo": str(x.get("titulo") or x.get("titulo_completo") or ""),
-                      "preco": x.get("preco"), "estoque": x.get("estoque"), "status": x.get("status") or ""})
+                      "preco": x.get("preco"), "estoque": x.get("estoque"), "status": x.get("status") or "", "capa": _primeira_foto(x),
+                      "url": x.get("url") or ""})
     for x in d.get("anuncios") or []:
-        itens.append({"id": str(x.get("anuncio_id") or ""), "titulo": str(x.get("titulo_completo") or ""), "preco": x.get("preco"),
-                      "estoque": x.get("estoque"), "status": x.get("status") or "", "capa": x.get("capa_url") or ""})
+        itens.append({"id": str(x.get("anuncio_id") or x.get("id") or ""), "titulo": str(x.get("titulo_completo") or x.get("titulo") or ""),
+                      "preco": x.get("preco"), "estoque": x.get("estoque"), "status": x.get("status") or "",
+                      "capa": _primeira_foto(x), "url": x.get("url") or ""})
+    com = sum(bool(i["capa"]) for i in itens)
     return {"anuncios": itens, "total": d.get("total") or len(itens), "pagina": d.get("pagina") or pagina,
-            "paginas": d.get("paginas") or 1, "lido_em": d.get("sincronizado_em_brasilia") or ""}
+            "paginas": d.get("paginas") or 1, "lido_em": d.get("sincronizado_em_brasilia") or d.get("fotos_lidas_em_brasilia") or "",
+            "diagnostico": {"formato": "detalhe" if d.get("anuncios") else "lista curta", "com_capa": com, "sem_capa": len(itens) - com,
+                            "fotos_ao_vivo": bool(fotos_ao_vivo)}}
+
+
+@rota.get("/api/b2x/foto")
+def foto(u: str):
+    """Passa a foto do marketplace pelo nosso servidor, para quando o navegador nao consegue abrir o link direto."""
+    from fastapi.responses import Response
+    if not re.match(r"^https://[A-Za-z0-9.-]+/", u) or len(u) > 1500:
+        raise HTTPException(400, "Link de foto inválido.")
+    req = urllib.request.Request(u, headers={"User-Agent": "Mozilla/5.0 (site-imagens-menork)"})
+    try:
+        with urllib.request.urlopen(req, timeout=20) as r:
+            tipo = r.headers.get("Content-Type") or ""
+            if not tipo.startswith("image/"):
+                raise HTTPException(400, "O link não é uma imagem.")
+            dados = r.read(15 * 1024 * 1024)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(502, f"Não consegui baixar a foto: {e}")
+    return Response(dados, media_type=tipo, headers={"Cache-Control": "max-age=86400"})
 
 
 def _detalhe(loja, anuncio):
@@ -253,7 +294,7 @@ def anuncio(loja: str, anuncio: str, canal: str = ""):
                     por_cor.setdefault(cor, str(x.get("anuncio_id") or ""))
         cores = list(por_cor) or cores
     fotos = []
-    for f in (a.get("fotos") or a.get("imagens") or a.get("fotos_urls") or [])[:20]:
+    for f in (a.get("fotos_urls") or a.get("fotos_anuncio") or a.get("fotos") or a.get("imagens") or [])[:20]:
         u = f if isinstance(f, str) else (f.get("url") or f.get("link") or "") if isinstance(f, dict) else ""
         if str(u).startswith("http"):
             fotos.append(u)
@@ -262,7 +303,7 @@ def anuncio(loja: str, anuncio: str, canal: str = ""):
              for v in (a.get("variacoes") or [])[:150] if isinstance(v, dict)]
     desc = a.get("descricao") or a.get("descricao_texto") or ""
     return {"id": str(a.get("anuncio_id") or anuncio), "titulo": a.get("titulo_completo") or a.get("titulo") or "",
-            "capa": a.get("capa_url") or (fotos[0] if fotos else ""), "qtd_fotos": a.get("qtd_fotos"), "status": a.get("status") or "",
+            "capa": _primeira_foto(a), "qtd_fotos": a.get("qtd_fotos"), "status": a.get("status") or "",
             "cores": cores, "familia": bool(por_cor) or len(familia) > 1, "anuncio_da_cor": por_cor,
             "variacoes": len(a.get("variacoes") or []) or len(familia), "url": a.get("url") or a.get("link") or "",
             "fotos": fotos, "lista_variacoes": lista, "descricao": str(desc)[:5000] if isinstance(desc, str) else "",

@@ -1057,13 +1057,13 @@ def lojas():
 
 
 @app.get("/api/lojas/{loja}/anuncios")
-def lojas_anuncios(loja: str, pagina: int = 1, busca: str = ""):
+def lojas_anuncios(loja: str, pagina: int = 1, busca: str = "", fotos_ao_vivo: int = 0):
     from . import b2x
-    r = b2x.anuncios(loja, busca, pagina)
+    r = b2x.anuncios(loja, busca, pagina, fotos_ao_vivo)
     return {"anuncios": [{"id": a["id"], "titulo": a["titulo"], "preco": "" if a["preco"] is None else str(a["preco"]),
-                          "status": a["status"], "foto": a.get("capa") or "", "link": "", "vendas": None,
+                          "status": a["status"], "foto": a.get("capa") or "", "link": a.get("url") or "", "vendas": None,
                           "estoque": a["estoque"] if isinstance(a["estoque"], (int, float)) else None} for a in r["anuncios"]],
-            "total": r["total"], "pagina": r["pagina"]}
+            "total": r["total"], "pagina": r["pagina"], "diagnostico": r["diagnostico"], "lido_em": r["lido_em"]}
 
 
 @app.post("/bot/enviar-sistema")

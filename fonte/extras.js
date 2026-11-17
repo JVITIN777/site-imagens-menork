@@ -322,18 +322,22 @@ async function carregarLojas(forcar) {
   try { LOJAS.clientes = (await SRV.lojas()).clientes; } catch (e) { LOJAS.erro = e.message; LOJAS.clientes = null; }
   LOJAS.carregando = false; if (ROTA.startsWith('/lojas')) RENDER();
 }
-async function carregarAnuncios(loja, busca, pagina) {
+async function carregarAnuncios(loja, busca, pagina, aoVivo) {
   const ch = loja + '|' + busca; const atual = LOJAS.anuncios[ch];
   if (atual && atual.carregando) return;
-  LOJAS.anuncios[ch] = { ...(atual || { lista: [], total: 0 }), carregando: true, erro: '' };
-  try { const r = await SRV.anunciosLoja(loja, busca, pagina);
-    LOJAS.anuncios[ch] = { lista: pagina > 1 ? [...(atual?.lista || []), ...r.anuncios] : r.anuncios, total: r.total, pagina, carregando: false };
+  LOJAS.anuncios[ch] = { ...(atual || { lista: [], total: 0 }), carregando: true, erro: '', aoVivo: !!aoVivo };
+  try { const r = await SRV.anunciosLoja(loja, busca, pagina, aoVivo);
+    LOJAS.anuncios[ch] = { lista: pagina > 1 ? [...(atual?.lista || []), ...r.anuncios] : r.anuncios, total: r.total, pagina, carregando: false, diag: r.diagnostico, lidoEm: r.lido_em };
   } catch (e) { LOJAS.anuncios[ch] = { lista: atual?.lista || [], total: 0, pagina, carregando: false, erro: e.message }; }
   if (ROTA.startsWith('/lojas')) RENDER();
 }
 document.addEventListener('submit', e => { const f = e.target; if (f.id !== 'busca-loja') return; e.preventDefault(); IR(rota('/lojas', { loja: f.dataset.loja, busca: f.busca.value.trim() })); });
 document.addEventListener('click', e => {
-  if (e.target.closest('#recarregar-lojas')) { LOJAS.anuncios = {}; carregarLojas(true); }
+  if (e.target.closest('#recarregar-lojas')) {
+    const q = Object.fromEntries(new URLSearchParams(ROTA.split('?')[1] || ''));
+    if (q.loja && LOJAS.clientes) { const b = q.busca || ''; delete LOJAS.anuncios[q.loja + '|' + b]; carregarAnuncios(q.loja, b, 1, true); RENDER(); window.menork.aviso('Buscando as fotos de novo no marketplace…'); return; }
+    LOJAS.anuncios = {}; carregarLojas(true);
+  }
   const m = e.target.closest('[data-mais-loja]'); if (m) { const [, busca = ''] = [0, ...(m.dataset.busca ? [m.dataset.busca] : [])]; carregarAnuncios(m.dataset.maisLoja, m.dataset.busca || '', (+m.dataset.pagina || 1) + 1); }
 });
 
@@ -357,7 +361,9 @@ Object.assign(TELAS, {
         ${loja.url ? `<div class="acoes"><a class="b claro" href="${esc(loja.url)}" target="_blank" rel="noopener">Abrir a loja no ${esc(MKT[loja.marketplace] || 'marketplace')}</a></div>` : ''}</div>
         <form class="busca-loja" id="busca-loja" data-loja="${esc(loja.id)}"><input type="search" name="busca" value="${esc(busca)}" placeholder="Buscar pelo título nesta loja"><button class="b claro">Buscar</button></form>
         ${st?.erro ? `<div class="vazio"><h2>Não consegui ler os anúncios</h2><p>${esc(st.erro)}</p></div>` : ''}
-        ${itens.length ? `<div class="grade anuncios-loja">${itens.map(a => `<div class="cartao">${a.foto ? `<div class="foto"><img loading="lazy" src="${esc(a.foto)}" alt="" referrerpolicy="no-referrer"></div>` : '<div class="foto sem-foto">Sem foto</div>'}
+        ${st?.diag && !st.carregando ? `<p class="pequeno">${st.diag.com_capa} com foto, ${st.diag.sem_capa} sem foto${st.diag.fotos_ao_vivo ? ' (fotos lidas agora no marketplace)' : ''}.${st.diag.sem_capa ? ' Clique em <b>Atualizar</b> para buscar as fotos de novo.' : ''}</p>` : ''}
+        ${st?.carregando && st.aoVivo ? '<p class="dica">Lendo as fotos agora no marketplace; pode levar até 1 minuto…</p>' : ''}
+        ${itens.length ? `<div class="grade anuncios-loja">${itens.map(a => `<div class="cartao">${a.foto ? `<div class="foto"><img loading="lazy" src="${esc(a.foto)}" alt="" referrerpolicy="no-referrer" data-foto-mk="${esc(a.foto)}"></div>` : '<div class="foto sem-foto">Sem foto</div>'}
           <div class="legenda"><b title="${esc(a.titulo)}">${esc(a.titulo)}</b>${a.preco ? `<span class="preco-loja">R$ ${esc(a.preco)}</span>` : ''}
           <span>${[a.status, a.vendas != null ? a.vendas + ' venda(s)' : '', a.estoque != null ? a.estoque + ' em estoque' : ''].filter(Boolean).map(esc).join(' · ')}</span>
           <span class="pequeno">${esc(a.id)}</span><button class="b claro" data-abrir-mk="${esc(a.id)}" data-loja="${esc(loja.id)}">Abrir e modificar</button>${a.link ? `<a class="abrir" href="${esc(a.link)}" target="_blank" rel="noopener">Abrir no marketplace</a>` : ''}</div></div>`).join('')}</div>` : (st && !st.carregando && !st.erro ? `<div class="vazio"><h2>Nenhum anúncio${busca ? ' com esse título' : ''}</h2></div>` : '')}
@@ -588,3 +594,11 @@ document.addEventListener('click', e => {
   if (e.target.closest('#mk-reabrir')) return mkAbrir(MK.loja.id, MK.atual.id);
 });
 document.addEventListener('submit', e => { if (e.target.id !== 'mk-editar') return; e.preventDefault(); mkSimular(e.target); });
+
+// foto de marketplace que o navegador nao abriu: tenta pelo nosso servidor; se ainda falhar, mostra "Sem foto" so nela
+document.addEventListener('error', e => {
+  const img = e.target; if (!(img instanceof HTMLImageElement) || !img.dataset.fotoMk && !img.closest('.mk-fotos, .b2-anuncio')) return;
+  const orig = img.dataset.fotoMk || img.getAttribute('src');
+  if (!img.dataset.viaServidor && /^https:/.test(orig)) { img.dataset.viaServidor = 1; img.src = '/api/b2x/foto?u=' + encodeURIComponent(orig); return; }
+  const caixa = img.closest('.foto'); if (caixa) { caixa.classList.add('sem-foto'); caixa.textContent = 'Sem foto'; } else img.remove();
+}, true);
