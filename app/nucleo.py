@@ -38,6 +38,7 @@ PADRAO = {
     "atualizar_ramo": "main",
     "atualizar_sozinho": True,
     "atualizar_a_cada_horas": 6,
+    "atualizar_a_cada_minutos": 2,  # quando maior que 0, vale este (quase tempo real); 0 volta para as horas
     "atualizar_endereco": "",
     "chave_bots": "",
 }

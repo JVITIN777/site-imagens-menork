@@ -45,7 +45,7 @@ const SRV = {
 function PAINEL_EXTRA() {
   const b = INFO.bot || {};
   const v = INFO.versao || {};
-  const versao = `<div class="bloco"><h2>Versão do site <small>${v.sozinho ? 'atualiza sozinho ao ligar e a cada algumas horas' : 'atualização só pelo botão'}</small></h2>
+  const versao = `<div class="bloco"><h2>Versão do site <small>${v.sozinho ? `atualiza sozinho: confere a cada ${v.a_cada_minutos >= 60 ? Math.round(v.a_cada_minutos / 60) + ' h' : (v.a_cada_minutos || 2) + ' min'} e a página recarrega sozinha` : 'atualização só pelo botão'}</small></h2>
     <p>Instalada: <b>${esc(v.atual)}</b>${v.checada_em ? `<span class="pequeno"> · última consulta em ${esc(v.checada_em.slice(0, 16))}${v.remota ? ', versão publicada: ' + esc(v.remota) : ''}</span>` : ''}</p>
     ${v.erro ? `<p class="aviso-txt">${esc(v.erro)}</p>` : ''}
     <div class="acoes"><button class="b" id="buscar-atualizacao">Buscar atualização agora</button>${v.anterior ? `<button class="b claro" id="voltar-versao">Voltar à versão ${esc(v.anterior)}</button>` : ''}</div>
@@ -63,3 +63,22 @@ document.addEventListener('click', async e => {
     if (r.religando) setTimeout(() => location.reload(), 7000); else RENDER();
   } catch (err) { window.menork.aviso(err.message, null, null, 15); }
 });
+
+// a pagina percebe sozinha quando o site foi atualizado e recarrega, sem atrapalhar quem esta digitando
+(() => {
+  let minha = null, avisou = false;
+  const ocupado = () => { const a = document.activeElement, j = document.getElementById('janela');
+    return !!(a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName) && a.type !== 'checkbox') || !!(j && !j.hidden); };
+  async function olhar() {
+    try {
+      const r = await fetch('/api/versao', { cache: 'no-store' }); if (!r.ok) return;
+      const v = (await r.json()).atual; if (!minha) { minha = v; return; }
+      if (v === minha) return;
+      if (ocupado()) { if (!avisou) { avisou = true; window.menork.aviso('Saiu a versão ' + v + ' do site. A página recarrega quando você terminar de digitar.', null, null, 20); } return; }
+      window.menork.aviso('Site atualizado para a versão ' + v + '. Recarregando…', null, null, 5);
+      setTimeout(() => location.reload(), 1500);
+    } catch (_) { /* o site esta religando: tenta de novo no proximo giro */ }
+  }
+  olhar(); setInterval(olhar, 20000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) olhar(); });
+})();

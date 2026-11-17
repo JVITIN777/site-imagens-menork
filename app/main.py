@@ -350,6 +350,12 @@ async def demanda_produto(request: Request):
     return {"ok": True}
 
 
+@app.get("/api/versao")
+def api_versao():
+    """Leve: a pagina pergunta isto de tempos em tempos para recarregar sozinha depois de uma atualizacao."""
+    return {"atual": atu.versao_local()}
+
+
 @app.post("/api/atualizar")
 async def atualizar_site(request: Request):
     d = await request.json()

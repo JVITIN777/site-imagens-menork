@@ -186,9 +186,17 @@ def ao_ligar():
         n.registrar(f"atualização ao ligar falhou: {e}")
 
 
+def intervalo():
+    """Segundos entre as consultas. Cada consulta e leve: 1 pergunta ao GitHub e um arquivo de 14 bytes."""
+    minutos = float(n.CFG.get("atualizar_a_cada_minutos") or 0)
+    if minutos > 0:
+        return max(1.0, minutos) * 60  # o GitHub deixa 60 consultas por hora sem senha; 1 por minuto e o limite
+    return max(1, float(n.CFG["atualizar_a_cada_horas"])) * 3600
+
+
 def _vigia():
     while True:
-        time.sleep(max(1, float(n.CFG["atualizar_a_cada_horas"])) * 3600)
+        time.sleep(intervalo())
         try:
             if n.CFG["atualizar_sozinho"] and atualizar():
                 religar()
@@ -202,4 +210,5 @@ def ligar_vigia():
 
 def situacao():
     return {"atual": versao_local(), "remota": info["remota"], "checada_em": info["checada_em"], "erro": info["erro"],
-            "anterior": anterior(), "sozinho": bool(n.CFG["atualizar_sozinho"])}
+            "anterior": anterior(), "sozinho": bool(n.CFG["atualizar_sozinho"]),
+            "a_cada_minutos": round(intervalo() / 60)}
