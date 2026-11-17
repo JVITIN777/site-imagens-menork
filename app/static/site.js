@@ -1334,4 +1334,4 @@ window.ANUNCIO = (ID) => {
   carregar().catch(e => aviso(e.message));
 };
 
-RENDER().catch(e => window.menork.aviso(e.message));
+RENDER().catch(e => window.menork.aviso(e.message)).finally(() => window.ABERTURA_FIM?.());

@@ -75,7 +75,8 @@
     const qtd = Math.round(Math.min(18, Math.max(8, W * H / 90000)));
     cartas = Array.from({ length: qtd }, () => nova(true)).sort((a, b) => a.z - b.z);
   }
-  let antes = performance.now();
+  let antes = performance.now(), parado = false;
+  window.CARTAS_PARAR = () => { parado = true; };
   function quadro(agora) {
     const dt = Math.min(0.05, (agora - antes) / 1000); antes = agora;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, W, H);
@@ -90,7 +91,7 @@
       ctx.drawImage(c.s, -L / 2, -A / 2, L, A);
       ctx.restore();
     }
-    if (!calmo) requestAnimationFrame(quadro);
+    if (!calmo && !parado) requestAnimationFrame(quadro);
   }
   addEventListener('resize', () => { medir(); if (calmo) quadro(performance.now()); });
   medir(); requestAnimationFrame(quadro);

@@ -409,3 +409,15 @@ body.porta{background:#050505!important}
 .pj .cod{font-style:normal;font-size:10px;font-weight:700;padding:2px 7px;border-radius:9px;color:#7fd8a6;border:1px solid rgba(127,216,166,.35)}
 .pj .qtd{font-style:normal;font-size:12px;font-weight:600;padding:3px 10px;border-radius:10px;background:rgba(255,255,255,.07)}
 .pj .grade-lojas{margin:0;padding:0 14px 14px 46px}
+/* abertura do site: cartas caindo enquanto carrega */
+#abertura{position:fixed;inset:0;z-index:9999;background:#050505;display:grid;place-items:center;transition:opacity .65s ease,visibility .65s}
+#abertura.saindo{opacity:0;visibility:hidden}
+#abertura #cartas{position:absolute;inset:0}
+.abertura-centro{position:relative;display:flex;flex-direction:column;align-items:center;gap:14px;animation:abertura-entra .8s ease both}
+.abertura-logo{width:180px;height:auto;-webkit-mask-image:radial-gradient(ellipse 72% 72% at 50% 50%,#000 58%,transparent 100%);mask-image:radial-gradient(ellipse 72% 72% at 50% 50%,#000 58%,transparent 100%)}
+.abertura-centro .nome-cromado{font-size:46px}
+.abertura-barra{width:160px;height:2px;border-radius:2px;background:rgba(255,255,255,.12);overflow:hidden}
+.abertura-barra i{display:block;width:40%;height:100%;background:linear-gradient(90deg,transparent,#e9e9e6,transparent);animation:abertura-barra 1.1s ease-in-out infinite}
+@keyframes abertura-entra{from{opacity:0;transform:scale(.94)}to{opacity:1;transform:none}}
+@keyframes abertura-barra{from{transform:translateX(-110%)}to{transform:translateX(260%)}}
+@media (prefers-reduced-motion:reduce){.abertura-centro,.abertura-barra i{animation:none}}

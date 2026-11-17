@@ -146,7 +146,7 @@ API_DEMO="  const api = (url, corpo, formulario) => FAKE(url, corpo, formulario)
 MARCA = '<svg viewBox="0 0 32 32" aria-hidden="true"><rect x="2" y="2" width="28" height="28" rx="7"/><path d="M8 21c0-5 3-7 6-7 1 2 3 3 6 3 3 0 4 2 4 4z"/></svg>'
 MARCA_SITE = '{% set lv = versao_logo() %}{% if lv %}<img class="logo" src="/logo?v={{ lv }}" alt="">{% else %}' + MARCA + '{% endif %}'
 ICONE_SITE = '{% if versao_logo() %}<link rel="icon" href="/logo?v={{ versao_logo() }}">{% endif %}'
-def pagina(estilos, banner, rodape, scripts, titulo, marca=MARCA):
+def pagina(estilos, banner, rodape, scripts, titulo, marca=MARCA, abertura=""):
     return f"""<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -156,7 +156,7 @@ def pagina(estilos, banner, rodape, scripts, titulo, marca=MARCA):
 {estilos}
 </head>
 <body data-desfazer="60">
-<canvas id="agua" aria-hidden="true"></canvas>
+{abertura}<canvas id="agua" aria-hidden="true"></canvas>
 <aside class="lateral">
   <a class="marca-site" href="#" data-rota="/">{marca}<span><b class="nome-cromado">Menor K</b><small>imagens</small></span></a>
   <form class="busca" data-busca="1"><svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="9" cy="9" r="6"/><path d="m14 14 4 4"/></svg><input type="search" name="q" placeholder="Buscar" aria-label="Buscar produto, cor, tipo, anúncio ou arquivo"></form>
@@ -183,11 +183,19 @@ def pedaco(ini, fim):
 linha=lambda ini: next(l for l in dados.split('\n') if l.startswith(ini))
 comuns='\n'.join([pedaco('const TIPOS = ', 'const TINTAS'), linha('const MOTIVOS = '), linha('const META = '), linha('const MKT = '), linha('const FORMATO = '),
                   pedaco('const resumo = i =>', 'function montar(aid, d) {'), pedaco('const demandaDe = a =>', 'const GRANDE = IMG;')])
-site_js='\n'.join(["'use strict';", comuns, open('dados_site.js').read(), telas, extras, app.replace('/*API*/', API_REAL), an, "RENDER().catch(e => window.menork.aviso(e.message));"])
+site_js='\n'.join(["'use strict';", comuns, open('dados_site.js').read(), telas, extras, app.replace('/*API*/', API_REAL), an, "RENDER().catch(e => window.menork.aviso(e.message)).finally(() => window.ABERTURA_FIM?.());"])
 assert 'FAKE' not in site_js and 'arte(' not in site_js and 'TAREFAS_NOVAS' not in site_js
 open(R+'static/site.js','w').write(site_js)
 open(R+'static/extra.css','w').write(extra.split('\n',3)[3])
+# abertura: cartas caindo enquanto o site carrega (some quando a primeira tela fica pronta; minimo 1,5 s, maximo 6 s)
+ABERTURA = """<div id="abertura" aria-hidden="true"><canvas id="cartas"></canvas><div class="abertura-centro">{% set lv = versao_logo() %}{% if lv %}<img class="abertura-logo" src="/logo?v={{ lv }}" alt="">{% endif %}<b class="nome-cromado">Menor K</b><span class="abertura-barra"><i></i></span></div></div>
+<script src="/static/cartas.js?v={{ versao }}"></script>
+<script>(() => { const t0 = performance.now(); let foi = false;
+  window.ABERTURA_FIM = () => { if (foi) return; foi = true; setTimeout(() => { const a = document.getElementById('abertura'); if (!a) return;
+    a.classList.add('saindo'); setTimeout(() => { a.remove(); window.CARTAS_PARAR?.(); }, 700); }, Math.max(0, 1500 - (performance.now() - t0))); };
+  setTimeout(() => window.ABERTURA_FIM(), 6000); })();</script>
+"""
 open(R+'templates/app.html','w').write(pagina(ICONE_SITE + '\n<link rel="stylesheet" href="/static/estilo.css?v={{ versao }}">\n<link rel="stylesheet" href="/static/extra.css?v={{ versao }}">', '',
             '<div class="pulso"><i></i><span>Lendo a pasta de entrada</span></div><a class="sair" href="/sair">Sair</a>',
-            '<script src="/static/agua.js?v={{ versao }}"></script>\n<script src="/static/site.js?v={{ versao }}"></script>', "Imagens Menork", MARCA_SITE))
+            '<script src="/static/agua.js?v={{ versao }}"></script>\n<script src="/static/site.js?v={{ versao }}"></script>', "Imagens Menork", MARCA_SITE, ABERTURA))
 print('site', len(site_js))
