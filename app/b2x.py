@@ -536,7 +536,11 @@ def _num(v, nome):
 
 @rota.post("/api/b2x/criar")
 async def criar(request: Request):
-    d = await request.json()
+    return criar_do_site(await request.json())
+
+
+def criar_do_site(d, por="você"):
+    """Cria na loja o anuncio do site (modo Shopee ou ML). Sem confirmar = so valida. O bot usa esta mesma funcao."""
     aid, loja, canal = int(d["aid"]), str(d["loja"]), str(d.get("canal") or "")
     m = _anuncio_local(aid)
     L, a = m["linhas"], m["anuncio"]

@@ -1,6 +1,7 @@
 // ===== Telas (no site de verdade elas sao montadas pelo servidor) =====
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const ROT = { gerada: 'Falta classificar', conferencia: 'Em conferência', aprovada: 'Aprovada', reprovada: 'Reprovada' };
+const SEL_AN = new Set(); // anuncios marcados para mandar ao Grok publicar
 let ROTA = (typeof SRV !== 'undefined' && SRV.rotaInicial?.()) || '/';
 const rota = (caminho, p = {}) => { const q = new URLSearchParams(Object.entries(p).filter(([, v]) => v)).toString(); return caminho + (q ? '?' + q : ''); };
 const elo = (r, texto, cls = '') => `<a href="#" data-rota="${esc(r)}" class="${cls}">${texto}</a>`;
@@ -56,13 +57,14 @@ const TELAS = {
   },
   anuncios() {
     const cart = a => { const m = montagem(a.id), rosto = m.capa || m.galeria[0] || m.disponiveis[0], n = (m.capa ? 1 : 0) + m.galeria.length, fl = faltas(a.id).itens.length;
-      return `<a class="cartao anuncio" href="#" data-rota="/anuncios/${a.id}"><button type="button" class="excluir-card" data-excluir-an="${a.id}" title="Excluir este anúncio">Excluir</button>${rosto ? `<div class="foto"><img src="${IMG(rosto.id)}" alt=""></div>` : '<div class="foto sem-foto">Sem imagem</div>'}
+      return `<a class="cartao anuncio ${SEL_AN.has(a.id) ? 'marcado' : ''}" href="#" data-rota="/anuncios/${a.id}"><label class="sel-an" title="Marcar para mandar ao Grok"><input type="checkbox" data-sel-an="${a.id}" ${SEL_AN.has(a.id) ? 'checked' : ''}></label><button type="button" class="excluir-card" data-excluir-an="${a.id}" title="Excluir este anúncio">Excluir</button>${rosto ? `<div class="foto"><img src="${IMG(rosto.id)}" alt=""></div>` : '<div class="foto sem-foto">Sem imagem</div>'}
       <div class="legenda"><b>${esc(a.nome)}</b><span>${FORMATO[a.formato]}</span><span>${n} foto(s) na ordem, ${m.cores.length} cor(es)</span><span class="${fl ? 'alerta-mini' : 'ok-mini'}">${fl ? fl + ' pendência(s)' : 'Completo'}</span></div></a>`; };
     const soltos = DB.anuncios.filter(a => !demandaDe(a));
     return `<div class="cabeca"><h1>Anúncios <small>${DB.anuncios.length}</small></h1><form class="acoes" id="novo-anuncio"><input name="nome" placeholder="Nome do anúncio novo" required>
       <select name="formato">${Object.entries(FORMATO).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select><button class="b">Criar anúncio</button></form></div>
     ${DB.demandas.map(d => `<h2 class="grupo">${esc(d.tarefa)} <small>${d.marketplaces.map(m => MKT[m]).join(', ')}</small></h2><div class="grade larga">${DB.anuncios.filter(a => a.demanda === d.id).map(cart).join('')}</div>`).join('')}
-    ${soltos.length ? `<h2 class="grupo">Sem tarefa do ClickUp <small>criados à mão</small></h2><div class="grade larga">${soltos.map(cart).join('')}</div>` : ''}`;
+    ${soltos.length ? `<h2 class="grupo">Sem tarefa do ClickUp <small>criados à mão</small></h2><div class="grade larga">${soltos.map(cart).join('')}</div>` : ''}
+    ${window.PEDIDOS_PUBLICAR ? PEDIDOS_PUBLICAR() : ''}${window.BARRA_SEL_AN ? BARRA_SEL_AN() : ''}`;
   },
   anuncio(q, id) {
     const a = DB.anuncios.find(x => x.id === id); if (!a) return TELAS.anuncios();

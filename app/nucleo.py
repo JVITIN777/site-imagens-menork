@@ -184,6 +184,7 @@ def iniciar_banco():
         novas["anuncios"] += [("demanda_id", "INTEGER"), ("meta_ia", "INTEGER"), ("meta_capa", "INTEGER"),
                               ("familia", "INTEGER"), ("id_externo", "TEXT DEFAULT ''"),
                               ("modo", "TEXT DEFAULT 'shopee'"), ("tamanhos", "TEXT DEFAULT ''")]
+        novas["pedidos"] = [("tipo", "TEXT DEFAULT 'faltas'"), ("dados", "TEXT DEFAULT ''"), ("resposta", "TEXT DEFAULT ''")]
         novas["imagens"] = [("motivo", "TEXT DEFAULT ''"), ("origem_decisao", "TEXT DEFAULT ''"), ("alertas", "TEXT DEFAULT ''"),
                             ("ref", "INTEGER DEFAULT 0"), ("conta", "TEXT DEFAULT ''"), ("dhash", "TEXT DEFAULT ''"),
                             ("estilo", "TEXT DEFAULT ''")]

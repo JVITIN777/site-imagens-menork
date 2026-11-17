@@ -8,7 +8,9 @@ param(
   [string]$Arquivo, [string]$Produto, [string]$Cor, [string]$Tipo, [string]$Anuncio, [string]$Conta,
   [string[]]$Alertas, [switch]$Conferida, [string]$Motivo, [string]$Bot, [string]$Status, [string]$Detalhe,
   [string]$Limite, [string]$Marketplace, [string]$Destino, [string]$Tarefa, [string]$Info, [string]$Pasta,
-  [string[]]$Marketplaces, [int]$Max = 5, [int]$Id, [string]$Estilo, [switch]$Copia, [int]$Posicao
+  [string[]]$Marketplaces, [int]$Max = 5, [int]$Id, [string]$Estilo, [switch]$Copia, [int]$Posicao,
+  [string]$Titulo, [string]$Descricao, [string]$Preco, [string]$PrecoAntigo, [string]$Tamanhos, [string]$Categoria,
+  [string]$Json, [switch]$Validar, [string]$Resposta, [string]$Busca
 )
 $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"
@@ -54,7 +56,11 @@ try {
     "instrucoes"  { (Get-Content (Join-Path $raiz "INSTRUCOES_GROK_BOT.md") -Raw -Encoding UTF8).Replace("C:\SiteImagensMenork", $raiz) }
     "enviar-sistema" { if (-not $Anuncio) { throw "Diga o anuncio com -Anuncio" }; Mostrar (MandarJson "/bot/enviar-sistema" @{ anuncio = $Anuncio; bot = $Bot }) }
     "pedidos"     { Mostrar (Pegar "/bot/pedidos") }
-    "pedido"      { if (-not $Id -or -not $Status) { throw "Diga -Id e -Status (pego ou feito)" }; Mostrar (MandarJson "/bot/pedido" @{ id = $Id; status = $Status; bot = $Bot }) }
+    "pedido"      { if (-not $Id -or -not $Status) { throw "Diga -Id e -Status (pego ou feito)" }; Mostrar (MandarJson "/bot/pedido" @{ id = $Id; status = $Status; bot = $Bot; resposta = $Resposta }) }
+    "dados"       { if (-not $Anuncio) { throw "Diga -Anuncio" }; Mostrar (MandarJson "/bot/anuncio-dados" @{ anuncio = $Anuncio; titulo = $Titulo; descricao = $Descricao; preco = $Preco; preco_antigo = $PrecoAntigo; tamanhos = $Tamanhos }) }
+    "categorias"  { if (-not $Anuncio) { throw "Diga -Anuncio" }; Mostrar (Pegar "/bot/b2x/categorias" @{ anuncio = $Anuncio; busca = $Busca }) }
+    "ficha"       { if (-not $Anuncio -or -not $Categoria) { throw "Diga -Anuncio e -Categoria" }; Mostrar (Pegar "/bot/b2x/ficha" @{ anuncio = $Anuncio; categoria = $Categoria }) }
+    "publicar"    { if (-not $Anuncio -or -not $Categoria) { throw "Diga -Anuncio e -Categoria" }; Mostrar (MandarJson "/bot/publicar" @{ anuncio = $Anuncio; categoria = $Categoria; json = $Json; validar = [bool]$Validar }) }
     "demanda"     {
       if (-not $Tarefa -or -not $Info) { throw "Diga -Tarefa e -Info" }
       Mostrar (MandarJson "/bot/demanda" @{ tarefa = $Tarefa; info = $Info; pasta = $Pasta; produto = $Produto; marketplaces = @($Marketplaces) })
@@ -74,6 +80,11 @@ Comandos (respostas em JSON):
   instrucoes                                                (mostra as regras atuais; rode no comeco de cada rodada)
   enviar      -Arquivo <png/jpg> -Produto CI9 -Cor Caramelo -Tipo ia [-Anuncio "CI9 unitario"] [-Conta "Conta 1"] [-Conferida] [-Alertas "Sola diferente","Sem logo"]
   enviar      -Arquivo <foto> -Anuncio "TA101 unitario" -Copia [-Posicao 1] [-Cor BEGE]   (foto COPIADA de anuncio que ja existe: entra direto no anuncio, sem fila)
+  dados       -Anuncio "X" [-Titulo "..."] [-Descricao "..."] [-Preco 49,90] [-Tamanhos "34 a 39"]   (so anuncio com pedido aberto)
+  categorias  -Anuncio "X" [-Busca "chinelo feminino"]       (pedido de PUBLICAR: categorias da loja escolhida)
+  ficha       -Anuncio "X" -Categoria ID                     (o que a categoria pede e o formato do -Json)
+  publicar    -Anuncio "X" -Categoria ID -Json '{...}' [-Validar]   (so o que o Menork mandou em pedidos)
+  pedido      -Id N -Status feito -Resposta "codigo criado ou motivo"
   reprovada   -Arquivo <png/jpg> -Motivo "Sola errada" -Bot CONFERENTE [-Produto -Cor -Tipo -Conta]
   referencias -Tipo informativo|cena|capa|tabela [-Estilo Academia] [-Produto CI9] [-Max 5]
   erros       [-Produto CI9]

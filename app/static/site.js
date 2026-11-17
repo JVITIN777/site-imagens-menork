@@ -150,6 +150,7 @@ document.addEventListener('click', async e => {
 // ===== Telas (no site de verdade elas sao montadas pelo servidor) =====
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const ROT = { gerada: 'Falta classificar', conferencia: 'Em conferência', aprovada: 'Aprovada', reprovada: 'Reprovada' };
+const SEL_AN = new Set(); // anuncios marcados para mandar ao Grok publicar
 let ROTA = (typeof SRV !== 'undefined' && SRV.rotaInicial?.()) || '/';
 const rota = (caminho, p = {}) => { const q = new URLSearchParams(Object.entries(p).filter(([, v]) => v)).toString(); return caminho + (q ? '?' + q : ''); };
 const elo = (r, texto, cls = '') => `<a href="#" data-rota="${esc(r)}" class="${cls}">${texto}</a>`;
@@ -205,13 +206,14 @@ const TELAS = {
   },
   anuncios() {
     const cart = a => { const m = montagem(a.id), rosto = m.capa || m.galeria[0] || m.disponiveis[0], n = (m.capa ? 1 : 0) + m.galeria.length, fl = faltas(a.id).itens.length;
-      return `<a class="cartao anuncio" href="#" data-rota="/anuncios/${a.id}"><button type="button" class="excluir-card" data-excluir-an="${a.id}" title="Excluir este anúncio">Excluir</button>${rosto ? `<div class="foto"><img src="${IMG(rosto.id)}" alt=""></div>` : '<div class="foto sem-foto">Sem imagem</div>'}
+      return `<a class="cartao anuncio ${SEL_AN.has(a.id) ? 'marcado' : ''}" href="#" data-rota="/anuncios/${a.id}"><label class="sel-an" title="Marcar para mandar ao Grok"><input type="checkbox" data-sel-an="${a.id}" ${SEL_AN.has(a.id) ? 'checked' : ''}></label><button type="button" class="excluir-card" data-excluir-an="${a.id}" title="Excluir este anúncio">Excluir</button>${rosto ? `<div class="foto"><img src="${IMG(rosto.id)}" alt=""></div>` : '<div class="foto sem-foto">Sem imagem</div>'}
       <div class="legenda"><b>${esc(a.nome)}</b><span>${FORMATO[a.formato]}</span><span>${n} foto(s) na ordem, ${m.cores.length} cor(es)</span><span class="${fl ? 'alerta-mini' : 'ok-mini'}">${fl ? fl + ' pendência(s)' : 'Completo'}</span></div></a>`; };
     const soltos = DB.anuncios.filter(a => !demandaDe(a));
     return `<div class="cabeca"><h1>Anúncios <small>${DB.anuncios.length}</small></h1><form class="acoes" id="novo-anuncio"><input name="nome" placeholder="Nome do anúncio novo" required>
       <select name="formato">${Object.entries(FORMATO).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select><button class="b">Criar anúncio</button></form></div>
     ${DB.demandas.map(d => `<h2 class="grupo">${esc(d.tarefa)} <small>${d.marketplaces.map(m => MKT[m]).join(', ')}</small></h2><div class="grade larga">${DB.anuncios.filter(a => a.demanda === d.id).map(cart).join('')}</div>`).join('')}
-    ${soltos.length ? `<h2 class="grupo">Sem tarefa do ClickUp <small>criados à mão</small></h2><div class="grade larga">${soltos.map(cart).join('')}</div>` : ''}`;
+    ${soltos.length ? `<h2 class="grupo">Sem tarefa do ClickUp <small>criados à mão</small></h2><div class="grade larga">${soltos.map(cart).join('')}</div>` : ''}
+    ${window.PEDIDOS_PUBLICAR ? PEDIDOS_PUBLICAR() : ''}${window.BARRA_SEL_AN ? BARRA_SEL_AN() : ''}`;
   },
   anuncio(q, id) {
     const a = DB.anuncios.find(x => x.id === id); if (!a) return TELAS.anuncios();
@@ -1156,6 +1158,52 @@ document.addEventListener('submit', e => {
   if (f.id === 'cr-tams') { e.preventDefault(); crLerGrade(); CR.tamanhos = f.tamanhos.value; return crVariacoes(); }
   if (f.id === 'cr-envio') { e.preventDefault(); crLerEnvio(f); return crRevisar(); }
 });
+
+// ---- mandar anuncios do site para o Grok publicar numa loja do B2X
+let PUB = { lista: null, carregando: false };
+async function carregarPub() { if (PUB.carregando || !INTEG().tem_chave) return; PUB.carregando = true; try { PUB.lista = (await b2get('/api/pedidos/publicar')).pedidos; } catch (_) { PUB.lista = []; } PUB.carregando = false; if (ROTA === '/anuncios') RENDER(); }
+window.PEDIDOS_PUBLICAR = () => {
+  if (!INTEG().tem_chave) return '';
+  if (!PUB.lista) { carregarPub(); return ''; }
+  const abertos = PUB.lista.filter(p => ['aberto', 'pego'].includes(p.status)), feitos = PUB.lista.filter(p => p.status === 'feito').slice(0, 12);
+  if (!abertos.length && !feitos.length) return '';
+  const nome = id => DB.anuncios.find(a => a.id === id)?.nome || ('#' + id);
+  const linha = p => `<li><b class="${p.status === 'feito' ? 'ok-mini' : 'alerta-mini'}">${{ aberto: 'Esperando o Grok', pego: 'Grok publicando', feito: 'Feito' }[p.status] || esc(p.status)}</b> ${esc(nome(p.anuncio_id))} → ${esc(p.loja_nome || '')} (${esc(p.marketplace || '')})${p.bot ? ' · ' + esc(p.bot) : ''}${p.resposta ? ' · ' + esc(p.resposta) : ''}</li>`;
+  return `<div class="bloco pedidos-pub"><h2>Mandados para o Grok publicar <small>${abertos.length} em andamento</small><button class="b claro mini" id="atualizar-pub">Atualizar</button></h2><ul class="envios-feitos">${abertos.map(linha).join('')}${feitos.map(linha).join('')}</ul></div>`;
+};
+window.BARRA_SEL_AN = () => SEL_AN.size ? `<div class="barra-sel-an"><b>${SEL_AN.size} anúncio(s) marcado(s)</b><button class="b verde" id="mandar-grok">Mandar para o Grok publicar</button><button class="b claro" id="marcar-familia" title="Marca também os outros anúncios da mesma família">Marcar a família</button><button class="b claro" id="limpar-sel-an">Limpar</button></div>` : '';
+async function pubJanela() {
+  if (!LOJAS.clientes) { b2Carregando('Buscando as lojas no B2X…'); await carregarLojas(); if (!LOJAS.clientes) return b2Erro(new Error(LOJAS.erro || 'Não consegui ler as lojas.')); }
+  const ads = [...SEL_AN].map(id => DB.anuncios.find(a => a.id === id)).filter(Boolean);
+  const lojas = todasLojas().filter(l => ['shopee', 'mercadolivre'].includes(l.canal)), grupos = {};
+  lojas.forEach(l => (grupos[l.cliente] = grupos[l.cliente] || []).push(l));
+  b2Tela(`<h2>Mandar para o Grok publicar <small>${ads.length} anúncio(s)</small></h2>
+    <ul class="envios-feitos pub-lista">${ads.map(a => { const fl = faltas(a.id).itens.length; return `<li><b>${esc(a.nome)}</b>${a.titulo ? ' · ' + esc(a.titulo) : ' · <span class="aviso-txt">sem título (o Grok cria)</span>'}${fl ? ` · ${fl} pendência(s)` : ''}</li>`; }).join('')}</ul>
+    <label class="campo-b2">Loja onde o Grok vai publicar<select id="pub-loja">${Object.entries(grupos).map(([c, ls]) => `<optgroup label="${esc(c)}">${ls.map(l => `<option value="${esc(l.id)}">${esc(l.nome)} · ${esc(MKN[l.marketplace] || l.marketplace)}${l.aviso ? ' ⚠' : ''}</option>`).join('')}</optgroup>`).join('')}</select></label>
+    <p class="pequeno">O Grok arruma o que estiver incompleto (título diferente para cada um, descrição, tamanhos), valida e publica. Ele só consegue publicar estes anúncios, nesta loja. Na Shopee o anúncio nasce oculto e no Mercado Livre pausado. O modo de cada anúncio muda para o marketplace da loja.</p>
+    <div class="acoes"><button class="b verde" id="pub-confirmar">Mandar ${ads.length} para o Grok</button><button class="b claro" data-fechar>Cancelar</button></div>`);
+}
+async function pubConfirmar() {
+  const loja = document.getElementById('pub-loja').value; b2Carregando('Criando os pedidos…');
+  try { const r = await b2post('/api/pedidos/publicar', { ids: [...SEL_AN], loja }); SEL_AN.clear(); PUB.lista = null;
+    b2Tela(`<h2>Pronto: ${r.pedidos.length} pedido(s) para o Grok</h2><p>Mande esta mensagem para o Grok no Grok Bot:</p>
+      <textarea id="txt-pub" rows="4" readonly>${esc(r.texto)}</textarea>
+      <div class="acoes"><button class="b" data-copiar-de="txt-pub">Copiar mensagem</button><button class="b claro" data-fechar>Fechar</button></div>
+      <p class="pequeno">O andamento aparece na página Anúncios, em "Mandados para o Grok publicar".</p>`);
+    await SRV.carregar(); RENDER();
+  } catch (err) { b2Erro(err); }
+}
+document.addEventListener('click', e => {
+  const cx = e.target.closest('[data-sel-an]');
+  if (cx || e.target.closest('.sel-an')) { e.stopPropagation(); if (!cx) return; const id = +cx.dataset.selAn; cx.checked ? SEL_AN.add(id) : SEL_AN.delete(id); return RENDER(); }
+  if (e.target.closest('#limpar-sel-an')) { SEL_AN.clear(); return RENDER(); }
+  if (e.target.closest('#marcar-familia')) { const fams = new Set([...SEL_AN].map(id => DB.anuncios.find(a => a.id === id)?.familia).filter(Boolean));
+    DB.anuncios.forEach(a => { if (a.familia && fams.has(a.familia) || fams.has(a.id)) SEL_AN.add(a.id); }); return RENDER(); }
+  if (e.target.closest('#mandar-grok')) return pubJanela();
+  if (e.target.closest('#pub-confirmar')) return pubConfirmar();
+  if (e.target.closest('#atualizar-pub')) { PUB.lista = null; return RENDER(); }
+  const cp = e.target.closest('[data-copiar-de]'); if (cp) { const t = document.getElementById(cp.dataset.copiarDe); t.select(); navigator.clipboard?.writeText(t.value); window.menork.aviso('Mensagem copiada.'); }
+}, true);
 
 (() => {
   const $ = (s, r = document) => r.querySelector(s);

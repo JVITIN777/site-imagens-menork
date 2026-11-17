@@ -106,8 +106,32 @@ menork.ps1 enviar -Arquivo "C:\Temp\copia\bege.jpg" -Anuncio "TA101 unitário" -
 - Com `-Cor`: a foto vai para a variação daquela cor. A primeira foto de uma cor nova vira a capa da variação; as próximas entram nas fotos da cor (Mercado Livre).
 - Mande na ordem do anúncio original. Não use `-Copia` para foto gerada por IA: essas continuam passando pela aprovação.
 
-**Mandar para o marketplace (B2X): só o Menork**
-Trocar fotos de anúncios que já existem e criar anúncios novos na Shopee e no Mercado Livre é feito pelo Menork, no site, com o botão do B2X dentro do anúncio. O comando `enviar-sistema` não envia mais nada: ele só responde com esse aviso. Quando um anúncio ficar completo, avise o Menork.
+**Publicar anúncios no marketplace (B2X): só o que o Menork mandar**
+O Menork prepara os anúncios no site (por exemplo, duplica um anúncio em 10 e troca as capas) e manda para você publicar numa loja. Esses pedidos aparecem em `menork.ps1 pedidos` com `"tipo": "publicar"`, o nome do anúncio e a loja. Você só consegue publicar o que estiver lá: o resto é recusado.
+
+Para cada pedido de publicar:
+1. `menork.ps1 pedido -Id N -Status pego -Bot "SEU NOME"`
+2. Veja `agora.faltas` do pedido. Se faltar título, descrição, preço ou tamanhos, arrume:
+```
+menork.ps1 dados -Anuncio "TA101 copia 3" -Titulo "Tênis Feminino Chunky Plataforma Leve" -Descricao "..." -Preco 89,90 -Tamanhos "34 a 39"
+```
+   - Os títulos dos anúncios da mesma família precisam ser **diferentes entre si** (não repita título). No Mercado Livre, até 60 caracteres.
+   - Foto faltando ou errada: NÃO invente foto. Responda o pedido explicando e avise o Menork.
+3. Categoria e ficha:
+```
+menork.ps1 categorias -Anuncio "TA101 copia 3"
+menork.ps1 ficha -Anuncio "TA101 copia 3" -Categoria 100559
+```
+4. Valide (nada é publicado):
+```
+menork.ps1 publicar -Anuncio "TA101 copia 3" -Categoria 100559 -Json '{"atributos":[{"id":"100134","opcao":"1"}],"marca":{"id":"0"},"peso_g":600,"comprimento_cm":30,"largura_cm":20,"altura_cm":12,"estoque":10,"sku":"TA101C3","tabela":true}' -Validar
+```
+   - `atributos`: use os ids da ficha. Com opções, mande `"opcao"`; sem opções, mande `"texto"`.
+   - `marca` só na Shopee (`{"id":"0"}` = sem marca). `tipo_anuncio` só no Mercado Livre (`gold_special` ou `gold_pro`).
+5. Sem problemas: rode o MESMO comando sem `-Validar` para publicar. Com problemas: arrume e valide de novo, no máximo 3 tentativas.
+   - Na Shopee o anúncio nasce oculto e no Mercado Livre pausado; o Menork ativa depois.
+   - Se a resposta disser `incerto`, NÃO publique de novo: avise o Menork.
+6. Termine: `menork.ps1 pedido -Id N -Status feito -Resposta "criado 999888"` (ou o motivo de não ter subido).
 
 **Baixar o pacote aprovado para subir o anúncio**
 ```
