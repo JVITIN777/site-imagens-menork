@@ -5,7 +5,7 @@
 <canvas id="cartas" aria-hidden="true"></canvas><div class="vinheta" aria-hidden="true"></div>
 <form method="post" class="cartao-senha curinga">
   {% if versao_logo() %}<div class="moldura-logo"><img class="logo-grande" src="/logo?v={{ versao_logo() }}" alt=""></div>{% endif %}
-  <h1>Menork <small>imagens</small></h1>
+  <h1><span class="nome-cromado">Menor K</span> <small>imagens</small></h1>
   {% if criar %}<p>Primeiro acesso: crie a senha do site.</p>{% else %}<p>Digite a senha para entrar.</p>{% endif %}
   {% if erro %}<div class="alerta">{{ erro }}</div>{% endif %}
   <label>Senha<input type="password" name="senha" autofocus required></label>

@@ -365,3 +365,12 @@ body.porta{background:#050505!important}
 .mk-vars{margin:6px 0;font-size:13px}.mk-vars summary{cursor:pointer;color:var(--fraco)}.mk-vars table{margin-top:8px}
 .b2-grade .largo2{grid-column:span 2}
 .anuncios-loja .legenda .b{margin-top:6px;width:100%}
+/* nome Menor K: Metal Mania (licença OFL, arquivo em static/fontes) com efeito cromado */
+@font-face{font-family:"Metal Mania";src:url("/static/fontes/MetalMania-Regular.ttf") format("truetype");font-display:swap}
+.nome-cromado{font-family:"Metal Mania",var(--titulo);font-weight:400;letter-spacing:.5px;line-height:1.05;
+  background:linear-gradient(180deg,#fff 0%,#d9d9d9 30%,#6c6c6c 50%,#f2f2f2 62%,#9a9a9a 80%,#fff 100%);
+  -webkit-background-clip:text;background-clip:text;color:transparent;
+  filter:drop-shadow(0 0 1px rgba(255,255,255,.7)) drop-shadow(0 2px 6px rgba(255,255,255,.18))}
+.marca-site .nome-cromado{font-size:25px}
+.curinga h1 .nome-cromado{font-size:52px}
+.curinga h1{display:flex;flex-direction:column;align-items:center;gap:2px}.curinga h1 small{margin-left:0!important;letter-spacing:.3em;text-transform:lowercase}

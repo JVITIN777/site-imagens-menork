@@ -158,7 +158,7 @@ def pagina(estilos, banner, rodape, scripts, titulo, marca=MARCA):
 <body data-desfazer="60">
 <canvas id="agua" aria-hidden="true"></canvas>
 <aside class="lateral">
-  <a class="marca-site" href="#" data-rota="/">{marca}<span>Menork<small>imagens</small></span></a>
+  <a class="marca-site" href="#" data-rota="/">{marca}<span><b class="nome-cromado">Menor K</b><small>imagens</small></span></a>
   <form class="busca" data-busca="1"><svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="9" cy="9" r="6"/><path d="m14 14 4 4"/></svg><input type="search" name="q" placeholder="Buscar" aria-label="Buscar produto, cor, tipo, anúncio ou arquivo"></form>
   <nav>{nav}</nav>
   <div class="rodape-lateral">{rodape}</div>
