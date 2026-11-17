@@ -626,7 +626,7 @@ Object.assign(TELAS, {
       if (!st) carregarAnuncios(loja.id, busca, 1);
       const itens = st?.lista || [];
       return `${caminho(elo('/lojas', 'Clientes'), elo(rota('/lojas', { cliente: loja.cliente_id }), esc(loja.cliente)), esc(loja.nome))}
-        ${topo(esc(loja.nome), `${esc(loja.cliente)} · ${esc(MKNOME[loja.marketplace] || loja.marketplace)}${st && !st.carregando ? ` · ${st.total} anúncio(s)` : ''}`)}
+        ${topo(esc(loja.nome), `${esc(loja.cliente)} · ${esc(MKNOME[loja.marketplace] || loja.marketplace)}${st && !st.carregando ? ` · ${st.total} anúncio(s)` : ''}`, `<button class="b" data-criar-loja="${esc(loja.id)}">+ Criar anúncio</button>`)}
         ${loja.aviso ? `<p class="dica aviso-txt">${esc(loja.aviso)}</p>` : ''}
         <form class="busca-loja" id="busca-loja" data-loja="${esc(loja.id)}"><input type="search" name="busca" value="${esc(busca)}" placeholder="Buscar pelo título nesta loja"><button class="b claro">Buscar</button></form>
         ${st?.erro ? `<div class="vazio"><h2>Não consegui ler os anúncios</h2><p>${esc(st.erro)}</p></div>` : ''}
@@ -635,7 +635,7 @@ Object.assign(TELAS, {
         ${itens.length ? `<div class="grade anuncios-loja">${itens.map(a => `<div class="cartao">${a.foto ? `<div class="foto"><img loading="lazy" src="${esc(a.foto)}" alt="" referrerpolicy="no-referrer" data-foto-mk="${esc(a.foto)}"></div>` : '<div class="foto sem-foto">Sem foto</div>'}
           <div class="legenda"><b title="${esc(a.titulo)}">${esc(a.titulo)}</b>${a.preco ? `<span class="preco-loja">R$ ${esc(a.preco)}</span>` : ''}
           <span>${[a.status, a.estoque != null ? a.estoque + ' em estoque' : ''].filter(Boolean).map(esc).join(' · ')}</span>
-          <span class="pequeno">${esc(a.id)}</span><button class="b claro" data-abrir-mk="${esc(a.id)}" data-loja="${esc(loja.id)}">Abrir e modificar</button>${a.link ? `<a class="abrir" href="${esc(a.link)}" target="_blank" rel="noopener">Abrir no marketplace</a>` : ''}</div></div>`).join('')}</div>` : (st && !st.carregando && !st.erro ? `<div class="vazio"><h2>Nenhum anúncio${busca ? ' com esse título' : ''}</h2></div>` : '')}
+          <span class="pequeno">${esc(a.id)}</span><span class="botoes-card"><button class="b claro" data-abrir-mk="${esc(a.id)}" data-loja="${esc(loja.id)}">Abrir e modificar</button><button class="b claro" data-duplicar="${esc(a.id)}" data-loja="${esc(loja.id)}" data-titulo="${esc(a.titulo)}">Duplicar</button></span>${a.link ? `<a class="abrir" href="${esc(a.link)}" target="_blank" rel="noopener">Abrir no marketplace</a>` : ''}</div></div>`).join('')}</div>` : (st && !st.carregando && !st.erro ? `<div class="vazio"><h2>Nenhum anúncio${busca ? ' com esse título' : ''}</h2></div>` : '')}
         ${st && !st.carregando && itens.length < st.total ? `<div class="acoes"><button class="b claro" data-mais-loja="${esc(loja.id)}" data-busca="${esc(busca)}" data-pagina="${st.pagina}">Carregar mais (${st.total - itens.length} restantes)</button></div>` : ''}`;
     }
     if (cliente) {  // lojas de um cliente, separadas por CNPJ
@@ -897,6 +897,265 @@ document.addEventListener('error', e => {
   const caixa = img.closest('.foto'); if (caixa) { caixa.classList.add('sem-foto'); caixa.textContent = 'Sem foto'; } else img.remove();
 }, true);
 document.addEventListener('submit', e => { if (e.target.id !== 'busca-cliente') return; e.preventDefault(); IR(rota('/lojas', { q: e.target.q.value.trim() })); });
+
+// ---- DUPLICAR um anuncio para outra loja (previa -> ajustes -> confirmar)
+const DUP = {};
+const todasLojas = () => (LOJAS.clientes || []).flatMap(c => c.lojas.map(l => ({ ...l, cliente: c.nome, cliente_id: c.id })));
+const MKN = { SHP: 'Shopee', ML: 'Mercado Livre', SHEIN: 'Shein', TIKTOK: 'TikTok', AMAZON: 'Amazon', MAGALU: 'Magalu', TEMU: 'Temu', KWAI: 'Kwai', NETSHOES: 'Netshoes' };
+function dupInicio(loja, anuncio, titulo) {
+  Object.assign(DUP, { loja, anuncio, titulo, previa: null });
+  const origem = todasLojas().find(l => l.id === loja), lojas = todasLojas().filter(l => l.id !== loja)
+    .sort((a, b) => (b.cliente_id === origem?.cliente_id) - (a.cliente_id === origem?.cliente_id) || a.cliente.localeCompare(b.cliente) || a.nome.localeCompare(b.nome));
+  const grupos = {}; lojas.forEach(l => (grupos[l.cliente] = grupos[l.cliente] || []).push(l));
+  b2Tela(`<h2>Duplicar anúncio <small>${esc(titulo)}</small></h2>
+    <p class="pequeno">De: ${esc(origem?.cliente || '')} · ${esc(origem?.nome || '')} (${esc(MKN[origem?.marketplace] || '')}) · ${esc(anuncio)}</p>
+    <label class="campo-b2">Loja de destino<select id="dup-destino"><option value="${esc(loja)}">A mesma loja (cópia aqui)</option>${Object.entries(grupos).map(([c, ls]) => `<optgroup label="${esc(c)}">${ls.map(l => `<option value="${esc(l.id)}">${esc(l.nome)} · ${esc(MKN[l.marketplace] || l.marketplace)}${(l.status || 'active') !== 'active' || l.aviso ? ' ⚠' : ''}</option>`).join('')}</optgroup>`).join('')}</select></label>
+    <p class="pequeno">Primeiro o ${esc(INTEG().nome)} monta a prévia do que vai ser copiado. Nada é criado antes do seu ok.</p>
+    <div class="acoes"><button class="b" id="dup-previa">Ver a prévia</button><button class="b claro" data-fechar>Fechar</button></div>`);
+}
+async function dupPrevia() {
+  DUP.destino = document.getElementById('dup-destino').value; b2Carregando('Montando a prévia da cópia…');
+  try { const p = await b2get(`/api/b2x/clonar/previa?loja=${encodeURIComponent(DUP.loja)}&anuncio=${encodeURIComponent(DUP.anuncio)}&destino=${encodeURIComponent(DUP.destino)}`); DUP.previa = p; dupMostrar(); }
+  catch (err) { b2Erro(err); }
+}
+function dupMostrar() {
+  const p = DUP.previa, r = p.resumo, dest = todasLojas().find(l => l.id === DUP.destino), ml = dest?.marketplace === 'ML';
+  const faixa = r.preco_min == null ? '—' : (r.preco_min === r.preco_max ? `R$ ${r.preco_min}` : `R$ ${r.preco_min} a ${r.preco_max}`);
+  b2Tela(`<h2>Prévia da cópia <small>nada foi criado ainda</small></h2>
+    <p class="pequeno">${esc(p.origem.loja_nome || '')} → <b>${esc(p.destino.loja_nome || dest?.nome || '')}</b> (${esc(p.destino.canal || '')})</p>
+    ${r.fotos.length ? `<div class="mk-fotos">${r.fotos.map(u => `<img src="${esc(u)}" alt="" referrerpolicy="no-referrer" data-foto-mk="${esc(u)}">`).join('')}</div>` : ''}
+    <div class="dup-resumo"><span><b>${r.variacoes}</b> variação(ões)</span><span><b>${r.cores.length}</b> cor(es)${r.cores.length ? ': ' + r.cores.map(esc).join(', ') : ''}</span><span>Tamanhos: ${r.tamanhos.map(esc).join(', ') || '—'}</span><span>Preço: ${esc(faixa)}</span><span>Estoque total: ${r.estoque_total}</span></div>
+    ${p.pendencias.length ? `<div class="nota ruim"><b>Pendências no destino</b>${p.pendencias.map(x => `<span>${esc(x)}</span>`).join('')}</div>` : ''}
+    ${p.avisos.length ? `<div class="nota"><b>Avisos</b>${p.avisos.map(x => `<span>${esc(x)}</span>`).join('')}</div>` : ''}
+    <form id="dup-form" class="b2-ficha"><h3>Mudar antes de copiar <small class="pequeno">vazio = igual ao original</small></h3>
+      <div class="b2-grade"><label class="largo2">Título<input name="titulo" value="${esc(r.titulo)}" maxlength="255"></label>
+      <label>Preço de todas as variações<input name="preco" inputmode="decimal" placeholder="manter"></label><label>Estoque de todas<input name="estoque" inputmode="numeric" placeholder="manter"></label>
+      <label>Final do SKU<input name="sku_sufixo" placeholder="ex.: -B"></label>
+      ${ml || !r.peso_g ? `<label>Peso (g)<input name="peso_g" inputmode="decimal" value="${esc(r.peso_g || '')}" placeholder="ex.: 600"></label><label>Comprimento (cm)<input name="comprimento_cm" value="${esc(r.medidas[0] || '')}"></label><label>Largura (cm)<input name="largura_cm" value="${esc(r.medidas[1] || '')}"></label><label>Altura (cm)<input name="altura_cm" value="${esc(r.medidas[2] || '')}"></label>` : ''}</div>
+      <div class="acoes"><button class="b verde">Confirmar e duplicar</button><button type="button" class="b claro" id="dup-voltar">Voltar</button></div></form>`);
+}
+async function dupConfirmar(f) {
+  const corpo = { loja_origem: DUP.loja, anuncio: DUP.anuncio, loja_destino: DUP.destino, chave: DUP.previa.chave };
+  ['titulo', 'preco', 'estoque', 'sku_sufixo', 'peso_g', 'comprimento_cm', 'largura_cm', 'altura_cm'].forEach(k => { if (f.elements[k] && f.elements[k].value.trim()) corpo[k] = f.elements[k].value.trim(); });
+  if (corpo.titulo === DUP.previa.resumo.titulo) delete corpo.titulo;
+  b2Carregando('Duplicando o anúncio no marketplace. Pode levar alguns minutos; não feche esta janela…');
+  try { const r = await b2post('/api/b2x/clonar', corpo);
+    b2Tela(r.ok ? `<h2>Anúncio duplicado</h2><div class="nota"><b>Criado: ${r.novos_ids.map(esc).join(', ')}</b>${r.repetido ? '<span>(essa cópia já tinha sido feita; nada foi duplicado de novo)</span>' : ''}${r.divergencias.map(x => `<span>Ficou diferente: ${esc(x)}</span>`).join('')}${r.depois.map(x => `<span>${esc(x)}</span>`).join('')}</div>${b2Lista('Avisos', r.avisos)}
+        <div class="acoes"><button class="b" data-ir-loja="${esc(DUP.destino)}">Ver a loja de destino</button><button class="b claro" data-fechar>Fechar</button></div>`
+      : `<h2>Não foi duplicado</h2><div class="nota ruim">${r.erros.map(x => `<span>${esc(x)}</span>`).join('') || '<span>O marketplace não devolveu o código do anúncio novo.</span>'}</div>${b2Lista('Avisos', r.avisos)}<div class="acoes"><button class="b claro" id="dup-voltar">Voltar e ajustar</button><button class="b claro" data-fechar>Fechar</button></div>`);
+  } catch (err) { b2Erro(err); }
+}
+document.addEventListener('click', e => {
+  const d = e.target.closest('[data-duplicar]'); if (d) return dupInicio(d.dataset.loja, d.dataset.duplicar, d.dataset.titulo);
+  if (e.target.closest('#dup-previa')) return dupPrevia();
+  if (e.target.closest('#dup-voltar')) return DUP.previa ? dupMostrar() : dupInicio(DUP.loja, DUP.anuncio, DUP.titulo);
+  const ir = e.target.closest('[data-ir-loja]'); if (ir) { fecharJanela(); const k = Object.keys(LOJAS.anuncios).filter(x => x.startsWith(ir.dataset.irLoja + '|')); k.forEach(x => delete LOJAS.anuncios[x]); return IR(rota('/lojas', { loja: ir.dataset.irLoja })); }
+});
+document.addEventListener('submit', e => { if (e.target.id !== 'dup-form') return; e.preventDefault(); dupConfirmar(e.target); });
+
+// ---- CRIAR anuncio novo na loja: categoria -> ficha -> fotos -> variacoes -> envio -> revisar -> publicar
+const CR = {};
+const PASSOS_CR = ['Categoria', 'Ficha', 'Fotos', 'Variações', 'Envio', 'Revisar'];
+function crTela(passo, html) {
+  CR.passo = passo;
+  b2Tela(`<div class="cr"><ol class="passos">${PASSOS_CR.map((p, i) => `<li class="${i === passo ? 'atual' : i < passo ? 'feito' : ''}">${p}</li>`).join('')}</ol>
+    <p class="pequeno">${esc(CR.loja.cliente)} · ${esc(CR.loja.nome)} · ${esc(MKN[CR.loja.marketplace] || CR.loja.marketplace)}</p>${html}</div>`);
+}
+function crInicio(lojaId) {
+  const loja = todasLojas().find(l => l.id === lojaId);
+  Object.assign(CR, { loja, canal: loja.canal, titulo: '', descricao: '', categoria: '', caminho: '', ficha: null, attr: {}, marca: '', tipo_anuncio: 'gold_special',
+    cores: [], fotos: { galeria: [], tabela: [] }, tamanhos: '', grade: {}, sku_pai: '', embalagem: { peso_g: 600, comprimento_cm: 30, largura_cm: 20, altura_cm: 12 },
+    envio: '', frete_gratis: false, medidas: {}, pedido: '', resultado: null });
+  crCategoria();
+}
+function crCategoria(lista) {
+  const ads = DB.anuncios.slice().sort((a, b) => a.nome.localeCompare(b.nome));
+  crTela(0, `<h2>Criar anúncio <small>passo 1: título e categoria</small></h2>
+    <form id="cr-cat" class="b2-ficha">
+      <div class="cr-puxar"><select id="cr-aid"><option value="">Puxar título, descrição, fotos e tamanhos de um anúncio do site (opcional)</option>${ads.map(a => `<option value="${a.id}">${esc(a.nome)}</option>`).join('')}</select><button type="button" class="b claro" id="cr-puxar">Puxar</button></div>
+      <label class="campo-b2">Título<input name="titulo" value="${esc(CR.titulo)}" maxlength="255" required placeholder="Ex.: Tênis feminino chunky confortável"></label>
+      <label class="campo-b2">Descrição<textarea name="descricao" rows="4" required>${esc(CR.descricao)}</textarea></label>
+      <div class="b2-linha"><input name="busca" placeholder="Outras palavras para achar a categoria (opcional)"><button class="b">Buscar categoria</button></div></form>
+    ${lista ? `<div class="b2-anuncios">${lista.map(c => `<button class="b2-anuncio ${c.id === CR.categoria ? 'escolhida' : ''}" data-cr-cat="${esc(c.id)}" data-cam="${esc(c.caminho)}"><span><b>${esc(c.caminho)}</b><small>${esc(c.id)}${c.motivo ? ' · ' + esc(c.motivo) : ''}</small></span></button>`).join('') || '<p class="dica">Nenhuma categoria. Tente outras palavras.</p>'}</div>` : ''}
+    <div class="acoes"><button class="b claro" data-fechar>Fechar</button></div>`);
+}
+async function crPuxar() {
+  const aid = +document.getElementById('cr-aid').value; if (!aid) return window.menork.aviso('Escolha um anúncio do site.');
+  b2Carregando('Subindo as fotos do anúncio do site para o B2X…');
+  try { const r = await b2post('/api/b2x/fotos/do-site', { aid, canal: CR.canal });
+    Object.assign(CR, { titulo: r.titulo || CR.titulo, descricao: r.descricao || CR.descricao, tamanhos: r.tamanhos.join(', ') || CR.tamanhos, preco: r.preco || CR.preco });
+    CR.cores = r.cores.map(c => c.cor); CR.fotos = { galeria: r.galeria.map(u => ({ url: u })), tabela: CR.fotos.tabela };
+    r.cores.forEach(c => { CR.fotos['cor:' + c.cor] = c.fotos.map(u => ({ url: u })); });
+    window.menork.aviso(`Puxei ${r.galeria.length + r.cores.reduce((n, c) => n + c.fotos.length, 0)} foto(s), ${r.cores.length} cor(es) e ${r.tamanhos.length} tamanho(s).`);
+    crCategoria();
+  } catch (err) { b2Erro(err); }
+}
+async function crBuscarCat(f) {
+  CR.titulo = f.titulo.value.trim(); CR.descricao = f.descricao.value.trim();
+  if (!CR.titulo) return window.menork.aviso('Preencha o título.');
+  b2Carregando('Procurando a categoria…');
+  try { const r = await b2post('/api/b2x/categorias', { loja: CR.loja.id, titulo: CR.titulo, busca: f.busca.value.trim() }); crCategoria(r.categorias); } catch (err) { b2Erro(err); }
+}
+async function crFicha(cat, cam) {
+  if (cat) { CR.categoria = cat; CR.caminho = cam; CR.ficha = null; }
+  if (!CR.descricao) return window.menork.aviso('Preencha a descrição antes.');
+  if (!CR.ficha) { b2Carregando('Lendo o que essa categoria pede…');
+    try { CR.ficha = await b2get(`/api/b2x/ficha?loja=${encodeURIComponent(CR.loja.id)}&categoria=${encodeURIComponent(CR.categoria)}`); } catch (err) { return b2Erro(err); } }
+  const f = CR.ficha;
+  const campo = o => o.opcoes.length ? `<label>${esc(o.nome)}<select data-cr-attr="${esc(o.id)}"><option value="">escolha</option>${o.opcoes.map(x => `<option value="${esc(x.id)}" ${CR.attr[o.id] === x.id ? 'selected' : ''}>${esc(x.nome)}</option>`).join('')}</select></label>`
+    : `<label>${esc(o.nome)}<input data-cr-attr="${esc(o.id)}" data-texto="1" value="${esc(CR.attr[o.id] || '')}"></label>`;
+  crTela(1, `<h2>Ficha <small>${esc(CR.caminho)}</small></h2><form id="cr-ficha" class="b2-ficha">
+    ${f.obrigatorios.length ? `<h3>A categoria pede</h3><div class="b2-grade">${f.obrigatorios.map(campo).join('')}</div>` : '<p class="pequeno">Esta categoria não pede nada obrigatório.</p>'}
+    ${CR.canal === 'shopee' ? `<h3>Marca</h3><div class="b2-grade"><label>Marca<select name="marca">${f.sem_marca ? '<option value="0">Sem marca</option>' : ''}${f.marcas.map(x => `<option value="${esc(x.id)}" ${CR.marca === x.id ? 'selected' : ''}>${esc(x.nome)}</option>`).join('')}</select></label></div>`
+      : CR.canal === 'mercadolivre' ? (f.tipos_anuncio.length ? `<h3>Tipo de anúncio</h3><div class="b2-grade"><label>Tipo<select name="tipo_anuncio">${f.tipos_anuncio.map(x => `<option value="${esc(x.id)}" ${CR.tipo_anuncio === x.id ? 'selected' : ''}>${esc(x.nome)}</option>`).join('')}</select></label></div>` : '')
+      : `<h3>Marca</h3><div class="b2-grade"><label>Marca<input name="marca" value="${esc(CR.marca)}"></label></div>`}
+    ${f.dica ? `<p class="pequeno">${esc(f.dica)}</p>` : ''}
+    <div class="acoes"><button class="b">Seguir para as fotos</button><button type="button" class="b claro" data-cr-ir="0">Voltar</button></div></form>`);
+}
+function crLerFicha(f) {
+  CR.attr = {}; f.querySelectorAll('[data-cr-attr]').forEach(x => { if (x.value.trim()) CR.attr[x.dataset.crAttr] = x.value.trim(); });
+  if (f.elements.marca) CR.marca = f.elements.marca.value; if (f.elements.tipo_anuncio) CR.tipo_anuncio = f.elements.tipo_anuncio.value;
+}
+function crZona(chave, titulo, max, dica) {
+  const l = CR.fotos[chave] || [];
+  return `<div class="cr-zona"><div class="cr-zona-topo"><b>${esc(titulo)}</b><small>${l.length} de ${max}${dica ? ' · ' + esc(dica) : ''}</small></div>
+    <div class="cr-fotos">${l.map((x, i) => `<span class="cr-foto"><img src="${esc(x.url)}" alt="" referrerpolicy="no-referrer"><button type="button" data-cr-tirar="${esc(chave)}" data-i="${i}" title="Tirar">×</button>${i === 0 ? '<i>1ª</i>' : ''}</span>`).join('')}
+    ${l.length < max ? `<label class="cr-mais" data-cr-zona="${esc(chave)}" data-max="${max}">+ Fotos<input type="file" multiple accept="image/jpeg,image/png,image/webp" hidden></label>` : ''}</div></div>`;
+}
+function crFotos() {
+  const ml = CR.canal === 'mercadolivre';
+  crTela(2, `<h2>Fotos <small>${ml ? 'no Mercado Livre cada cor tem as suas fotos' : 'fotos do anúncio e uma por cor'}</small></h2>
+    <form id="cr-cores" class="b2-linha"><input name="cores" value="${esc(CR.cores.join(', '))}" placeholder="Cores, separadas por vírgula (ex.: BEGE, PRETO). Vazio = sem variação de cor"><button class="b claro">Atualizar cores</button></form>
+    ${ml ? '' : crZona('galeria', 'Fotos do anúncio (a 1ª é a capa)', 9)}
+    ${CR.cores.map(c => crZona('cor:' + c, (ml ? 'Fotos da cor ' : 'Foto da variação ') + c, ml ? 10 : 1, ml ? 'a 1ª é a principal' : 'aparece quando o cliente toca na cor')).join('')}
+    ${ml && !CR.cores.length ? crZona('galeria', 'Fotos do anúncio (a 1ª é a principal)', 10) : ''}
+    ${CR.canal === 'shopee' ? crZona('tabela', 'Tabela de medidas (imagem)', 1, 'a Shopee pede em calçados') : ''}
+    <div class="acoes"><button class="b" data-cr-ir="3">Seguir para as variações</button><button class="b claro" data-cr-ir="1">Voltar</button></div>`);
+}
+async function crSubir(zona, arquivos) {
+  const chave = zona.dataset.crZona, max = +zona.dataset.max, ja = (CR.fotos[chave] || []).length;
+  const lista = [...arquivos].slice(0, Math.max(0, max - ja)); if (!lista.length) return;
+  const f = new FormData(); lista.forEach(a => f.append('arquivos', a, a.name));
+  zona.classList.add('subindo'); zona.firstChild.textContent = 'Subindo…';
+  try { const r = await window.menork.api('/api/b2x/fotos/subir', f, true); CR.fotos[chave] = [...(CR.fotos[chave] || []), ...r.fotos]; crFotos(); }
+  catch (err) { window.menork.aviso(err.message, null, null, 10); crFotos(); }
+}
+const crTams = () => String(CR.tamanhos || '').split(/[,;\s]+/).map(t => t.trim()).filter(Boolean);
+function crVariacoes() {
+  const cores = CR.cores.length ? CR.cores : [''], tams = crTams().length ? crTams() : [''];
+  const ch = (c, t) => c + '|' + t, g = CR.grade;
+  cores.forEach(c => tams.forEach(t => { g[ch(c, t)] = g[ch(c, t)] || { preco: CR.preco || '', estoque: '10', sku: '' }; }));
+  crTela(3, `<h2>Variações <small>${cores.length} cor(es) × ${tams.length} tamanho(s) = ${cores.length * tams.length}</small></h2>
+    <form id="cr-tams" class="b2-linha"><input name="tamanhos" value="${esc(CR.tamanhos)}" placeholder="Tamanhos: 34, 35, 36 ou 33/34, 35/36"><button class="b claro">Atualizar tamanhos</button></form>
+    <div class="cr-todos"><span class="pequeno">Preencher todas:</span><input id="cr-p-todos" inputmode="decimal" placeholder="Preço"><input id="cr-e-todos" inputmode="numeric" placeholder="Estoque"><input id="cr-s-base" placeholder="Base do SKU (ex.: TA01)"><button type="button" class="b claro" id="cr-aplicar-todos">Aplicar</button></div>
+    <div class="cr-grade-wrap"><table class="tabela cr-grade"><tr><th>Cor</th><th>Tamanho</th><th>SKU</th><th>Preço</th><th>Estoque</th></tr>
+    ${cores.flatMap(c => tams.map(t => { const v = g[ch(c, t)]; return `<tr data-v="${esc(ch(c, t))}"><td>${esc(c || '—')}</td><td>${esc(t || '—')}</td><td><input data-k="sku" value="${esc(v.sku)}"></td><td><input data-k="preco" inputmode="decimal" value="${esc(v.preco)}" placeholder="49,90"></td><td><input data-k="estoque" inputmode="numeric" value="${esc(v.estoque)}"></td></tr>`; })).join('')}</table></div>
+    <label class="campo-b2">SKU pai (opcional)<input id="cr-sku-pai" value="${esc(CR.sku_pai)}" placeholder="Ex.: TA01-BEGE"></label>
+    <div class="acoes"><button class="b" data-cr-ir="4">Seguir para o envio</button><button class="b claro" data-cr-ir="2">Voltar</button></div>`);
+}
+function crLerGrade() {
+  document.querySelectorAll('.cr-grade tr[data-v]').forEach(tr => { const v = CR.grade[tr.dataset.v]; tr.querySelectorAll('input[data-k]').forEach(i => { v[i.dataset.k] = i.value.trim(); }); });
+  const sp = document.getElementById('cr-sku-pai'); if (sp) CR.sku_pai = sp.value.trim();
+}
+async function crEnvio() {
+  const ml = CR.canal === 'mercadolivre', e = CR.embalagem;
+  if (ml && !CR.envioInfo) { b2Carregando('Lendo as formas de envio da conta…'); try { CR.envioInfo = await b2get('/api/b2x/envio?loja=' + encodeURIComponent(CR.loja.id)); } catch (err) { CR.envioInfo = { modos: [], logisticas: [], obs: err.message }; } }
+  const ei = CR.envioInfo;
+  crTela(4, `<h2>Envio <small>embalagem${ml ? ', modalidade e medidas do pé' : ''}</small></h2><form id="cr-envio" class="b2-ficha">
+    <div class="b2-grade"><label>Peso (g)<input name="peso_g" inputmode="decimal" value="${esc(e.peso_g)}"></label><label>Comprimento (cm)<input name="comprimento_cm" inputmode="decimal" value="${esc(e.comprimento_cm)}"></label>
+      <label>Largura (cm)<input name="largura_cm" inputmode="decimal" value="${esc(e.largura_cm)}"></label><label>Altura (cm)<input name="altura_cm" inputmode="decimal" value="${esc(e.altura_cm)}"></label></div>
+    ${ml ? `<h3>Mercado Livre</h3><div class="b2-grade"><label>Modalidade<select name="envio"><option value="">a da conta${ei?.usa ? ' (' + esc(ei.usa) + ')' : ''}</option><option value="me2" ${CR.envio === 'me2' ? 'selected' : ''}>Mercado Envios</option><option value="not_specified" ${CR.envio === 'not_specified' ? 'selected' : ''}>A combinar</option></select></label>
+      <label class="linha"><input type="checkbox" name="frete_gratis" ${CR.frete_gratis ? 'checked' : ''}> Frete grátis</label></div>
+      ${ei?.logisticas?.length ? `<p class="pequeno">Logísticas da conta: ${ei.logisticas.map(esc).join(' · ')}</p>` : ''}${ei?.o_que_fazer ? `<p class="pequeno aviso-txt">${esc(ei.o_que_fazer)}</p>` : ''}
+      ${crTams().length ? `<h3>Medidas do pé <small class="pequeno">opcional: com elas o B2X escolhe ou cria a tabela de medidas</small></h3><div class="b2-grade">${crTams().map(t => `<label>Tamanho ${esc(t)} (cm)<input data-medida="${esc(t)}" inputmode="decimal" value="${esc(CR.medidas[t] || '')}"></label>`).join('')}</div>` : ''}` : ''}
+    <div class="acoes"><button class="b">Revisar</button><button type="button" class="b claro" data-cr-ir="3">Voltar</button></div></form>`);
+}
+function crLerEnvio(f) {
+  ['peso_g', 'comprimento_cm', 'largura_cm', 'altura_cm'].forEach(k => { CR.embalagem[k] = f.elements[k].value.trim(); });
+  if (f.elements.envio) { CR.envio = f.elements.envio.value; CR.frete_gratis = f.elements.frete_gratis.checked; }
+  f.querySelectorAll('[data-medida]').forEach(i => { CR.medidas[i.dataset.medida] = i.value.trim(); });
+}
+function crCorpo(extra = {}) {
+  const ml = CR.canal === 'mercadolivre', cores = CR.cores.length ? CR.cores : [''], tams = crTams().length ? crTams() : [''];
+  const fotoCor = c => (CR.fotos['cor:' + c] || []).map(x => x.url);
+  const variacoes = cores.flatMap(c => tams.map(t => { const v = CR.grade[c + '|' + t] || {}; return { cor: c, tamanho: t, sku: v.sku, preco: v.preco, estoque: v.estoque, fotos: c ? fotoCor(c) : (ml ? CR.fotos.galeria.map(x => x.url) : []) }; }));
+  const marca = CR.canal === 'shopee' ? { id: CR.marca || '0', nome: CR.ficha?.marcas.find(m => m.id === CR.marca)?.nome || '' } : { nome: CR.marca };
+  return { loja: CR.loja.id, canal: CR.canal, categoria: CR.categoria, titulo: CR.titulo, descricao: CR.descricao, variacoes,
+    fotos: CR.fotos.galeria.map(x => x.url), tabela_url: CR.fotos.tabela[0]?.url || '', sku_pai: CR.sku_pai, marca, tipo_anuncio: CR.tipo_anuncio,
+    atributos: Object.entries(CR.attr).map(([id, v]) => CR.ficha.obrigatorios.find(o => o.id === id)?.opcoes.length ? { id, opcao: v } : { id, texto: v }),
+    envio: CR.envio, frete_gratis: CR.frete_gratis, medidas_pe: Object.fromEntries(Object.entries(CR.medidas).filter(([, v]) => v)), ...CR.embalagem, ...extra };
+}
+function crRevisar(r) {
+  const c = crCorpo(), nf = c.fotos.length + new Set(c.variacoes.flatMap(v => v.fotos)).size;
+  crTela(5, `<h2>Revisar <small>${r ? (r.validado ? 'validado: pode publicar' : 'o marketplace pediu correções') : 'confira e valide'}</small></h2>
+    <div class="dup-resumo"><span><b>${esc(CR.titulo)}</b></span><span>${esc(CR.caminho)}</span><span>${c.variacoes.length} variação(ões)</span><span>${nf} foto(s)</span><span>Embalagem ${esc(c.peso_g)} g · ${esc(c.comprimento_cm)}×${esc(c.largura_cm)}×${esc(c.altura_cm)} cm</span></div>
+    ${r?.problemas?.length ? `<div class="nota ruim"><b>Corrigir</b>${r.problemas.map(p => `<span>${esc(p)}</span>`).join('')}</div>` : ''}${r ? b2Lista('Avisos', r.avisos) : ''}
+    <p class="pequeno">${CR.canal === 'shopee' ? 'Na Shopee o anúncio nasce OCULTO' : CR.canal === 'mercadolivre' ? 'No Mercado Livre o anúncio nasce PAUSADO' : 'O anúncio nasce sem vender'}: revise no marketplace e ative quando estiver tudo certo.</p>
+    <div class="acoes">${r?.validado ? '<button class="b verde" id="cr-publicar">Publicar</button>' : '<button class="b" id="cr-validar">Validar (nada é publicado)</button>'}<button class="b claro" data-cr-ir="4">Voltar</button></div>`);
+}
+async function crValidar() {
+  b2Carregando('Validando com o marketplace…');
+  try { const r = await b2post('/api/b2x/criar-loja', crCorpo()); CR.pedido = r.pedido_id; crRevisar(r); } catch (err) { b2Erro(err); }
+}
+async function crPublicar() {
+  b2Carregando('Publicando no marketplace. Não feche esta janela…');
+  try { const r = await b2post('/api/b2x/criar-loja', crCorpo({ confirmar: true, pedido_id: CR.pedido })); if (r.pedido_id) CR.pedido = r.pedido_id;
+    if (r.criado) return crFim({ estado: 'criado', final: true, anuncio_id: r.anuncio_ids.join(', '), erros: [], avisos: r.avisos, etapa: r.status });
+    if (r.problemas.length && !r.na_fila && !CR.pedido) return crRevisar(r);
+    crAcompanhar();
+  } catch (err) { b2Erro(err); }
+}
+async function crAcompanhar() {
+  clearTimeout(CR.relogio);
+  try { const s = await b2get(`/api/b2x/criar/status?pedido_id=${encodeURIComponent(CR.pedido)}&loja=${encodeURIComponent(CR.loja.id)}`);
+    if (s.final || s.parar) return crFim(s);
+    b2Tela(`<h2>Publicando <small>${esc(s.estado)}</small></h2><div class="cr-andamento"><span class="abertura-barra"><i></i></span><p>${esc(s.etapa || 'Em andamento…')}</p></div>
+      <p class="pequeno">Confere de novo sozinho em ${s.de_novo_em} s. Pode deixar esta janela aberta.</p>
+      <div class="acoes"><button class="b claro" id="cr-cancelar">Cancelar a criação</button></div>`);
+    CR.relogio = setTimeout(() => { if (document.querySelector('.cr-andamento')) crAcompanhar(); }, Math.max(4, s.de_novo_em) * 1000);
+  } catch (err) { b2Erro(err); }
+}
+function crFim(s) {
+  const ok = ['criado', 'publicado', 'enviado', 'em_analise'].includes(s.estado) && s.estado !== 'recusado';
+  b2Tela(ok ? `<h2>Anúncio criado</h2><div class="nota"><b>${esc(MKN[CR.loja.marketplace] || '')}: ${esc(s.anuncio_id || '')}</b><span>Situação: ${esc(s.estado)}${s.etapa ? ' · ' + esc(s.etapa) : ''}</span></div>${b2Lista('Avisos', s.avisos)}
+      <div class="acoes"><button class="b" data-ir-loja="${esc(CR.loja.id)}">Ver na loja</button><button class="b claro" data-fechar>Fechar</button></div>`
+    : `<h2>Não foi publicado <small>${esc(s.estado)}</small></h2><div class="nota ruim">${s.motivo ? `<span>${esc(s.motivo)}</span>` : ''}${s.erros.map(x => `<span>${esc(x)}</span>`).join('') || (s.motivo ? '' : '<span>O marketplace não confirmou a criação.</span>')}</div>
+      ${s.estado === 'incerto' ? '<p class="pequeno aviso-txt">Ficou incerto: confira a loja antes de tentar de novo. Tentar por aqui usa o mesmo pedido e não duplica.</p>' : ''}
+      <div class="acoes"><button class="b claro" data-cr-ir="5">Voltar e corrigir</button><button class="b claro" data-fechar>Fechar</button></div>`);
+}
+async function crCancelar(b) {
+  if (!b.dataset.ok) { b.dataset.ok = 1; b.textContent = 'Confirmar: cancelar a criação'; b.classList.add('vermelho'); return; }
+  clearTimeout(CR.relogio); b2Carregando('Cancelando…');
+  try { const r = await b2post('/api/b2x/criar/cancelar', { pedido_id: CR.pedido, loja: CR.loja.id, confirmar: true });
+    b2Tela(`<h2>Criação cancelada</h2><div class="nota"><span>${esc(r.estado_antes)} → ${esc(r.estado_depois)}${r.motivo ? ' · ' + esc(r.motivo) : ''}</span></div><div class="acoes"><button class="b claro" data-fechar>Fechar</button></div>`);
+  } catch (err) { b2Erro(err); }
+}
+document.addEventListener('click', e => {
+  const c = e.target.closest('[data-criar-loja]'); if (c) return crInicio(c.dataset.criarLoja);
+  if (e.target.closest('#cr-puxar')) return crPuxar();
+  const cat = e.target.closest('[data-cr-cat]'); if (cat) { const f = document.getElementById('cr-cat'); CR.titulo = f.titulo.value.trim(); CR.descricao = f.descricao.value.trim(); return crFicha(cat.dataset.crCat, cat.dataset.cam); }
+  const t = e.target.closest('[data-cr-tirar]'); if (t) { CR.fotos[t.dataset.crTirar].splice(+t.dataset.i, 1); return crFotos(); }
+  if (e.target.closest('#cr-aplicar-todos')) { crLerGrade(); const p = document.getElementById('cr-p-todos').value.trim(), es = document.getElementById('cr-e-todos').value.trim(), base = document.getElementById('cr-s-base').value.trim().toUpperCase();
+    Object.entries(CR.grade).forEach(([k, v]) => { const [cor, tam] = k.split('|'); if (p) v.preco = p; if (es) v.estoque = es; if (base) v.sku = [base, cor.replace(/[^A-Za-z0-9]+/g, '').toUpperCase().slice(0, 8), tam.replace(/[^A-Za-z0-9]+/g, '')].filter(Boolean).join('-'); }); return crVariacoes(); }
+  if (e.target.closest('#cr-validar')) return crValidar();
+  if (e.target.closest('#cr-publicar')) return crPublicar();
+  const cc = e.target.closest('#cr-cancelar'); if (cc) return crCancelar(cc);
+  const ir = e.target.closest('[data-cr-ir]'); if (!ir) return;
+  const de = CR.passo, para = +ir.dataset.crIr;
+  if (de === 1) { const f = document.getElementById('cr-ficha'); if (f) crLerFicha(f); }
+  if (de === 3) crLerGrade();
+  if (de === 2 && para === 3 && !CR.fotos.galeria.length && !CR.cores.some(c => (CR.fotos['cor:' + c] || []).length)) return window.menork.aviso('Coloque pelo menos uma foto.');
+  [crCategoria, () => crFicha(), crFotos, crVariacoes, crEnvio, () => crRevisar()][para]();
+});
+document.addEventListener('change', e => { const z = e.target.closest('[data-cr-zona]'); if (z && e.target.files?.length) crSubir(z, e.target.files); });
+document.addEventListener('submit', e => {
+  const f = e.target;
+  if (f.id === 'cr-cat') { e.preventDefault(); return crBuscarCat(f); }
+  if (f.id === 'cr-ficha') { e.preventDefault(); crLerFicha(f); return crFotos(); }
+  if (f.id === 'cr-cores') { e.preventDefault(); CR.cores = [...new Set(f.cores.value.split(',').map(x => x.trim().toUpperCase()).filter(Boolean))]; return crFotos(); }
+  if (f.id === 'cr-tams') { e.preventDefault(); crLerGrade(); CR.tamanhos = f.tamanhos.value; return crVariacoes(); }
+  if (f.id === 'cr-envio') { e.preventDefault(); crLerEnvio(f); return crRevisar(); }
+});
 
 (() => {
   const $ = (s, r = document) => r.querySelector(s);

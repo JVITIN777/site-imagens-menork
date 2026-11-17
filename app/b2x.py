@@ -611,3 +611,258 @@ async def criar(request: Request):
         _registrar(aid, ok, f"criar no {CANAIS.get(canal, canal)}: {'criado ' + ', '.join(map(str, ids[:5])) if ok else (problemas[:1] or ['falhou'])[0]}",
                    ids[0] if ids else "", r.get("desfazer_com"))
     return saida
+
+
+# ------------------------------------------------------------ duplicar (clonar) um anuncio para outra loja
+def _resumo_payload(p):
+    p = p or {}
+    vs = p.get("variacoes") or []
+    precos = sorted({v.get("preco") for v in vs if isinstance(v, dict) and v.get("preco") is not None})
+    fotos = [f for f in (p.get("fotos") or []) if isinstance(f, str)][:10]
+    if not fotos:
+        for v in vs:
+            for f in (v.get("fotos") or []) if isinstance(v, dict) else []:
+                if isinstance(f, str) and f not in fotos:
+                    fotos.append(f)
+    return {"titulo": p.get("titulo") or "", "descricao": str(p.get("descricao") or "")[:600], "categoria": str(p.get("categoria") or ""),
+            "variacoes": len(vs), "cores": sorted({str(v.get("cor")) for v in vs if isinstance(v, dict) and v.get("cor")})[:30],
+            "tamanhos": sorted({str(v.get("tamanho")) for v in vs if isinstance(v, dict) and v.get("tamanho")})[:40],
+            "preco_min": precos[0] if precos else None, "preco_max": precos[-1] if precos else None,
+            "estoque_total": sum(int(v.get("estoque") or 0) for v in vs if isinstance(v, dict)), "fotos": fotos[:10],
+            "peso_g": p.get("peso_g"), "medidas": [p.get("comprimento_cm"), p.get("largura_cm"), p.get("altura_cm")]}
+
+
+@rota.get("/api/b2x/clonar/previa")
+def clonar_previa(loja: str, anuncio: str, destino: str):
+    q = {"loja": loja, "anuncio": anuncio, "destino": destino}
+    status, r = chamar("GET", "/v1/anuncios/clonar-payload?" + urllib.parse.urlencode(q), timeout=150)
+    _ok(status, r, "Montar a prévia da cópia")
+    return {"origem": r.get("origem") or {}, "destino": r.get("destino") or {}, "resumo": _resumo_payload(r.get("payload")),
+            "pendencias": [_frase(x) for x in (r.get("pendencias") or [])][:20], "avisos": [_frase(x) for x in (r.get("avisos") or [])][:12],
+            "proximo": str(r.get("proximo") or ""), "chave": secrets.token_hex(16)}
+
+
+@rota.post("/api/b2x/clonar")
+async def clonar(request: Request):
+    d = await request.json()
+    corpo = {"loja_origem": str(d["loja_origem"]), "anuncio": str(d["anuncio"]), "loja_destino": str(d["loja_destino"])}
+    if str(d.get("titulo") or "").strip():
+        corpo["titulo"] = str(d["titulo"]).strip()[:255]
+    if str(d.get("preco") or "").strip():
+        p = _preco(d["preco"])
+        if not p:
+            raise HTTPException(400, "Preço inválido. Use por exemplo 49,90.")
+        corpo["preco"] = p
+    if str(d.get("estoque") or "").strip():
+        try:
+            corpo["estoque"] = max(0, int(str(d["estoque"]).strip()))
+        except ValueError:
+            raise HTTPException(400, "Estoque inválido: use um número inteiro.")
+    if str(d.get("sku_sufixo") or "").strip():
+        corpo["sku_sufixo"] = str(d["sku_sufixo"]).strip()[:30]
+    for k in ("peso_g", "comprimento_cm", "largura_cm", "altura_cm"):
+        if str(d.get(k) or "").strip():
+            corpo[k] = _num(d[k], k.replace("_", " "))
+    # a mesma chave da previa: clicar duas vezes devolve a mesma resposta, sem criar duas copias
+    url, chave, nome = _base()
+    req = urllib.request.Request(url + "/v1/anuncios/clonar", data=json.dumps(corpo, ensure_ascii=False).encode(), method="POST",
+                                 headers={"Authorization": f"Bearer {chave}", "Content-Type": "application/json; charset=utf-8",
+                                          "Accept": "application/json", "User-Agent": "site-imagens-menork",
+                                          "Idempotency-Key": str(d.get("chave") or secrets.token_hex(16))[:64]})
+    try:
+        with urllib.request.urlopen(req, timeout=300) as r:
+            status, texto = r.status, r.read().decode("utf-8", "replace")
+    except urllib.error.HTTPError as e:
+        status, texto = e.code, e.read().decode("utf-8", "replace")
+    except Exception as e:
+        raise HTTPException(502, f"Não consegui falar com o {nome}: {e}")
+    try:
+        r = json.loads(texto or "{}")
+    except ValueError:
+        raise HTTPException(502, f"O {nome} respondeu algo que não é JSON ({status}).")
+    ids = [str(x) for x in (r.get("novos_ids") or [])]
+    erros = [_frase(x) for x in (r.get("erros") or [])][:12]
+    if not 200 <= status < 300 and not erros:
+        erros = [texto_erro(r) or f"O {nome} respondeu {status}."]
+    diverg = [f"{c.get('id')}: {_frase(x)}" for c in (r.get("conferencia") or []) if isinstance(c, dict) for x in (c.get("divergencias") or [])][:10]
+    n.registrar(f"B2X: duplicar {corpo['anuncio']} para {corpo['loja_destino']}: {'criado ' + ', '.join(ids) if ids else 'falhou'}")
+    return {"ok": bool(ids), "novos_ids": ids, "erros": erros, "avisos": [_frase(x) for x in (r.get("avisos") or [])][:12],
+            "divergencias": diverg, "repetido": bool(r.get("repetido")),
+            "depois": [_frase(x) for x in (r.get("depois_de_criar") or [])][:8]}
+
+
+# ------------------------------------------------------------ criar anuncio novo direto na loja (sem anuncio do site)
+@rota.post("/api/b2x/fotos/subir")
+async def fotos_subir(request: Request):
+    """Fotos do PC para o B2X: devolve os links (validos por 7 dias) na mesma ordem."""
+    form = await request.form()
+    arquivos = form.getlist("arquivos")
+    if not arquivos:
+        raise HTTPException(400, "Nenhuma foto recebida.")
+    links, lote, tam = [], [], 0
+
+    def mandar():
+        nonlocal lote, tam
+        if not lote:
+            return
+        status, r = chamar("POST", "/v1/fotos", {"fotos": [{"arquivo_base64": base64.b64encode(b).decode("ascii")} for _, b in lote],
+                                                  "prazo_s": 90}, timeout=150)
+        itens = r.get("fotos") or []
+        for i, (nome, _) in enumerate(lote):
+            it = next((x for x in itens if x.get("indice") == i), itens[i] if i < len(itens) else {})
+            if not it.get("url"):
+                raise HTTPException(400, f"O B2X recusou a foto {nome}: {it.get('motivo') or texto_erro(r) or status}")
+            links.append({"nome": nome, "url": it["url"]})
+        lote, tam = [], 0
+    for a in arquivos:
+        dados = await a.read()
+        try:
+            with Image.open(io.BytesIO(dados)) as im:
+                im = im.convert("RGB")
+                if max(im.size) > 2000:
+                    im.thumbnail((2000, 2000))
+                b = io.BytesIO(); im.save(b, "JPEG", quality=90, optimize=True); dados = b.getvalue()
+        except Exception:
+            raise HTTPException(400, f"{a.filename}: não é uma imagem válida.")
+        if len(lote) == 20 or tam + len(dados) > 14 * 1024 * 1024:
+            mandar()
+        lote.append((a.filename or "foto.jpg", dados)); tam += len(dados)
+    mandar()
+    return {"fotos": links}
+
+
+@rota.post("/api/b2x/fotos/do-site")
+async def fotos_do_site(request: Request):
+    """Pega as fotos de um anuncio do site (no modo do marketplace de destino) e sobe para o B2X."""
+    d = await request.json()
+    m = _anuncio_local(int(d["aid"]))
+    L, a = m["linhas"], m["anuncio"]
+    ml = d.get("canal") == "mercadolivre"
+    galeria = [] if ml else (([L["capa"]] if L["capa"] else []) + L["galeria"])[:9]
+    # ML: as fotos de cada cor (ou a capa da cor, se ainda nao montou); Shopee: a capa da variacao de cada cor
+    cores = [(v["cor"], (v["fotos"][:10] or [v["capa"]]) if ml else [v["capa"]]) for v in L["variacoes"]]
+    links = subir_fotos(galeria + [r for _, f in cores for r in f])
+    return {"titulo": a["titulo"] or "", "descricao": a["descricao"] or "", "preco": a["preco"] or "", "tamanhos": m["tamanhos"],
+            "galeria": [links[r["id"]] for r in galeria], "cores": [{"cor": c, "fotos": [links[r["id"]] for r in f]} for c, f in cores]}
+
+
+@rota.get("/api/b2x/envio")
+def envio(loja: str):
+    status, r = chamar("GET", "/v1/anuncios/criar/envio?" + urllib.parse.urlencode({"loja": loja}))
+    _ok(status, r, "Ler as formas de envio")
+    return {"modos": [{"id": str(x[0]), "nome": str(x[1]), "aceito": bool(x[2])} if isinstance(x, list) else x for x in (r.get("modos_da_conta") or [])],
+            "logisticas": [" · ".join(str(y) for y in x[:3] if y) if isinstance(x, list) else _frase(x) for x in (r.get("logisticas") or [])][:8],
+            "usa": r.get("criar_usa_nome") or r.get("criar_usa") or "", "o_que_fazer": _frase(r.get("o_que_fazer")) if r.get("o_que_fazer") else "",
+            "obs": str(r.get("obs") or "")[:400]}
+
+
+@rota.post("/api/b2x/criar-loja")
+async def criar_loja(request: Request):
+    """Cria um anuncio novo numa loja a partir do passo a passo da tela da loja. so_validar primeiro; depois o mesmo
+    corpo com o pedido_id. Grande ou lento: o B2X devolve pedido_id e a tela acompanha pelo /criar/status."""
+    d = await request.json()
+    loja, canal = str(d["loja"]), str(d.get("canal") or "")
+    ml = canal == "mercadolivre"
+    titulo, descricao = str(d.get("titulo") or "").strip(), str(d.get("descricao") or "").strip()
+    if not titulo or not descricao:
+        raise HTTPException(400, "Preencha o título e a descrição.")
+    variacoes = []
+    for v in d.get("variacoes") or []:
+        p = _preco(v.get("preco"))
+        if not p:
+            raise HTTPException(400, f"Preço inválido na variação {v.get('cor', '')} {v.get('tamanho', '')}.")
+        try:
+            est = max(0, int(str(v.get("estoque") or "0").strip()))
+        except ValueError:
+            raise HTTPException(400, f"Estoque inválido na variação {v.get('cor', '')} {v.get('tamanho', '')}.")
+        item = {"preco": p, "estoque": est}
+        for k in ("cor", "tamanho", "sku"):
+            if str(v.get(k) or "").strip():
+                item[k] = str(v[k]).strip()[:60]
+        fotos = [f for f in (v.get("fotos") or []) if str(f).startswith("http")][:10]
+        if fotos:
+            item["fotos"] = fotos
+        variacoes.append(item)
+    if not variacoes:
+        raise HTTPException(400, "Monte pelo menos uma variação (cor/tamanho com preço e estoque).")
+    atributos = []
+    for x in d.get("atributos") or []:
+        aid_, opc, txt = str(x.get("id") or "").strip(), str(x.get("opcao") or "").strip(), str(x.get("texto") or "").strip()
+        if not aid_ or not (opc or txt):
+            continue
+        if ml:
+            atributos.append({"id": aid_, "value_id": opc} if opc else {"id": aid_, "value_name": txt})
+        else:
+            atributos.append({"id": int(aid_) if aid_.isdigit() else aid_,
+                              "valores": [{"id": int(opc) if opc.isdigit() else opc}] if opc else [{"nome": txt}]})
+    corpo = {"loja": loja, "categoria": str(d["categoria"]), "titulo": titulo[:255], "descricao": descricao[:20000], "condicao": "novo",
+             "variacoes": variacoes, "peso_g": _num(d.get("peso_g"), "o peso"), "comprimento_cm": _num(d.get("comprimento_cm"), "o comprimento"),
+             "largura_cm": _num(d.get("largura_cm"), "a largura"), "altura_cm": _num(d.get("altura_cm"), "a altura")}
+    fotos = [f for f in (d.get("fotos") or []) if str(f).startswith("http")][:9]
+    if fotos:
+        corpo["fotos"] = fotos
+    if atributos:
+        corpo["atributos"] = atributos
+    if str(d.get("sku_pai") or "").strip():
+        corpo["sku_pai"] = str(d["sku_pai"]).strip()[:100]
+    if ml:
+        bloco = {"tipo_anuncio": str(d.get("tipo_anuncio") or "gold_special"), "titulo": titulo[:60]}
+        if d.get("envio") in ("me2", "not_specified"):
+            bloco["envio"] = d["envio"]
+        if d.get("frete_gratis"):
+            bloco["frete_gratis"] = True
+        linhas = [{"tamanho": str(k), "comprimento_cm": float(str(v).replace(",", "."))}
+                  for k, v in (d.get("medidas_pe") or {}).items() if str(v).strip()]
+        if linhas:
+            bloco["tabela_medidas"] = {"linhas": linhas}
+        corpo["ml"] = bloco
+    elif canal == "shopee":
+        marca = d.get("marca") or {}
+        corpo["marca"] = {"id": int(marca["id"]), "nome": str(marca.get("nome") or "")} if str(marca.get("id") or "").isdigit() and int(marca["id"]) else {"id": 0}
+        if str(d.get("tabela_url") or "").startswith("http"):
+            corpo["shopee"] = {"tabela_medidas": {"imagem_url": d["tabela_url"]}}
+    elif str((d.get("marca") or {}).get("nome") or "").strip():
+        corpo["marca"] = {"nome": str(d["marca"]["nome"]).strip()}
+    validar = not d.get("confirmar")
+    if validar:
+        corpo["so_validar"] = True
+    if d.get("pedido_id"):
+        corpo["pedido_id"] = str(d["pedido_id"])
+    status, r = chamar("POST", "/v1/anuncios/criar", corpo, timeout=280)
+    problemas = [_frase(x) for x in (r.get("problemas") or r.get("erros") or [])][:25]
+    if not 200 <= status < 300 and not problemas:
+        problemas = [texto_erro(r) or f"O {config()['nome']} respondeu {status}."]
+    ids = [str(x) for x in (r.get("anuncio_ids") or ([r["anuncio_id"]] if r.get("anuncio_id") else []))]
+    saida = {"validado": bool(r.get("validado")) and not problemas, "problemas": problemas, "pedido_id": r.get("pedido_id") or d.get("pedido_id") or "",
+             "avisos": [_frase(x) for x in (r.get("avisos") or [])][:12], "variacoes": len(variacoes),
+             "estado": r.get("estado") or "", "anuncio_ids": ids, "status": r.get("status") or "", "incerto": bool(r.get("incerto")),
+             "na_fila": bool(r.get("fila") or r.get("estado") in ("fila", "em_andamento")) and not ids}
+    if not validar:
+        saida["criado"] = bool(ids) and 200 <= status < 300
+        n.registrar(f"B2X: criar na loja {loja}: {'criado ' + ', '.join(ids) if ids else (problemas[:1] or ['enviado, acompanhando'])[0]}")
+    return saida
+
+
+@rota.get("/api/b2x/criar/status")
+def criar_status(pedido_id: str, loja: str = ""):
+    q = {"pedido_id": pedido_id}
+    if loja:
+        q["loja"] = loja
+    status, r = chamar("GET", "/v1/anuncios/criar/status?" + urllib.parse.urlencode(q))
+    _ok(status, r, "Ver o andamento")
+    return {"estado": r.get("estado") or "", "final": bool(r.get("final")), "etapa": r.get("etapa_texto") or r.get("etapa") or "",
+            "anuncio_id": str(r.get("anuncio_id") or ""), "motivo": _frase(r.get("motivo")) if r.get("motivo") else "",
+            "erros": [_frase(x) for x in (r.get("erros") or [])][:12], "avisos": [_frase(x) for x in (r.get("avisos") or [])][:8],
+            "de_novo_em": int(r.get("consultar_de_novo_em_s") or 8), "parar": bool(r.get("parar_de_consultar"))}
+
+
+@rota.post("/api/b2x/criar/cancelar")
+async def criar_cancelar(request: Request):
+    d = await request.json()
+    corpo = {"pedido_id": str(d["pedido_id"])}
+    if d.get("loja"):
+        corpo["loja"] = str(d["loja"])
+    status, r = chamar("POST", "/v1/anuncios/criar/cancelar", dict(corpo, **({"confirmar": True} if d.get("confirmar") else {"simular": True})))
+    _ok(status, r, "Cancelar a criação")
+    return {"estado_antes": r.get("estado_antes") or "", "estado_depois": r.get("estado_depois") or "", "motivo": _frase(r.get("motivo")) if r.get("motivo") else "",
+            "pode_criar_de_novo": bool(r.get("pode_criar_de_novo")), "confirmado": bool(d.get("confirmar"))}
