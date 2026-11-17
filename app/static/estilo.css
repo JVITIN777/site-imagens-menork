@@ -497,3 +497,9 @@ body.porta{background:#050505!important}
 .chips-cor .peca.chip-cor{flex-direction:row;align-items:center;gap:8px;padding:5px 6px 5px 5px;border-radius:10px}
 .chips-cor .chip-cor .nome-cor{width:132px}
 .chips-cor .chip-cor{max-width:270px}.chips-cor .chip-cor .nome-cor{width:158px}
+/* fotos da cor num tamanho que cabe na tela: 10 fotos em 2 linhas (Principal 2x2) */
+.fotos-principal .slots{grid-template-columns:repeat(7,minmax(64px,128px));justify-content:start;gap:8px}
+.fotos-principal .slot.capa{grid-column:span 2;grid-row:span 2}
+.fotos-principal .slot.vazio span{font-size:11px}
+@media (max-width:900px){.fotos-principal .slots{grid-template-columns:repeat(4,minmax(60px,1fr))}}
+.falta-cor .cores-falta{font-size:12px;color:var(--fraco);cursor:help;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:60%}
