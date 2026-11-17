@@ -520,7 +520,8 @@ async function b2Validar(corpo) {
 async function b2Publicar() {
   b2Carregando('Criando o anúncio no marketplace. Não feche esta janela…');
   try { const r = await b2post('/api/b2x/criar', { ...B2.corpo, confirmar: true, pedido_id: B2.pedido });
-    b2Tela(r.criado ? `<h2>Anúncio criado</h2><div class="nota"><b>${esc(B2CANAL[B2.canal])}: ${r.anuncio_ids.map(esc).join(', ')}</b><span>Situação: ${esc(({ UNLIST: 'oculto', unlist: 'oculto', paused: 'pausado', PAUSED: 'pausado', active: 'ativo', NORMAL: 'ativo' })[r.status] || r.status || (B2.canal === 'shopee' ? 'oculto' : 'pausado'))}. Revise no marketplace e ative.</span>${r.divergencias.map(x => `<span>Ficou diferente: ${esc(x)}</span>`).join('')}</div>${b2Lista('Avisos', r.avisos)}<div class="acoes"><button class="b" data-fechar>Fechar</button></div>`
+    if (r.na_fila) return b2Fila(r.pedido_id);
+    b2Tela(r.criado ? `<h2>Anúncio criado</h2><div class="nota"><b>${esc(B2CANAL[B2.canal])}: ${r.anuncio_ids.map(esc).join(', ')}</b><span>Situação: ${esc(({ UNLIST: 'oculto', unlist: 'oculto', paused: 'pausado', PAUSED: 'pausado', active: 'ativo', NORMAL: 'ativo' })[r.status] || r.status || (B2.canal === 'shopee' ? 'oculto' : 'pausado'))}. Revise no marketplace e ative.</span>${r.divergencias.map(x => `<span>Ficou diferente: ${esc(x)}</span>`).join('')}</div>${r.promocao ? `<div class="nota ${r.promocao.ok ? '' : 'ruim'}"><span>${esc(r.promocao.msg)}</span></div>` : ''}${b2Lista('Avisos', r.avisos)}<div class="acoes"><button class="b" data-fechar>Fechar</button></div>`
       : `<h2>Não foi criado</h2>${r.incerto ? '<div class="nota ruim"><span>A resposta ficou incerta. Não crie de novo: confira a loja no marketplace antes. Repetir por aqui usa o mesmo pedido e não duplica.</span></div>' : ''}<div class="nota ruim">${r.problemas.map(p => `<span>${esc(p)}</span>`).join('') || '<span>O marketplace não devolveu o código do anúncio.</span>'}</div><div class="acoes"><button class="b" data-b2="publicar">Tentar de novo (não duplica)</button><button class="b claro" data-b2="ficha">Voltar</button></div>`);
     window.AO_DESENHAR?.(B2.aid);
   } catch (err) { b2Erro(err, 'ficha'); }
@@ -849,6 +850,8 @@ function mkMostrar() {
       <div class="b2-grade"><label class="largo2">Título novo<input name="titulo" placeholder="${esc(d.titulo)}" maxlength="255"></label>
         <label>Preço novo<input name="preco" inputmode="decimal" placeholder="Ex.: 49,90"></label><label>Estoque novo${vs.length > 1 ? ' (todas as variações)' : ''}<input name="estoque" inputmode="numeric" placeholder="Ex.: 20"></label></div>
       <label class="campo-b2">Descrição nova<textarea name="descricao" rows="4" placeholder="${d.descricao ? 'Deixe vazio para manter a atual' : ''}">${''}</textarea></label>
+      ${l?.canal === 'mercadolivre' ? `<h3>Promoção <small class="pequeno">desconto direto do Mercado Livre; o preço do anúncio fica como o cheio, riscado</small></h3>
+        <div class="b2-linha"><input id="mk-promo" inputmode="decimal" placeholder="Preço promocional, ex.: 59,90"><button type="button" class="b claro" id="mk-promo-simular">Simular promoção</button></div>` : ''}
       <div class="acoes"><button class="b">Simular a mudança</button>${podeFotos ? '<button type="button" class="b claro" id="mk-fotos">Trocar fotos com um anúncio do site</button>' : ''}${d.url ? `<a class="b claro" href="${esc(d.url)}" target="_blank" rel="noopener">Abrir no marketplace</a>` : ''}<button type="button" class="b claro" data-fechar>Fechar</button></div></form>`);
 }
 function mkEscolherAnuncio() {
@@ -1053,11 +1056,14 @@ function crVariacoes() {
     <div class="cr-grade-wrap"><table class="tabela cr-grade"><tr><th>Cor</th><th>Tamanho</th><th>SKU</th><th>Preço</th><th>Estoque</th></tr>
     ${cores.flatMap(c => tams.map(t => { const v = g[ch(c, t)]; return `<tr data-v="${esc(ch(c, t))}"><td>${esc(c || '—')}</td><td>${esc(t || '—')}</td><td><input data-k="sku" value="${esc(v.sku)}"></td><td><input data-k="preco" inputmode="decimal" value="${esc(v.preco)}" placeholder="49,90"></td><td><input data-k="estoque" inputmode="numeric" value="${esc(v.estoque)}"></td></tr>`; })).join('')}</table></div>
     <label class="campo-b2">SKU pai (opcional)<input id="cr-sku-pai" value="${esc(CR.sku_pai)}" placeholder="Ex.: TA01-BEGE"></label>
+    ${CR.canal === 'mercadolivre' ? `<label class="campo-b2">Preço promocional (opcional)<input id="cr-promo" inputmode="decimal" value="${esc(CR.promo || '')}" placeholder="Ex.: 59,90 · os preços da tabela são o preço cheio, riscado"></label>
+      <p class="pequeno">Depois de criado entra a promoção (desconto direto do Mercado Livre) com esse preço, renovada sozinha a cada 30 dias.</p>` : ''}
     <div class="acoes"><button class="b" data-cr-ir="4">Seguir para o envio</button><button class="b claro" data-cr-ir="2">Voltar</button></div>`);
 }
 function crLerGrade() {
   document.querySelectorAll('.cr-grade tr[data-v]').forEach(tr => { const v = CR.grade[tr.dataset.v]; tr.querySelectorAll('input[data-k]').forEach(i => { v[i.dataset.k] = i.value.trim(); }); });
   const sp = document.getElementById('cr-sku-pai'); if (sp) CR.sku_pai = sp.value.trim();
+  const pr = document.getElementById('cr-promo'); if (pr) CR.promo = pr.value.trim();
 }
 async function crEnvio() {
   const ml = CR.canal === 'mercadolivre', e = CR.embalagem;
@@ -1085,7 +1091,7 @@ function crCorpo(extra = {}) {
   return { loja: CR.loja.id, canal: CR.canal, categoria: CR.categoria, titulo: CR.titulo, descricao: CR.descricao, variacoes,
     fotos: CR.fotos.galeria.map(x => x.url), tabela_url: CR.fotos.tabela[0]?.url || '', sku_pai: CR.sku_pai, marca, tipo_anuncio: CR.tipo_anuncio,
     atributos: Object.entries(CR.attr).map(([id, v]) => CR.ficha.obrigatorios.find(o => o.id === id)?.opcoes.length ? { id, opcao: v } : { id, texto: v }),
-    envio: CR.envio, frete_gratis: CR.frete_gratis, medidas_pe: Object.fromEntries(Object.entries(CR.medidas).filter(([, v]) => v)), ...CR.embalagem, ...extra };
+    envio: CR.envio, frete_gratis: CR.frete_gratis, preco_promocional: CR.canal === 'mercadolivre' ? (CR.promo || '') : '', medidas_pe: Object.fromEntries(Object.entries(CR.medidas).filter(([, v]) => v)), ...CR.embalagem, ...extra };
 }
 function crRevisar(r) {
   const c = crCorpo(), nf = c.fotos.length + new Set(c.variacoes.flatMap(v => v.fotos)).size;
@@ -1102,7 +1108,7 @@ async function crValidar() {
 async function crPublicar() {
   b2Carregando('Publicando no marketplace. Não feche esta janela…');
   try { const r = await b2post('/api/b2x/criar-loja', crCorpo({ confirmar: true, pedido_id: CR.pedido })); if (r.pedido_id) CR.pedido = r.pedido_id;
-    if (r.criado) return crFim({ estado: 'criado', final: true, anuncio_id: r.anuncio_ids.join(', '), erros: [], avisos: r.avisos, etapa: r.status });
+    if (r.criado) { CR.promoFeita = r.promocao || null; return crFim({ estado: 'criado', final: true, anuncio_id: r.anuncio_ids.join(', '), erros: [], avisos: r.avisos, etapa: r.status }); }
     if (r.problemas.length && !r.na_fila && !CR.pedido) return crRevisar(r);
     crAcompanhar();
   } catch (err) { b2Erro(err); }
@@ -1117,9 +1123,18 @@ async function crAcompanhar() {
     CR.relogio = setTimeout(() => { if (document.querySelector('.cr-andamento')) crAcompanhar(); }, Math.max(4, s.de_novo_em) * 1000);
   } catch (err) { b2Erro(err); }
 }
-function crFim(s) {
+async function crFim(s) {
   const ok = ['criado', 'publicado', 'enviado', 'em_analise'].includes(s.estado) && s.estado !== 'recusado';
-  b2Tela(ok ? `<h2>Anúncio criado</h2><div class="nota"><b>${esc(MKN[CR.loja.marketplace] || '')}: ${esc(s.anuncio_id || '')}</b><span>Situação: ${esc(s.estado)}${s.etapa ? ' · ' + esc(s.etapa) : ''}</span></div>${b2Lista('Avisos', s.avisos)}
+  if (ok && CR.canal === 'mercadolivre' && CR.promo && !CR.promoFeita && s.anuncio_id) {  // criado pela fila: aplica a promocao agora
+    b2Carregando('Anúncio criado. Aplicando a promoção…');
+    const ids = String(s.anuncio_id).split(',').map(x => x.trim()).filter(Boolean);
+    try { const sim = await b2post('/api/b2x/desconto-ml', { loja: CR.loja.id, anuncios: ids, preco: CR.promo });
+      CR.promoFeita = sim.ok ? await b2post('/api/b2x/desconto-ml', { loja: CR.loja.id, anuncios: ids, preco: CR.promo, confirmar: true, pedido_id: sim.pedido_id })
+        .then(f => ({ ok: f.ok, msg: f.ok ? `Promoção de R$ ${CR.promo} aplicada (renova sozinha a cada 30 dias).` : 'A promoção não entrou: ' + f.problemas.join('; ') }))
+        : { ok: false, msg: 'A promoção não entrou: ' + sim.problemas.join('; ') };
+    } catch (err) { CR.promoFeita = { ok: false, msg: 'A promoção não entrou: ' + err.message }; }
+  }
+  b2Tela(ok ? `<h2>Anúncio criado</h2><div class="nota"><b>${esc(MKN[CR.loja.marketplace] || '')}: ${esc(s.anuncio_id || '')}</b><span>Situação: ${esc(s.estado)}${s.etapa ? ' · ' + esc(s.etapa) : ''}</span></div>${CR.promoFeita ? `<div class="nota ${CR.promoFeita.ok ? '' : 'ruim'}"><span>${esc(CR.promoFeita.msg)}</span></div>` : ''}${b2Lista('Avisos', s.avisos)}
       <div class="acoes"><button class="b" data-ir-loja="${esc(CR.loja.id)}">Ver na loja</button><button class="b claro" data-fechar>Fechar</button></div>`
     : `<h2>Não foi publicado <small>${esc(s.estado)}</small></h2><div class="nota ruim">${s.motivo ? `<span>${esc(s.motivo)}</span>` : ''}${s.erros.map(x => `<span>${esc(x)}</span>`).join('') || (s.motivo ? '' : '<span>O marketplace não confirmou a criação.</span>')}</div>
       ${s.estado === 'incerto' ? '<p class="pequeno aviso-txt">Ficou incerto: confira a loja antes de tentar de novo. Tentar por aqui usa o mesmo pedido e não duplica.</p>' : ''}
@@ -1204,6 +1219,44 @@ document.addEventListener('click', e => {
   if (e.target.closest('#atualizar-pub')) { PUB.lista = null; return RENDER(); }
   const cp = e.target.closest('[data-copiar-de]'); if (cp) { const t = document.getElementById(cp.dataset.copiarDe); t.select(); navigator.clipboard?.writeText(t.value); window.menork.aviso('Mensagem copiada.'); }
 }, true);
+
+// promocao (desconto direto) num anuncio do ML que ja existe
+async function mkPromoSimular() {
+  const preco = document.getElementById('mk-promo').value.trim(); if (!preco) return window.menork.aviso('Digite o preço promocional.');
+  MK.promo = preco; b2Carregando('Simulando a promoção…');
+  try { const r = await b2post('/api/b2x/desconto-ml', { loja: MK.loja.id, anuncios: [MK.atual.id], preco }); MK.promoPedido = r.pedido_id;
+    b2Tela(`<h2>Promoção <small>simulação, nada mudou ainda</small></h2>
+      <div class="nota ${r.ok ? '' : 'ruim'}"><b>${r.ok ? 'Pronto para aplicar' : 'Recusada'}</b>${r.itens.map(i => `<span>${esc(i.anuncio || '')}: R$ ${esc(i.preco_atual ?? '')} → R$ ${esc(i.preco_promocional ?? preco)}${i.desconto != null ? ` (${esc(i.desconto)}% OFF)` : ''}</span>`).join('')}${r.problemas.map(x => `<span>${esc(x)}</span>`).join('')}${r.avisos.map(x => `<span>${esc(x)}</span>`).join('')}</div>
+      <p class="pequeno">Vale por 30 dias e renova sozinha.</p>
+      <div class="acoes">${r.ok ? '<button class="b verde" id="mk-promo-confirmar">Confirmar a promoção</button>' : ''}<button class="b claro" id="mk-voltar">Voltar</button></div>`);
+  } catch (err) { b2Erro(err); }
+}
+async function mkPromoConfirmar() {
+  b2Carregando('Aplicando a promoção…');
+  try { const r = await b2post('/api/b2x/desconto-ml', { loja: MK.loja.id, anuncios: [MK.atual.id], preco: MK.promo, confirmar: true, pedido_id: MK.promoPedido });
+    b2Tela(`<h2>${r.ok ? 'Promoção aplicada' : 'A promoção não entrou'}</h2><div class="nota ${r.ok ? '' : 'ruim'}"><span>${r.ok ? `R$ ${esc(MK.promo)} no anúncio ${esc(MK.atual.id)}; o Mercado Livre pode levar alguns minutos para mostrar.` : r.problemas.map(esc).join('<br>')}</span></div>
+      <div class="acoes"><button class="b" id="mk-reabrir">Ver o anúncio de novo</button><button class="b claro" data-fechar>Fechar</button></div>`);
+  } catch (err) { b2Erro(err); }
+}
+document.addEventListener('click', e => {
+  if (e.target.closest('#mk-promo-simular')) return mkPromoSimular();
+  if (e.target.closest('#mk-promo-confirmar')) return mkPromoConfirmar();
+});
+
+// criacao na fila do B2X (janela do anuncio do site): o servidor acompanha e aplica a promocao; a tela so mostra
+async function b2Fila(pedido) {
+  clearTimeout(B2.relogio);
+  try { const s = await b2get(`/api/b2x/criar/status?pedido_id=${encodeURIComponent(pedido)}&loja=${encodeURIComponent(B2.loja)}`);
+    if (s.final || s.parar) {
+      const ok = s.anuncio_id && !['recusado', 'apagado', 'parado'].includes(s.estado);
+      return b2Tela(ok ? `<h2>Anúncio criado</h2><div class="nota"><b>${esc(B2CANAL[B2.canal])}: ${esc(s.anuncio_id)}</b><span>Situação: ${esc(s.estado)}. ${B2.canal === 'mercadolivre' ? 'Se o anúncio tem preço cheio maior, a promoção entra sozinha em instantes.' : ''}</span></div><div class="acoes"><button class="b" data-fechar>Fechar</button></div>`
+        : `<h2>Não foi criado <small>${esc(s.estado)}</small></h2><div class="nota ruim">${s.motivo ? `<span>${esc(s.motivo)}</span>` : ''}${s.erros.map(x => `<span>${esc(x)}</span>`).join('')}</div><div class="acoes"><button class="b claro" data-b2="ficha">Voltar</button></div>`);
+    }
+    b2Tela(`<h2>Publicando <small>${esc(s.estado)}</small></h2><div class="cr-andamento"><span class="abertura-barra"><i></i></span><p>${esc(s.etapa || 'Na fila do B2X…')}</p></div>
+      <p class="pequeno">Pode fechar esta janela: o site continua acompanhando e registra o resultado no histórico do anúncio.</p><div class="acoes"><button class="b claro" data-fechar>Fechar</button></div>`);
+    B2.relogio = setTimeout(() => { if (document.querySelector('.cr-andamento')) b2Fila(pedido); }, Math.max(4, s.de_novo_em) * 1000);
+  } catch (err) { b2Erro(err); }
+}
 
 (() => {
   const $ = (s, r = document) => r.querySelector(s);
@@ -1472,8 +1525,11 @@ window.ANUNCIO = (ID) => {
     const limite = M.titulo ? ` maxlength="${M.titulo + 40}"` : '';
     const dados = `<div class="bloco dados">
         <label class="largo">Título do anúncio <small id="conta-titulo"></small><input id="c-titulo" data-campo="titulo" value="${esc(a.titulo)}"${limite} placeholder="Ex.: Chinelo feminino nuvem confortável"></label>
-        <label>Preço<input id="c-preco" data-campo="preco" value="${esc(a.preco)}" placeholder="49,90" inputmode="decimal"></label>
-        <label>Preço antigo, riscado<input id="c-preco_antigo" data-campo="preco_antigo" value="${esc(a.preco_antigo)}" placeholder="79,90" inputmode="decimal"></label>
+        ${ml() ? `<label>Preço cheio (riscado)<input id="c-preco_antigo" data-campo="preco_antigo" value="${esc(a.preco_antigo)}" placeholder="79,90" inputmode="decimal"></label>
+        <label>Preço promocional (o cliente paga)<input id="c-preco" data-campo="preco" value="${esc(a.preco)}" placeholder="49,90" inputmode="decimal"></label>
+        <p class="pequeno largo">No Mercado Livre o anúncio sobe com o preço cheio e o promocional entra como promoção (desconto direto), com o riscado e o % OFF. A promoção renova sozinha a cada 30 dias. Sem preço cheio maior, sobe só com o preço promocional, sem promoção.</p>`
+        : `<label>Preço<input id="c-preco" data-campo="preco" value="${esc(a.preco)}" placeholder="49,90" inputmode="decimal"></label>
+        <label>Preço antigo, riscado<input id="c-preco_antigo" data-campo="preco_antigo" value="${esc(a.preco_antigo)}" placeholder="79,90" inputmode="decimal"></label>`}
         <label class="largo">Descrição<textarea id="c-descricao" data-campo="descricao" rows="4" placeholder="Texto da descrição do anúncio">${esc(a.descricao)}</textarea></label>
       </div>`;
 

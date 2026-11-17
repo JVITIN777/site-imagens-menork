@@ -1031,14 +1031,18 @@ async def bot_publicar(request: Request):
         return {"etapa": "validacao", "validado": r["validado"], "problemas": r["problemas"], "avisos": r["avisos"],
                 "proximo": "Sem problemas: rode o mesmo comando sem -Validar para publicar." if r["validado"] else
                            "Arrume os problemas (dados, ficha ou -Json) e valide de novo. Foto faltando: avise o Menork."}
-    final = b2x.criar_do_site(dict(corpo, confirmar=True, pedido_id=r["pedido_id"]))
+    final = b2x.criar_do_site(dict(corpo, confirmar=True, pedido_id=r["pedido_id"], _pedido_bot=p["id"]))
+    if final.get("na_fila"):
+        return {"etapa": "na_fila", "criado": False, "pedido_b2x": final.get("pedido_id"), "avisos": final.get("avisos") or [],
+                "proximo": "O B2X pôs na fila. O site acompanha sozinho e marca o pedido como feito quando terminar "
+                           "(com a promoção, se tiver). Não publique de novo; pode seguir para o próximo pedido."}
     with n.con() as c:
         if final.get("criado"):
             c.execute("UPDATE pedidos SET status='feito', resposta=?, atualizado=? WHERE id=?",
                       (f"criado {', '.join(final.get('anuncio_ids') or [])} ({final.get('status') or ''})", n.agora(), p["id"]))
     return {"etapa": "publicado" if final.get("criado") else "nao_publicado", "criado": bool(final.get("criado")),
             "anuncio_ids": final.get("anuncio_ids") or [], "status": final.get("status") or "", "problemas": final.get("problemas") or [],
-            "avisos": final.get("avisos") or [], "incerto": final.get("incerto"),
+            "avisos": final.get("avisos") or [], "incerto": final.get("incerto"), "promocao": final.get("promocao"),
             "proximo": "Pronto: o pedido foi marcado como feito." if final.get("criado") else
                        ("Ficou incerto: NAO publique de novo, avise o Menork." if final.get("incerto") else "Arrume os problemas e tente de novo.")}
 

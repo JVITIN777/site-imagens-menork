@@ -547,6 +547,10 @@ def criar_do_site(d, por="você"):
     preco = _preco(a["preco"])
     if not preco:
         raise HTTPException(400, "Preencha o preço do anúncio no site antes de criar.")
+    cheio = _preco(a["preco_antigo"])
+    promo_ml = preco if canal == "mercadolivre" and cheio and cheio > preco else None
+    if promo_ml:  # ML: o anuncio sobe com o preco cheio; o promocional entra como desconto direto depois de criado
+        preco = cheio
     if not (a["titulo"] or "").strip() or not (a["descricao"] or "").strip():
         raise HTTPException(400, "Preencha o título e a descrição do anúncio no site antes de criar.")
     tamanhos = m["tamanhos"]
@@ -606,12 +610,19 @@ def criar_do_site(d, por="você"):
     saida = {"validado": bool(r.get("validado")) and not problemas, "problemas": problemas,
              "avisos": [_frase(x) for x in (r.get("avisos") or [])][:12], "pedido_id": r.get("pedido_id") or d.get("pedido_id") or "",
              "variacoes": len(variacoes), "fotos": len(links)}
+    if promo_ml and validar:
+        saida["avisos"].insert(0, f"Mercado Livre: sobe com o preço cheio R$ {preco:.2f} e, depois de criado, entra a promoção de R$ {promo_ml:.2f}.")
     if not validar:
         ids = r.get("anuncio_ids") or ([r["anuncio_id"]] if r.get("anuncio_id") else [])
         ok = 200 <= status < 300 and r.get("success", True) is not False and bool(ids)
         divergencias = (r.get("conferido") or {}).get("divergencias") or []
         saida.update(criado=ok, anuncio_ids=[str(x) for x in ids][:60], status=r.get("status") or "",
                      incerto=bool(r.get("incerto")), divergencias=[_frase(x) for x in divergencias][:10])
+        if ok and promo_ml:
+            saida["promocao"] = aplicar_desconto_ml(loja, [str(x) for x in ids][:100], promo_ml)
+        if not ids and 200 <= status < 300 and saida["pedido_id"] and not problemas:  # foi para a fila do B2X
+            saida["na_fila"] = True
+            acompanhar(loja, saida["pedido_id"], promo_ml, d.get("_pedido_bot"), aid)
         _registrar(aid, ok, f"criar no {CANAIS.get(canal, canal)}: {'criado ' + ', '.join(map(str, ids[:5])) if ok else (problemas[:1] or ['falhou'])[0]}",
                    ids[0] if ids else "", r.get("desfazer_com"))
     return saida
@@ -837,12 +848,20 @@ async def criar_loja(request: Request):
     if not 200 <= status < 300 and not problemas:
         problemas = [texto_erro(r) or f"O {config()['nome']} respondeu {status}."]
     ids = [str(x) for x in (r.get("anuncio_ids") or ([r["anuncio_id"]] if r.get("anuncio_id") else []))]
+    promo = _preco(d.get("preco_promocional")) if ml else None
     saida = {"validado": bool(r.get("validado")) and not problemas, "problemas": problemas, "pedido_id": r.get("pedido_id") or d.get("pedido_id") or "",
              "avisos": [_frase(x) for x in (r.get("avisos") or [])][:12], "variacoes": len(variacoes),
              "estado": r.get("estado") or "", "anuncio_ids": ids, "status": r.get("status") or "", "incerto": bool(r.get("incerto")),
              "na_fila": bool(r.get("fila") or r.get("estado") in ("fila", "em_andamento")) and not ids}
+    if promo and validar:
+        saida["avisos"].insert(0, f"Depois de criado entra a promoção de R$ {promo:.2f} (desconto direto do Mercado Livre).")
     if not validar:
         saida["criado"] = bool(ids) and 200 <= status < 300
+        if saida["criado"] and promo:
+            saida["promocao"] = aplicar_desconto_ml(loja, ids, promo)
+        if not ids and 200 <= status < 300 and saida["pedido_id"] and not problemas:
+            saida["na_fila"] = True
+            acompanhar(loja, saida["pedido_id"], promo)
         n.registrar(f"B2X: criar na loja {loja}: {'criado ' + ', '.join(ids) if ids else (problemas[:1] or ['enviado, acompanhando'])[0]}")
     return saida
 
@@ -870,3 +889,99 @@ async def criar_cancelar(request: Request):
     _ok(status, r, "Cancelar a criação")
     return {"estado_antes": r.get("estado_antes") or "", "estado_depois": r.get("estado_depois") or "", "motivo": _frase(r.get("motivo")) if r.get("motivo") else "",
             "pode_criar_de_novo": bool(r.get("pode_criar_de_novo")), "confirmado": bool(d.get("confirmar"))}
+
+
+# ------------------------------------------------------------ Mercado Livre: preco cheio no anuncio + desconto direto (promocao)
+def desconto_ml(loja, anuncios, preco_promo, simular=True, pedido_id=""):
+    """Desconto direto do ML (POST /v1/promocoes sem tipo): o anuncio fica com o preco cheio e o cliente paga o promocional,
+    com o riscado e o % OFF. Renovacao automatica a cada 30 dias para a promocao nao acabar sozinha."""
+    agora = int(time.time())
+    corpo = {"loja": loja, "nome": f"Desconto {anuncios[0]}"[:60], "inicio": agora + 120, "fim": agora + 30 * 86400,
+             "renovacao_automatica": {"duracao_dias": 30, "dias_antes": 2},
+             "itens": [{"produto_id": str(a), "variacoes": [{"id": None, "preco_promocional": preco_promo}]} for a in anuncios]}
+    if simular:
+        corpo["simular"] = True
+    if pedido_id:
+        corpo["pedido_id"] = pedido_id
+    status, r = chamar("POST", "/v1/promocoes", corpo, timeout=150)
+    problemas = [_frase(x) for x in (r.get("problemas") or r.get("falhas") or [])][:12]
+    ok = 200 <= status < 300 and r.get("success", True) is not False and not (simular and r.get("validado") is False)
+    if not ok and not problemas:
+        problemas = [texto_erro(r) or f"O B2X respondeu {status}."]
+    itens = [{"anuncio": str(x[0]), "preco_atual": x[3], "preco_promocional": x[4], "desconto": x[5]} if isinstance(x, list) and len(x) > 5 else x
+             for x in (r.get("itens_resolvidos") or [])][:20]
+    return {"ok": ok and not (not simular and problemas and not r.get("confirmados")), "simulado": simular, "pedido_id": r.get("pedido_id") or "",
+            "problemas": problemas, "avisos": [_frase(x) for x in (r.get("avisos") or [])][:8], "itens": itens,
+            "confirmados": r.get("confirmados"), "renovacao": bool(r.get("renovacao_automatica"))}
+
+
+def aplicar_desconto_ml(loja, ids, preco_promo):
+    """Depois de criar no ML: simula e confirma o desconto direto. Nunca derruba a criacao: devolve o que aconteceu."""
+    try:
+        s = desconto_ml(loja, ids, preco_promo, simular=True)
+        if not s["ok"]:
+            return {"ok": False, "msg": "A promoção não entrou: " + "; ".join(s["problemas"][:3]), "problemas": s["problemas"]}
+        f = desconto_ml(loja, ids, preco_promo, simular=False, pedido_id=s["pedido_id"])
+        return {"ok": f["ok"], "msg": (f"Promoção de R$ {preco_promo:.2f} aplicada (renova sozinha a cada 30 dias)." if f["ok"]
+                                       else "A promoção não entrou: " + "; ".join(f["problemas"][:3])), "problemas": f["problemas"]}
+    except HTTPException as e:
+        return {"ok": False, "msg": f"A promoção não entrou: {e.detail}", "problemas": [str(e.detail)]}
+
+
+@rota.post("/api/b2x/desconto-ml")
+async def rota_desconto_ml(request: Request):
+    d = await request.json()
+    p = _preco(d.get("preco"))
+    if not p:
+        raise HTTPException(400, "Preço promocional inválido. Use por exemplo 49,90.")
+    ids = [str(x) for x in (d.get("anuncios") or []) if str(x).strip()][:100]
+    if not ids:
+        raise HTTPException(400, "Diga o anúncio.")
+    if d.get("confirmar"):
+        r = desconto_ml(str(d["loja"]), ids, p, simular=False, pedido_id=str(d.get("pedido_id") or ""))
+        n.registrar(f"B2X: desconto ML R$ {p} em {', '.join(ids[:5])}: {'ok' if r['ok'] else 'falhou'}")
+        return r
+    return desconto_ml(str(d["loja"]), ids, p, simular=True)
+
+
+
+# ------------------------------------------------------------ criacao que foi para a fila: o site acompanha sozinho
+_acompanhando = set()
+
+
+def acompanhar(loja, pedido_id, promo=None, pedido_bot=None, aid=None):
+    """Consulta o /criar/status ate o fim (no maximo 40 min). No fim: aplica a promocao do ML (se houver),
+    marca o pedido do bot como feito e registra no historico do anuncio."""
+    import threading
+    if not pedido_id or pedido_id in _acompanhando:
+        return
+    _acompanhando.add(pedido_id)
+
+    def rodar():
+        try:
+            fim = time.time() + 40 * 60
+            while time.time() < fim:
+                try:
+                    s = criar_status(pedido_id, loja)
+                except HTTPException:
+                    time.sleep(30)
+                    continue
+                if s["final"] or s["parar"]:
+                    ids = [x.strip() for x in str(s["anuncio_id"] or "").split(",") if x.strip()]
+                    ok = bool(ids) and s["estado"] not in ("recusado", "apagado", "parado")
+                    promo_txt = ""
+                    if ok and promo:
+                        promo_txt = " " + aplicar_desconto_ml(loja, ids, promo)["msg"]
+                    resposta = (f"criado {', '.join(ids)} ({s['estado']})" if ok else
+                                f"não subiu ({s['estado']}): {s['motivo'] or '; '.join(s['erros'][:2])}") + promo_txt
+                    with n.con() as c:
+                        if pedido_bot:
+                            c.execute("UPDATE pedidos SET status='feito', resposta=?, atualizado=? WHERE id=?", (resposta[:1500], n.agora(), pedido_bot))
+                    if aid:
+                        _registrar(aid, ok, "criar (fila): " + resposta, ids[0] if ids else "")
+                    n.registrar(f"B2X: pedido {pedido_id}: {resposta}")
+                    return
+                time.sleep(max(5, min(60, s["de_novo_em"])))
+        finally:
+            _acompanhando.discard(pedido_id)
+    threading.Thread(target=rodar, daemon=True).start()
