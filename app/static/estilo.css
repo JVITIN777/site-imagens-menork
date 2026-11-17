@@ -503,3 +503,21 @@ body.porta{background:#050505!important}
 .fotos-principal .slot.vazio span{font-size:11px}
 @media (max-width:900px){.fotos-principal .slots{grid-template-columns:repeat(4,minmax(60px,1fr))}}
 .falta-cor .cores-falta{font-size:12px;color:var(--fraco);cursor:help;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:60%}
+
+.banco .abas-banco{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 10px}
+.banco .abas-banco button{padding:6px 12px;border-radius:999px;border:1px solid var(--borda,#333);background:transparent;color:inherit;cursor:pointer;font-size:13px}
+.banco .abas-banco button b{opacity:.6;font-weight:600;margin-left:4px}
+.banco .abas-banco button.ativo{background:var(--luz);color:var(--luz-tinta);border-color:transparent}
+.banco .abas-banco button.ativo b{opacity:.8}
+.banco .abas-banco button:disabled{opacity:.35;cursor:default}
+.banco .banco-trilho{grid-template-columns:repeat(auto-fill,minmax(124px,136px));gap:8px;max-height:430px;overflow:auto;padding-right:4px}
+.banco .peca .rotulo{font-size:11px}
+.banco .peca .botoes{flex-wrap:wrap;gap:4px}.banco .peca .botoes button{font-size:11px;padding:3px 6px;white-space:nowrap;flex:1 1 auto}
+.banco .mini-tipo{width:100%;font-size:11px;margin-top:4px;background:transparent;color:inherit;border:1px solid var(--borda,#333);border-radius:6px;padding:2px}
+.topo-anuncio{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.15fr);gap:14px;align-items:stretch;margin-bottom:14px}
+.topo-anuncio > .bloco{margin:0}
+.dados-topo h2{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.dados-topo .dados.compacto{padding:0;grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+.dados-topo .dados.compacto label:first-child,.dados-topo .dados.compacto label:last-child{grid-column:1/-1}
+.dados-topo .dados.compacto textarea{min-height:52px}
+@media (max-width:1100px){.topo-anuncio{grid-template-columns:1fr}}

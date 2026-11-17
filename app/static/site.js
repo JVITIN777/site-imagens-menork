@@ -227,7 +227,7 @@ const TELAS = {
       <label class="b claro">Enviar imagens<input type="file" id="enviar" data-anuncio="${esc(a.nome)}" multiple accept="image/*" hidden></label>
       ${INTEG().url && INTEG().tem_chave ? `<button class="b" id="enviar-sistema" data-id="${a.id}">${esc(INTEG().nome)}: fotos e anúncio</button>` : ''}
       <button class="b verde" id="baixar-zip" data-id="${a.id}">Exportar</button><button class="b claro" id="excluir-anuncio" data-id="${a.id}">Excluir</button></div></div>
-    <div class="montagem"><div class="editor"><div class="bloco faltas" id="faltas"></div><section id="editor" class="editor"></section></div><aside class="previa">
+    <div class="montagem"><div class="editor"><div class="topo-anuncio"><div class="bloco faltas" id="faltas"></div><div class="bloco dados-topo" id="dados-topo"></div></div><section id="editor" class="editor"></section></div><aside class="previa">
       <div class="troca" role="group" aria-label="Marketplace do anúncio"><button data-modo="ml"><span class="mk-marca ml"><img src="/marca-mk/ml" alt="" onerror="this.remove()"></span>Mercado Livre</button><button data-modo="shopee"><span class="mk-marca shopee"><img src="/marca-mk/shopee" alt="" onerror="this.remove()"></span>Shopee</button></div>
       <div class="celular"><div class="tela" id="tela"></div></div><p class="pequeno" id="dica-previa">Prévia de como o anúncio aparece no celular. Deslize as fotos e toque nas cores.</p></aside></div>`;
   },
@@ -1468,7 +1468,13 @@ window.ANUNCIO = (ID) => {
   // Shopee: 9 fotos do anuncio (1a = capa) + uma capa por variacao de cor + tamanhos.
   // Mercado Livre: cada cor tem as suas fotos (ate 10, 1a = principal) + tamanhos; titulo ate 60 caracteres.
   const MODOS = { shopee: { nome: 'Shopee', fotos: 9 }, ml: { nome: 'Mercado Livre', fotos: 10, titulo: 60 } };
-  let E = null, corAtiva = null, corPrevia = null, dadosAberto = null;
+  let E = null, corAtiva = null, corPrevia = null, abaBanco = null;
+  // banco de imagens embaixo das variacoes, separado por botoes
+  const ABAS_BANCO = [
+    ['ia', 'IA', t => t === 'ia' || t === 'cena'], ['informativo', 'Informativo', t => t === 'informativo'],
+    ['tabela', 'Tabela', t => t === 'tabela'], ['capa', 'Capa', t => (t || '').startsWith('capa')],
+    ['fb', 'Fundo branco', t => /(^|_)fb$/.test(t || '')], ['sem', 'Sem tipo', t => !t]];
+  const TIPOS_SEL = [['ia', 'Foto IA'], ['informativo', 'Informativo'], ['tabela', 'Tabela'], ['capa', 'Capa'], ['fb', 'Fundo branco'], ['cena', 'Cena real']];
   const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const ml = () => E.modo === 'ml';
   const variacao = cor => E.variacoes.find(v => v.cor === cor);
@@ -1524,18 +1530,16 @@ window.ANUNCIO = (ID) => {
 
     const limite = M.titulo ? ` maxlength="${M.titulo + 40}"` : '';
     // titulo, precos e descricao: compactos, numa caixa que abre e fecha (fica no fim; as fotos vem primeiro)
-    if (dadosAberto === null) dadosAberto = !a.titulo || !a.preco || !a.descricao;
     const faltaDados = [!a.titulo && 'título', !a.preco && 'preço', !a.descricao && 'descrição'].filter(Boolean);
-    const resumoDados = [a.titulo ? esc(a.titulo) : '', a.preco ? (ml() && a.preco_antigo ? `R$ ${esc(a.preco_antigo)} → R$ ${esc(a.preco)}` : 'R$ ' + esc(a.preco)) : ''].filter(Boolean).join(' · ');
-    const dados = `<details class="bloco dados-dobra" ${dadosAberto ? 'open' : ''}><summary><b>Título, preço e descrição</b><span class="resumo-dados">${resumoDados || 'nada preenchido ainda'}</span>${faltaDados.length ? `<em class="falta-dados">falta ${faltaDados.join(', ')}</em>` : ''}</summary>
+    const dados = `<h2>Título, preço e descrição ${faltaDados.length ? `<em class="falta-dados">falta ${faltaDados.join(', ')}</em>` : ''}</h2>
       <div class="dados compacto">
         <label class="largo">Título <small id="conta-titulo"></small><input id="c-titulo" data-campo="titulo" value="${esc(a.titulo)}"${limite} placeholder="Ex.: Chinelo feminino nuvem confortável"></label>
         ${ml() ? `<label>Preço cheio (riscado)<input id="c-preco_antigo" data-campo="preco_antigo" value="${esc(a.preco_antigo)}" placeholder="79,90" inputmode="decimal"></label>
-        <label title="No Mercado Livre o anúncio sobe com o preço cheio e este entra como promoção (desconto direto), renovada a cada 30 dias">Preço promocional ⓘ<input id="c-preco" data-campo="preco" value="${esc(a.preco)}" placeholder="49,90" inputmode="decimal"></label>`
+        <label title="O anúncio sobe com o preço cheio e este entra como Desconto direto do Mercado Livre (o desconto do próprio vendedor, igual ao da Central de promoções; não entra em campanha do ML). O B2X renova a cada 30 dias. Depois de criado, para tirar o desconto pode ser preciso ir no painel do ML.">Preço promocional ⓘ<input id="c-preco" data-campo="preco" value="${esc(a.preco)}" placeholder="49,90" inputmode="decimal"></label>`
         : `<label>Preço<input id="c-preco" data-campo="preco" value="${esc(a.preco)}" placeholder="49,90" inputmode="decimal"></label>
         <label>Preço antigo, riscado<input id="c-preco_antigo" data-campo="preco_antigo" value="${esc(a.preco_antigo)}" placeholder="79,90" inputmode="decimal"></label>`}
         <label class="largo">Descrição<textarea id="c-descricao" data-campo="descricao" rows="2" placeholder="Texto da descrição do anúncio">${esc(a.descricao)}</textarea></label>
-      </div></details>`;
+      </div>`;
 
     const chip = x => `<div class="peca var-cor chip-cor ${ml() && x.cor === corAtiva ? 'escolhida' : ''}" data-cor="${esc(x.cor)}" data-cor-alvo="${esc(x.cor)}">
         <button type="button" class="chip-foto" ${ml() ? `data-cor-aba="${esc(x.cor)}"` : `data-ver="${x.capa.id}"`} title="${ml() ? 'Montar as fotos desta cor' : 'Ver a capa da variação'}"><img loading="lazy" src="/mini/${(ml() && x.fotos[0] ? x.fotos[0] : x.capa).id}" alt=""></button>
@@ -1549,16 +1553,23 @@ window.ANUNCIO = (ID) => {
     const colocar = ml()
       ? (v ? botao('foto_cor', 'Foto da cor', 'Coloca nas fotos da cor ' + v.cor) : '') + botao('cor', 'Nova cor', 'Cria uma cor nova com esta foto como principal')
       : botao('capa', 'Capa') + botao('foto', 'Foto') + botao('variacao', 'Cor', 'Usa como capa da variação de uma cor');
+    const proprias = new Set(E.todas.map(i => i.id));
+    const todasBanco = [...fora, ...E.sugestoes.filter(i => !usadas.has(i.id))];
+    const grupos = ABAS_BANCO.map(([k, nome, f]) => [k, nome, todasBanco.filter(i => f(i.tipo))]).filter(([k, , l]) => l.length || k !== 'sem');
+    if (!grupos.some(g => g[0] === abaBanco && g[2].length)) abaBanco = (grupos.find(g => g[2].length) || grupos[0])[0];
+    const atual = grupos.find(g => g[0] === abaBanco)[2];
+    const selTipo = i => i.tipo ? '' : `<select class="mini-tipo" data-classificar="${i.id}" title="Dizer o tipo desta imagem"><option value="">Tipo…</option>${TIPOS_SEL.map(([v, t]) => `<option value="${v}">${t}</option>`).join('')}</select>`;
+    const banco = `<div class="bloco banco"><h2>Imagens para usar no anúncio <small>arraste para cima ou use os botões</small></h2>
+      <div class="abas-banco">${grupos.map(([k, nome, l]) => `<button type="button" data-aba-banco="${k}" class="${k === abaBanco ? 'ativo' : ''}" ${l.length ? '' : 'disabled'}>${nome} <b>${l.length}</b></button>`).join('')}</div>
+      <div class="trilho banco-trilho">${atual.map(i => peca(i, colocar + (proprias.has(i.id) ? botao('desvincular', '×', 'Tirar deste anúncio') : '') + selTipo(i), { arrasta: i.status === 'aprovada' })).join('') || vaga('Nada aqui.')}</div></div>`;
     // guarda onde voce deixou as rolagens: redesenhar nao pode jogar a coluna de volta para o topo
     const rolCol = editor.querySelector('.slots-col')?.scrollTop || 0, rolAbas = editor.querySelector('.abas-cor')?.scrollTop || 0, rolJanela = window.scrollY;
     editor.innerHTML = `<div class="editor-um">
       <div class="bloco fotos-principal">${fotosCol}</div>
       <div class="resto">${cores}${blocoTamanhos()}
-      <div class="bloco"><h2>Imagens deste anúncio fora ${ml() ? (v ? 'das fotos da cor ' + esc(v.cor) : 'das cores') : 'das fotos'} <small>${fora.length}</small></h2>
-        <div class="trilho">${fora.map(i => peca(i, colocar + botao('desvincular', '×', 'Tirar deste anúncio'), { arrasta: i.status === 'aprovada' })).join('') || vaga('Tudo que está neste anúncio já foi colocado.')}</div></div>
-      ${E.sugestoes.length ? `<div class="bloco"><h2>Outras aprovadas de ${esc(E.produto)} <small>ainda fora deste anúncio</small></h2>
-        <div class="trilho">${E.sugestoes.map(i => peca(i, colocar, { arrasta: true })).join('')}</div></div>` : ''}
-      ${dados}</div></div>`;
+      ${banco}</div></div>`;
+    const topo = document.getElementById('dados-topo');
+    if (topo) topo.innerHTML = dados; else editor.querySelector('.resto').insertAdjacentHTML('beforeend', `<div class="bloco">${dados}</div>`);
     const col = editor.querySelector('.slots-col'), abas = editor.querySelector('.abas-cor');
     if (col) col.scrollTop = rolCol; if (abas) abas.scrollTop = rolAbas;
     if (Math.abs(window.scrollY - rolJanela) > 1) window.scrollTo(0, rolJanela);
@@ -1581,6 +1592,8 @@ window.ANUNCIO = (ID) => {
   }
 
   editor.addEventListener('click', e => {
+    const ab = e.target.closest('[data-aba-banco]'); if (ab) { abaBanco = ab.dataset.abaBanco; return desenharEditor(); }
+    if (e.target.closest('select')) return;
     const aba = e.target.closest('[data-cor-aba]'); if (aba) { corAtiva = corPrevia = aba.dataset.corAba; return desenhar(); }
     const ts = e.target.closest('[data-tirar-slot]');
     if (ts) return ml() ? fazer({ acao: 'tirar_foto_cor', cor: corAtiva, imagem: +ts.dataset.tirarSlot }) : fazer({ acao: 'tirar', imagem: +ts.dataset.tirarSlot });
@@ -1600,12 +1613,13 @@ window.ANUNCIO = (ID) => {
     if (acao === 'cor' && ml()) { const img = [...E.todas, ...E.sugestoes].find(i => i.id === imagem); corAtiva = img?.cor || null; }
     fazer({ acao, imagem });
   });
-  editor.addEventListener('toggle', e => { if (e.target.classList?.contains('dados-dobra')) dadosAberto = e.target.open; }, true);
-  editor.addEventListener('input', e => {
+  const ouvir = (tipo, fn) => { editor.addEventListener(tipo, fn); document.getElementById('dados-topo')?.addEventListener(tipo, fn); };
+  ouvir('input', e => {
     const campo = e.target.dataset.campo; if (!campo) return;
     E.anuncio[campo] = e.target.value; contarTitulo(); desenharPrevia();
   });
-  editor.addEventListener('change', e => {
+  ouvir('change', e => {
+    if (e.target.dataset.classificar) return e.target.value && api('/api/acao', { ids: [+e.target.dataset.classificar], acao: 'classificar', tipo: e.target.value }).then(carregar).catch(err => aviso(err.message));
     const campo = e.target.dataset.campo;
     if (campo === 'tamanhos') return fazer({ acao: 'dados', tamanhos: e.target.value }).then(() => window.AO_DESENHAR?.(ID));
     if (campo) return api('/api/anuncios/' + ID, { acao: 'dados', [campo]: e.target.value }).then(() => window.AO_DESENHAR?.(ID)).catch(err => aviso(err.message));
