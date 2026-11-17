@@ -609,34 +609,63 @@ document.addEventListener('click', e => {
 Object.assign(TELAS, {
   lojas(q) {
     const i = INTEG(), nome = esc(i.nome || 'sistema');
+    const topo = (titulo, sub, extra = '') => `<div class="cabeca"><h1>${titulo}${sub ? ` <small>${sub}</small>` : ''}</h1><div class="acoes">${extra}<button class="b claro" id="recarregar-lojas">Atualizar</button></div></div>`;
     if (!i.url || !i.tem_chave) return `<div class="cabeca"><h1>Lojas dos clientes</h1></div><div class="vazio"><h2>Ligue o ${nome} primeiro</h2><p>As lojas e os anúncios vêm do ${nome}. Configure o endereço e a chave em ${elo('/integracoes', 'Integrações')}.</p></div>`;
     if (!LOJAS.clientes && !LOJAS.erro) { carregarLojas(); return `<div class="cabeca"><h1>Lojas dos clientes</h1></div><div class="vazio"><h2>Buscando os clientes no ${nome}…</h2></div>`; }
-    if (LOJAS.erro) return `<div class="cabeca"><h1>Lojas dos clientes</h1><div class="acoes"><button class="b claro" id="recarregar-lojas">Tentar de novo</button></div></div><div class="vazio"><h2>Não consegui ler as lojas</h2><p>${esc(LOJAS.erro)}</p></div>`;
-    const todas = LOJAS.clientes.flatMap(c => c.lojas.map(l => ({ ...l, cliente: c.nome })));
-    const loja = todas.find(l => l.id === q.loja) || null, busca = q.busca || '';
-    const lista = `<aside class="bloco lojas-lista">${LOJAS.clientes.map(c => `<details ${c.lojas.some(l => l.id === q.loja) || LOJAS.clientes.length <= 3 ? 'open' : ''}><summary>${esc(c.nome)} <small>${c.lojas.length} loja(s)</small></summary>
-      ${c.lojas.map(l => elo(rota('/lojas', { loja: l.id }), `<span class="mk">${esc(MKT[l.marketplace] ? l.marketplace : (l.marketplace || '—'))}</span>${esc(l.nome)}`, l.id === q.loja ? 'ativo' : '')).join('') || '<p class="pequeno">Sem lojas.</p>'}</details>`).join('') || '<p class="pequeno">Nenhum cliente no sistema.</p>'}</aside>`;
-    let direita;
-    if (!loja) direita = `<div class="vazio"><h2>Escolha uma loja</h2><p>Clique numa loja de um cliente, à esquerda, para ver os anúncios dela.</p></div>`;
-    else {
-      const ch = loja.id + '|' + busca, st = LOJAS.anuncios[ch];
+    if (LOJAS.erro) return `${topo('Lojas dos clientes', '')}<div class="vazio"><h2>Não consegui ler as lojas</h2><p>${esc(LOJAS.erro)}</p></div>`;
+    const MKNOME = { SHP: 'Shopee', ML: 'Mercado Livre', SHEIN: 'Shein', TIKTOK: 'TikTok', AMAZON: 'Amazon', MAGALU: 'Magalu', TEMU: 'Temu', KWAI: 'Kwai', NETSHOES: 'Netshoes' };
+    const ativa = l => (l.status || 'active') === 'active' && !l.aviso;
+    const icone = '<svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="8" cy="7" r="3"/><path d="M2.5 16.5c.6-3 2.8-4.5 5.5-4.5s4.9 1.5 5.5 4.5"/><path d="M13.5 4.2a3 3 0 0 1 0 5.6M15.5 12.4c1.2.7 2 2 2.3 4.1"/></svg>';
+    const cliente = LOJAS.clientes.find(c => c.id === q.cliente);
+    const todas = LOJAS.clientes.flatMap(c => c.lojas.map(l => ({ ...l, cliente: c.nome, cliente_id: c.id })));
+    const loja = todas.find(l => l.id === q.loja) || null;
+    const caminho = (...p) => `<nav class="trilha">${p.join('<span>›</span>')}</nav>`;
+
+    if (loja) {  // anuncios da loja, na largura toda
+      const busca = q.busca || '', ch = loja.id + '|' + busca, st = LOJAS.anuncios[ch];
       if (!st) carregarAnuncios(loja.id, busca, 1);
       const itens = st?.lista || [];
-      direita = `<div class="cabeca"><h1>${esc(loja.nome)} <small>${esc(loja.cliente)} · ${esc(MKT[loja.marketplace] || loja.marketplace)}${st && !st.carregando ? ` · ${st.total} anúncio(s)` : ''}</small></h1>
-        ${loja.url ? `<div class="acoes"><a class="b claro" href="${esc(loja.url)}" target="_blank" rel="noopener">Abrir a loja no ${esc(MKT[loja.marketplace] || 'marketplace')}</a></div>` : ''}</div>
+      return `${caminho(elo('/lojas', 'Clientes'), elo(rota('/lojas', { cliente: loja.cliente_id }), esc(loja.cliente)), esc(loja.nome))}
+        ${topo(esc(loja.nome), `${esc(loja.cliente)} · ${esc(MKNOME[loja.marketplace] || loja.marketplace)}${st && !st.carregando ? ` · ${st.total} anúncio(s)` : ''}`)}
+        ${loja.aviso ? `<p class="dica aviso-txt">${esc(loja.aviso)}</p>` : ''}
         <form class="busca-loja" id="busca-loja" data-loja="${esc(loja.id)}"><input type="search" name="busca" value="${esc(busca)}" placeholder="Buscar pelo título nesta loja"><button class="b claro">Buscar</button></form>
         ${st?.erro ? `<div class="vazio"><h2>Não consegui ler os anúncios</h2><p>${esc(st.erro)}</p></div>` : ''}
         ${st?.diag && !st.carregando ? `<p class="pequeno">${st.diag.com_capa} com foto, ${st.diag.sem_capa} sem foto${st.diag.fotos_ao_vivo ? ' (fotos lidas agora no marketplace)' : ''}.${st.diag.sem_capa ? ' Clique em <b>Atualizar</b> para buscar as fotos de novo.' : ''}</p>` : ''}
-        ${st?.carregando && st.aoVivo ? '<p class="dica">Lendo as fotos agora no marketplace; pode levar até 1 minuto…</p>' : ''}
+        ${st?.carregando ? `<p class="dica">${st.aoVivo ? 'Lendo as fotos agora no marketplace; pode levar até 1 minuto…' : 'Buscando os anúncios…'}</p>` : ''}
         ${itens.length ? `<div class="grade anuncios-loja">${itens.map(a => `<div class="cartao">${a.foto ? `<div class="foto"><img loading="lazy" src="${esc(a.foto)}" alt="" referrerpolicy="no-referrer" data-foto-mk="${esc(a.foto)}"></div>` : '<div class="foto sem-foto">Sem foto</div>'}
           <div class="legenda"><b title="${esc(a.titulo)}">${esc(a.titulo)}</b>${a.preco ? `<span class="preco-loja">R$ ${esc(a.preco)}</span>` : ''}
-          <span>${[a.status, a.vendas != null ? a.vendas + ' venda(s)' : '', a.estoque != null ? a.estoque + ' em estoque' : ''].filter(Boolean).map(esc).join(' · ')}</span>
+          <span>${[a.status, a.estoque != null ? a.estoque + ' em estoque' : ''].filter(Boolean).map(esc).join(' · ')}</span>
           <span class="pequeno">${esc(a.id)}</span><button class="b claro" data-abrir-mk="${esc(a.id)}" data-loja="${esc(loja.id)}">Abrir e modificar</button>${a.link ? `<a class="abrir" href="${esc(a.link)}" target="_blank" rel="noopener">Abrir no marketplace</a>` : ''}</div></div>`).join('')}</div>` : (st && !st.carregando && !st.erro ? `<div class="vazio"><h2>Nenhum anúncio${busca ? ' com esse título' : ''}</h2></div>` : '')}
-        ${st?.carregando ? `<p class="dica">Buscando anúncios no ${nome}…</p>` : ''}
         ${st && !st.carregando && itens.length < st.total ? `<div class="acoes"><button class="b claro" data-mais-loja="${esc(loja.id)}" data-busca="${esc(busca)}" data-pagina="${st.pagina}">Carregar mais (${st.total - itens.length} restantes)</button></div>` : ''}`;
     }
-    return `<div class="cabeca"><h1>Lojas dos clientes <small>${todas.length} loja(s) de ${LOJAS.clientes.length} cliente(s), lidas do ${nome}</small></h1><div class="acoes"><button class="b claro" id="recarregar-lojas">Atualizar</button></div></div>
-      <div class="lojas-tela">${lista}<section>${direita}</section></div>`;
+    if (cliente) {  // lojas de um cliente, separadas por CNPJ
+      const fmtCnpj = c => { const d = String(c || '').replace(/\D/g, ''); return d.length === 14 ? d.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5') : (c || ''); };
+      const pjs = (cliente.pjs || []).slice().sort((a, b) => (a.ordem ?? 99) - (b.ordem ?? 99));
+      const doPj = p => cliente.lojas.filter(l => l.pj && (l.pj === p.codigo || l.pj === p.rotulo));
+      const usadas = new Set(pjs.flatMap(p => doPj(p).map(l => l.id)));
+      const grupos = [...pjs.map(p => ({ p, lojas: doPj(p) })), { p: null, lojas: cliente.lojas.filter(l => !usadas.has(l.id)) }].filter(g => g.p || g.lojas.length);
+      const cardLoja = l => `<a href="#" class="card-loja" data-rota="${esc(rota('/lojas', { loja: l.id }))}">
+          <span class="mk-sigla mk-${esc(l.marketplace)}">${esc(l.marketplace)}</span>
+          <span class="txt"><b><i class="bolinha ${ativa(l) ? '' : 'bolinha-aviso'}"></i>${esc(l.nome)}</b><small>${esc(MKNOME[l.marketplace] || l.marketplace)}</small>${l.aviso ? `<small class="aviso-txt" title="${esc(l.aviso)}">${esc(l.aviso)}</small>` : ''}</span></a>`;
+      return `<div class="trilha-voltar"><a href="#" class="b claro" data-rota="/lojas">← Voltar aos clientes</a>${caminho(elo('/lojas', 'Clientes'), esc(cliente.nome))}</div>
+        ${topo(esc(cliente.nome), [cliente.gestor ? 'gestor ' + esc(cliente.gestor) : '', pjs.length + ' CNPJ(s)', cliente.lojas.length + ' loja(s)'].filter(Boolean).join(' · '))}
+        <div class="bloco pjs"><h2>Selecione o CNPJ e a loja</h2>
+        ${grupos.map(g => `<details class="pj" open><summary>
+            <span class="ico-pj"><svg viewBox="0 0 20 20" aria-hidden="true"><rect x="4" y="3" width="12" height="14" rx="1.5"/><path d="M7.5 6.5h1M11.5 6.5h1M7.5 9.5h1M11.5 9.5h1M9 17v-3h2v3"/></svg></span>
+            <span class="txt">${g.p ? `<span class="linha1">${g.p.codigo ? `<em class="cod">${esc(g.p.codigo)}</em>` : ''}<code>${esc(fmtCnpj(g.p.cnpj))}</code></span><small>${esc(g.p.rotulo)}</small>` : '<span class="linha1"><b>Sem CNPJ vinculado</b></span><small>lojas que não estão ligadas a nenhum CNPJ no B2X</small>'}</span>
+            <em class="qtd">${g.lojas.length} loja${g.lojas.length === 1 ? '' : 's'}</em></summary>
+            <div class="grade-lojas">${g.lojas.map(cardLoja).join('') || '<p class="pequeno">Nenhuma loja neste CNPJ.</p>'}</div></details>`).join('') || '<p class="pequeno">Este cliente não tem lojas.</p>'}</div>`;
+    }
+    // todos os clientes em cards
+    const busca = (q.q || '').trim().toLowerCase();
+    const lista = LOJAS.clientes.filter(c => !busca || [c.nome, ...(c.pjs || []).map(p => p.rotulo + ' ' + p.cnpj)].join(' ').toLowerCase().includes(busca));
+    return `${topo('Lojas dos clientes', `${todas.length} loja(s) de ${LOJAS.clientes.length} cliente(s), lidas do ${nome}`)}
+      <form class="busca-loja" id="busca-cliente"><input type="search" name="q" value="${esc(q.q || '')}" placeholder="Buscar cliente, empresa ou CNPJ"><button class="b claro">Buscar</button></form>
+      <div class="grade-clientes">${lista.map(c => { const at = c.lojas.filter(ativa).length, mks = {}; c.lojas.forEach(l => mks[l.marketplace] = (mks[l.marketplace] || 0) + 1);
+        return `<a href="#" class="card-cliente" data-rota="${esc(rota('/lojas', { cliente: c.id }))}">
+          <span class="ico">${icone}</span>
+          <span class="txt"><b><i class="bolinha ${at === c.lojas.length ? '' : 'bolinha-aviso'}"></i>${esc(c.nome)}</b><small>${esc(c.pjs?.[0]?.rotulo || c.pjs?.[0]?.cnpj || '')}</small></span>
+          <span class="nums"><em>${c.lojas.length} loja(s)</em><em class="${at === c.lojas.length ? 'n-ok' : 'n-aviso'}">${at} ativa(s)</em>${Object.entries(mks).sort((a, b) => b[1] - a[1]).slice(0, 4).map(([m, n]) => `<em class="mk-sigla mk-${esc(m)}">${esc(m)} ${n}</em>`).join('')}</span></a>`; }).join('') || '<p class="pequeno">Nenhum cliente com esse nome.</p>'}</div>`;
   },
   integracoes() {
     const i = INTEG();
@@ -867,6 +896,7 @@ document.addEventListener('error', e => {
   if (!img.dataset.viaServidor && /^https:/.test(orig)) { img.dataset.viaServidor = 1; img.src = '/api/b2x/foto?u=' + encodeURIComponent(orig); return; }
   const caixa = img.closest('.foto'); if (caixa) { caixa.classList.add('sem-foto'); caixa.textContent = 'Sem foto'; } else img.remove();
 }, true);
+document.addEventListener('submit', e => { if (e.target.id !== 'busca-cliente') return; e.preventDefault(); IR(rota('/lojas', { q: e.target.q.value.trim() })); });
 
 (() => {
   const $ = (s, r = document) => r.querySelector(s);

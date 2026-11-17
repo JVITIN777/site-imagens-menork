@@ -195,7 +195,13 @@ def lojas(canal: str = ""):
                           "status": x.get("status") or "", "aviso": x.get("aviso") or "", "pj": x.get("pj") or "",
                           "cliente": str(cl.get("nome") or ""), "cliente_id": str(cl.get("id") or "")})
     saida.sort(key=lambda x: (_sem_acento(x["cliente"]), _sem_acento(x["nome"])))
-    return {"lojas": saida, "sistema": config()["nome"]}
+    fmt_pj = d.get("formato_pjs") or ["cnpj_id", "rotulo", "ordem", "cnpj"]
+    info = [{"id": str(cl.get("id") or ""), "nome": str(cl.get("nome") or ""), "gestor": str(cl.get("gestor_nome") or ""),
+             "pjs": [{"rotulo": str(x.get("rotulo") or ""), "cnpj": str(x.get("cnpj") or ""), "ordem": x.get("ordem"),
+                      "codigo": f"PJ{int(x['ordem']):02d}" if str(x.get("ordem") or "").isdigit() else ""}
+                     for x in ((dict(zip(fmt_pj, p)) if isinstance(p, list) else p) for p in (cl.get("pjs") or [])) if isinstance(x, dict)]}
+            for cl in d.get("clientes") or []]
+    return {"lojas": saida, "clientes": info, "sistema": config()["nome"]}
 
 
 def _primeira_foto(x):

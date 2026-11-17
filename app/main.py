@@ -1046,14 +1046,14 @@ def _link(v):
 def lojas():
     from . import b2x
     r = b2x.lojas()
-    clientes = {}
+    clientes = {c["id"]: dict(c, lojas=[]) for c in r.get("clientes", [])}
     for x in r["lojas"]:
-        cl = clientes.setdefault(x["cliente_id"], {"id": x["cliente_id"], "nome": x["cliente"], "lojas": []})
+        cl = clientes.setdefault(x["cliente_id"], {"id": x["cliente_id"], "nome": x["cliente"], "gestor": "", "pjs": [], "lojas": []})
         sigla = {"shopee": "SHP", "mercadolivre": "ML", "shein": "SHEIN", "tiktokshop": "TIKTOK", "amazon": "AMAZON",
                  "magalu": "MAGALU", "temu": "TEMU", "kwai": "KWAI", "netshoes": "NETSHOES"}.get(x["canal"], x["canal"].upper())
         cl["lojas"].append({"id": x["id"], "nome": x["nome"], "marketplace": sigla, "canal": x["canal"], "url": "",
-                            "anuncios": None, "status": x["status"], "aviso": x["aviso"]})
-    return {"sistema": r["sistema"], "clientes": list(clientes.values())}
+                            "anuncios": None, "status": x["status"], "aviso": x["aviso"], "pj": x["pj"]})
+    return {"sistema": r["sistema"], "clientes": sorted(clientes.values(), key=lambda c: b2x._sem_acento(c["nome"]))}
 
 
 @app.get("/api/lojas/{loja}/anuncios")
