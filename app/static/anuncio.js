@@ -4,7 +4,7 @@
   // Shopee: 9 fotos do anuncio (1a = capa) + uma capa por variacao de cor + tamanhos.
   // Mercado Livre: cada cor tem as suas fotos (ate 10, 1a = principal) + tamanhos; titulo ate 60 caracteres.
   const MODOS = { shopee: { nome: 'Shopee', fotos: 9 }, ml: { nome: 'Mercado Livre', fotos: 10, titulo: 60 } };
-  let E = null, corAtiva = null, corPrevia = null;
+  let E = null, corAtiva = null, corPrevia = null, dadosAberto = null;
   const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const ml = () => E.modo === 'ml';
   const variacao = cor => E.variacoes.find(v => v.cor === cor);
@@ -62,15 +62,19 @@
          <p class="pequeno">A Shopee aceita 9 fotos. A primeira é a capa. Arraste para mudar a ordem ou para colocar uma imagem.</p>`;
 
     const limite = M.titulo ? ` maxlength="${M.titulo + 40}"` : '';
-    const dados = `<div class="bloco dados">
-        <label class="largo">Título do anúncio <small id="conta-titulo"></small><input id="c-titulo" data-campo="titulo" value="${esc(a.titulo)}"${limite} placeholder="Ex.: Chinelo feminino nuvem confortável"></label>
+    // titulo, precos e descricao: compactos, numa caixa que abre e fecha (fica no fim; as fotos vem primeiro)
+    if (dadosAberto === null) dadosAberto = !a.titulo || !a.preco || !a.descricao;
+    const faltaDados = [!a.titulo && 'título', !a.preco && 'preço', !a.descricao && 'descrição'].filter(Boolean);
+    const resumoDados = [a.titulo ? esc(a.titulo) : '', a.preco ? (ml() && a.preco_antigo ? `R$ ${esc(a.preco_antigo)} → R$ ${esc(a.preco)}` : 'R$ ' + esc(a.preco)) : ''].filter(Boolean).join(' · ');
+    const dados = `<details class="bloco dados-dobra" ${dadosAberto ? 'open' : ''}><summary><b>Título, preço e descrição</b><span class="resumo-dados">${resumoDados || 'nada preenchido ainda'}</span>${faltaDados.length ? `<em class="falta-dados">falta ${faltaDados.join(', ')}</em>` : ''}</summary>
+      <div class="dados compacto">
+        <label class="largo">Título <small id="conta-titulo"></small><input id="c-titulo" data-campo="titulo" value="${esc(a.titulo)}"${limite} placeholder="Ex.: Chinelo feminino nuvem confortável"></label>
         ${ml() ? `<label>Preço cheio (riscado)<input id="c-preco_antigo" data-campo="preco_antigo" value="${esc(a.preco_antigo)}" placeholder="79,90" inputmode="decimal"></label>
-        <label>Preço promocional (o cliente paga)<input id="c-preco" data-campo="preco" value="${esc(a.preco)}" placeholder="49,90" inputmode="decimal"></label>
-        <p class="pequeno largo">No Mercado Livre o anúncio sobe com o preço cheio e o promocional entra como promoção (desconto direto), com o riscado e o % OFF. A promoção renova sozinha a cada 30 dias. Sem preço cheio maior, sobe só com o preço promocional, sem promoção.</p>`
+        <label title="No Mercado Livre o anúncio sobe com o preço cheio e este entra como promoção (desconto direto), renovada a cada 30 dias">Preço promocional ⓘ<input id="c-preco" data-campo="preco" value="${esc(a.preco)}" placeholder="49,90" inputmode="decimal"></label>`
         : `<label>Preço<input id="c-preco" data-campo="preco" value="${esc(a.preco)}" placeholder="49,90" inputmode="decimal"></label>
         <label>Preço antigo, riscado<input id="c-preco_antigo" data-campo="preco_antigo" value="${esc(a.preco_antigo)}" placeholder="79,90" inputmode="decimal"></label>`}
-        <label class="largo">Descrição<textarea id="c-descricao" data-campo="descricao" rows="4" placeholder="Texto da descrição do anúncio">${esc(a.descricao)}</textarea></label>
-      </div>`;
+        <label class="largo">Descrição<textarea id="c-descricao" data-campo="descricao" rows="2" placeholder="Texto da descrição do anúncio">${esc(a.descricao)}</textarea></label>
+      </div></details>`;
 
     const cores = ml()
       ? `<div class="bloco"><h2>Variação 1: Cor <small>clique numa cor para montar as fotos dela</small></h2>
@@ -94,12 +98,12 @@
     const rolCol = editor.querySelector('.slots-col')?.scrollTop || 0, rolAbas = editor.querySelector('.abas-cor')?.scrollTop || 0, rolJanela = window.scrollY;
     editor.innerHTML = `<div class="com-slots">
       <div class="slots-col">${fotosCol}</div>
-      <div class="resto">${dados}${cores}${blocoTamanhos()}
+      <div class="resto">${cores}${blocoTamanhos()}
       <div class="bloco"><h2>Imagens deste anúncio fora ${ml() ? (v ? 'das fotos da cor ' + esc(v.cor) : 'das cores') : 'das fotos'} <small>${fora.length}</small></h2>
         <div class="trilho">${fora.map(i => peca(i, colocar + botao('desvincular', '×', 'Tirar deste anúncio'), { arrasta: i.status === 'aprovada' })).join('') || vaga('Tudo que está neste anúncio já foi colocado.')}</div></div>
       ${E.sugestoes.length ? `<div class="bloco"><h2>Outras aprovadas de ${esc(E.produto)} <small>ainda fora deste anúncio</small></h2>
         <div class="trilho">${E.sugestoes.map(i => peca(i, colocar, { arrasta: true })).join('')}</div></div>` : ''}
-      </div></div>`;
+      ${dados}</div></div>`;
     const col = editor.querySelector('.slots-col'), abas = editor.querySelector('.abas-cor');
     if (col) col.scrollTop = rolCol; if (abas) abas.scrollTop = rolAbas;
     if (Math.abs(window.scrollY - rolJanela) > 1) window.scrollTo(0, rolJanela);
@@ -138,6 +142,7 @@
     if (acao === 'cor' && ml()) { const img = [...E.todas, ...E.sugestoes].find(i => i.id === imagem); corAtiva = img?.cor || null; }
     fazer({ acao, imagem });
   });
+  editor.addEventListener('toggle', e => { if (e.target.classList?.contains('dados-dobra')) dadosAberto = e.target.open; }, true);
   editor.addEventListener('input', e => {
     const campo = e.target.dataset.campo; if (!campo) return;
     E.anuncio[campo] = e.target.value; contarTitulo(); desenharPrevia();
@@ -240,3 +245,4 @@
   document.addEventListener('menork:mudou', carregar);
   carregar().catch(e => aviso(e.message));
 })();
+
