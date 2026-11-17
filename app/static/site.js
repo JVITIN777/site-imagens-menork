@@ -1514,13 +1514,10 @@ window.ANUNCIO = (ID) => {
     if (dica) dica.textContent = ml() ? 'Prévia no jeito do Mercado Livre: toque numa cor e as fotos mudam para as daquela cor.' : 'Prévia no jeito da Shopee: deslize as fotos e toque numa cor para ver a capa daquela variação.';
 
     const fotosCol = ml()
-      ? `<h2>Fotos da cor <small>${v ? v.fotos.length : 0} de 10</small></h2>
-         ${E.variacoes.length ? `<div class="abas-cor">${E.variacoes.map(x => `<button type="button" data-cor-aba="${esc(x.cor)}" class="${x.cor === corAtiva ? 'ativo' : ''}"><img src="/mini/${(x.fotos[0] || x.capa).id}" alt="">${esc(x.cor)} <small>${x.fotos.length}</small></button>`).join('')}</div>
-         <div class="slots" id="slots">${espacos(lista, M.fotos, 'Principal')}</div>
-         <p class="pequeno">No Mercado Livre cada cor tem as suas fotos. A primeira é a principal da cor: use o fundo branco ou a capa daquela cor.</p>`
-        : vaga('Nenhuma cor ainda. Clique em Nova cor numa foto de fundo branco.')}`
-      : `<h2>Fotos do anúncio <small>${cheias} de ${M.fotos}</small></h2><div class="slots" id="slots">${espacos(lista, M.fotos, 'Capa')}</div>
-         <p class="pequeno">A Shopee aceita 9 fotos. A primeira é a capa. Arraste para mudar a ordem ou para colocar uma imagem.</p>`;
+      ? (E.variacoes.length ? `<h2>Fotos da cor ${v ? esc(v.cor) : ''} <small>${v ? v.fotos.length : 0} de 10 · a 1ª é a principal da cor</small></h2>
+         <div class="slots" id="slots">${espacos(lista, M.fotos, 'Principal')}</div>`
+        : `<h2>Fotos da cor</h2>${vaga('Nenhuma cor ainda. Clique em Nova cor numa foto de fundo branco, aqui embaixo.')}`)
+      : `<h2>Fotos do anúncio <small>${cheias} de ${M.fotos} · a 1ª é a capa · arraste para mudar a ordem</small></h2><div class="slots" id="slots">${espacos(lista, M.fotos, 'Capa')}</div>`;
 
     const limite = M.titulo ? ` maxlength="${M.titulo + 40}"` : '';
     // titulo, precos e descricao: compactos, numa caixa que abre e fecha (fica no fim; as fotos vem primeiro)
@@ -1537,18 +1534,12 @@ window.ANUNCIO = (ID) => {
         <label class="largo">Descrição<textarea id="c-descricao" data-campo="descricao" rows="2" placeholder="Texto da descrição do anúncio">${esc(a.descricao)}</textarea></label>
       </div></details>`;
 
-    const cores = ml()
-      ? `<div class="bloco"><h2>Variação 1: Cor <small>clique numa cor para montar as fotos dela</small></h2>
-          <div class="trilho">${E.variacoes.map(x => `<div class="peca var-cor ${x.cor === corAtiva ? 'escolhida' : ''}" data-cor="${esc(x.cor)}" data-cor-alvo="${esc(x.cor)}">
-            <div class="foto" data-cor-aba="${esc(x.cor)}"><img loading="lazy" src="/mini/${(x.fotos[0] || x.capa).id}" alt=""></div>
-            <input class="nome-cor" value="${esc(x.cor)}" aria-label="Nome da cor"><span class="rotulo">${x.fotos.length} de 10 fotos</span>
-            <div class="botoes">${botao('tirar_cor', 'Tirar a cor')}</div></div>`).join('') || vaga('Nenhuma cor ainda. Clique em Nova cor numa foto de fundo branco.')}</div></div>`
-      : `<div class="bloco"><h2>Variação 1: Cor <small>cada cor tem a sua capa da variação</small></h2>
-          <div class="trilho">${E.variacoes.map(x => `<div class="peca var-cor" data-cor="${esc(x.cor)}" data-cor-alvo="${esc(x.cor)}">
-            <i class="etiqueta">Capa da variação</i><div class="foto" data-ver="${x.capa.id}"><img loading="lazy" src="${IMG(x.capa.id)}" alt=""></div>
-            <input class="nome-cor" value="${esc(x.cor)}" aria-label="Nome da cor">
-            <div class="botoes">${botao('tirar_cor', 'Tirar a cor')}</div></div>`).join('') || vaga('Nenhuma cor ainda. Clique em Cor numa foto (de preferência a capa daquela cor).')}</div>
-          <p class="pequeno">Para trocar a capa de uma variação, arraste uma imagem aprovada para cima da cor, ou clique em Cor na imagem e escolha qual. Cor nova usa a cor escrita na própria foto.</p></div>`;
+    const chip = x => `<div class="peca var-cor chip-cor ${ml() && x.cor === corAtiva ? 'escolhida' : ''}" data-cor="${esc(x.cor)}" data-cor-alvo="${esc(x.cor)}">
+        <button type="button" class="chip-foto" ${ml() ? `data-cor-aba="${esc(x.cor)}"` : `data-ver="${x.capa.id}"`} title="${ml() ? 'Montar as fotos desta cor' : 'Ver a capa da variação'}"><img loading="lazy" src="/mini/${(ml() && x.fotos[0] ? x.fotos[0] : x.capa).id}" alt=""></button>
+        <span class="chip-txt"><input class="nome-cor" value="${esc(x.cor)}" aria-label="Nome da cor"><small>${ml() ? x.fotos.length + ' de 10 fotos' : 'capa da variação'}</small></span>
+        <button type="button" class="chip-tirar" data-acao="tirar_cor" title="Tirar esta cor do anúncio">×</button></div>`;
+    const cores = `<div class="bloco cores-compacto"><h2>Variação 1: Cor <small>${E.variacoes.length} cor(es) · ${ml() ? 'clique numa cor para montar as fotos dela lá em cima' : 'arraste uma imagem para cima de uma cor para trocar a capa da variação'}</small></h2>
+      <div class="chips-cor">${E.variacoes.map(chip).join('') || `<p class="pequeno">Nenhuma cor ainda. Clique em ${ml() ? 'Nova cor' : 'Cor'} numa foto aqui embaixo.</p>`}</div></div>`;
 
     const usadas = new Set(ml() ? (v ? v.fotos.map(i => i.id) : []) : [E.capa?.id, ...E.galeria.map(i => i.id), ...E.variacoes.map(x => x.capa.id)]);
     const fora = [...E.todas.filter(i => !usadas.has(i.id)), ...E.disponiveis.filter(i => i.status !== 'aprovada')];
@@ -1557,8 +1548,8 @@ window.ANUNCIO = (ID) => {
       : botao('capa', 'Capa') + botao('foto', 'Foto') + botao('variacao', 'Cor', 'Usa como capa da variação de uma cor');
     // guarda onde voce deixou as rolagens: redesenhar nao pode jogar a coluna de volta para o topo
     const rolCol = editor.querySelector('.slots-col')?.scrollTop || 0, rolAbas = editor.querySelector('.abas-cor')?.scrollTop || 0, rolJanela = window.scrollY;
-    editor.innerHTML = `<div class="com-slots">
-      <div class="slots-col">${fotosCol}</div>
+    editor.innerHTML = `<div class="editor-um">
+      <div class="bloco fotos-principal">${fotosCol}</div>
       <div class="resto">${cores}${blocoTamanhos()}
       <div class="bloco"><h2>Imagens deste anúncio fora ${ml() ? (v ? 'das fotos da cor ' + esc(v.cor) : 'das cores') : 'das fotos'} <small>${fora.length}</small></h2>
         <div class="trilho">${fora.map(i => peca(i, colocar + botao('desvincular', '×', 'Tirar deste anúncio'), { arrasta: i.status === 'aprovada' })).join('') || vaga('Tudo que está neste anúncio já foi colocado.')}</div></div>
@@ -1594,7 +1585,10 @@ window.ANUNCIO = (ID) => {
     const ver = e.target.closest('[data-ver]'); if (ver) return abrir(+ver.dataset.ver);
     const b = e.target.closest('[data-acao]'); if (!b) return;
     const p = b.closest('.peca'), imagem = +p.dataset.img, acao = b.dataset.acao;
-    if (acao === 'tirar_cor') return fazer({ acao, cor: p.dataset.cor });
+    if (acao === 'tirar_cor') {
+      if (!b.dataset.ok) { b.dataset.ok = 1; b.classList.add('confirmar'); b.textContent = 'Tirar?'; setTimeout(() => { if (b.isConnected) { delete b.dataset.ok; b.classList.remove('confirmar'); b.textContent = '×'; } }, 4000); return; }
+      return fazer({ acao, cor: p.dataset.cor });
+    }
     if (acao === 'desvincular') return api('/api/acao', { ids: [imagem], acao, anuncio_id: ID }).then(() => document.dispatchEvent(new Event('menork:mudou')));
     if (acao === 'variacao') return escolherCor(p, imagem);
     if (acao === 'var_para') return fazer({ acao: 'cor', imagem, cor: b.dataset.para });
