@@ -570,10 +570,12 @@ document.addEventListener('click', e => { if (!e.target.closest('#buscar-clickup
 
 document.addEventListener('submit', async e => {
   const f = e.target; if (f.id !== 'form-integ') return; e.preventDefault();
-  try { await SRV.salvarIntegracao({ nome: f.nome.value, url: f.url.value, chave: f.chave.value, rascunho: f.rascunho.checked }); await RENDER(); window.menork.aviso('Integração salva.'); } catch (err) { window.menork.aviso(err.message, null, null, 10); }
+  try { await SRV.salvarIntegracao({ nome: f.nome.value, url: f.url.value, chave: f.chave.value, rascunho: true }); await RENDER(); window.menork.aviso('Integração salva.'); } catch (err) { window.menork.aviso(err.message, null, null, 10); }
 });
 document.addEventListener('click', async e => {
-  if (e.target.closest('#testar-integ')) { window.menork.aviso('Testando a conexão…', null, null, 30); try { const r = await SRV.testarIntegracao(); window.menork.aviso(r.msg, null, null, 12); } catch (err) { window.menork.aviso(err.message, null, null, 12); } }
+  if (e.target.closest('#testar-integ')) { window.menork.aviso('Salvando e testando a conexão…', null, null, 30); try {
+    const f = document.getElementById('form-integ'); if (f) await SRV.salvarIntegracao({ nome: f.nome.value, url: f.url.value, chave: f.chave.value, rascunho: true });
+    const r = await SRV.testarIntegracao(); await RENDER(); window.menork.aviso(r.msg, null, null, 12); } catch (err) { window.menork.aviso(err.message, null, null, 12); } }
   const ap = e.target.closest('#apagar-chave'); if (ap) { if (!ap.dataset.ok) { ap.dataset.ok = 1; ap.textContent = 'Confirmar: apagar a chave'; ap.classList.add('vermelho'); return; } await SRV.salvarIntegracao({ ...INTEG(), chave: '', apagar_chave: true }); await RENDER(); window.menork.aviso('Chave apagada.'); }
 });
 

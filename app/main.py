@@ -971,6 +971,9 @@ async def integracao_salvar(request: Request):
     url = str(d.get("url", "")).strip().rstrip("/")
     if url and not re.match(r"^https?://", url):
         raise HTTPException(400, "O endereço precisa começar com https:// (ou http://).")
+    if url and "/dashboard" in url:
+        raise HTTPException(400, "Esse é o endereço do painel, que abre no navegador. Use a Base da API que está no começo "
+                                 "da documentação do B2X (o endereço que termina em /api-b2x).")
     n.gravar_ajuste("integ_nome", (str(d.get("nome", "")).strip() or "B2X")[:30])
     n.gravar_ajuste("integ_url", url)
     n.gravar_ajuste("integ_rascunho", "1" if d.get("rascunho", True) else "0")
