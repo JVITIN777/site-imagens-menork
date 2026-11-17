@@ -77,6 +77,14 @@
   $('#barra-limpar')?.addEventListener('click', () => { $$('.cartao.marcado').forEach(c => { c.classList.remove('marcado'); $('input', c).checked = false; }); atualizarBarra(); });
   $$('[data-lote]').forEach(b => b.addEventListener('click', async () => {
     const ids = marcados(), acao = b.dataset.lote; if (!ids.length) return;
+    if (acao === 'excluir') {
+      if (!b.dataset.ok) { b.dataset.ok = 1; b.textContent = `Confirmar: excluir ${ids.length}`; b.classList.add('vermelho'); b.classList.remove('claro');
+        setTimeout(() => { if (b.dataset.ok) { delete b.dataset.ok; b.textContent = 'Excluir'; b.classList.remove('vermelho'); b.classList.add('claro'); } }, 6000); return; }
+      delete b.dataset.ok; b.textContent = 'Excluindo…';
+      try { await api('/api/acao', { ids, acao: 'excluir' }); sessionStorage.setItem('recado', `${ids.length} imagem(ns) excluída(s) de vez.`); location.reload(); }
+      catch (e) { b.textContent = 'Excluir'; aviso(e.message); }
+      return;
+    }
     if (acao === 'ref_sim' || acao === 'ref_nao') {
       const aprovadas = ids.filter(id => cartao(id)?.dataset.status === 'aprovada');
       if (!aprovadas.length) return aviso('Só imagem aprovada pode virar referência. Aprove primeiro.');

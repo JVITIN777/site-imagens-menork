@@ -23,7 +23,7 @@ app=app[:i]+"      const id = atual.id; RENDER(); abrir(id);\n"+app[f:]
 app=troca(app,"$('#enviar')?.addEventListener('change', async e => {","document.addEventListener('change', async e => {\n    if (e.target.id !== 'enviar') return;")
 app=troca(app,"$('#ler-agora')?.addEventListener('click', async () => {","document.addEventListener('click', async e => {\n    if (!e.target.closest('#ler-agora')) return;")
 app=troca(app,"if (r.erros.length) alert('Não consegui ler: ' + r.erros.join(', '));","")
-app,k=re.subn(r"sessionStorage\.setItem\('recado', (.+?)\);\s*location\.reload\(\);", r"RENDER(); aviso(\1);", app); assert k==2,k
+app,k=re.subn(r"sessionStorage\.setItem\('recado', (.+?)\);\s*location\.reload\(\);", r"RENDER(); aviso(\1);", app); assert k==3,k
 app=troca(app,"  try { const r = sessionStorage.getItem('reabrir'); if (r) { sessionStorage.removeItem('reabrir'); if (cartao(r)) abrir(+r); } } catch (e) {}\n","")
 app=troca(app,"  try { const r = sessionStorage.getItem('recado'); if (r) { sessionStorage.removeItem('recado'); aviso(r); } } catch (e) {}\n","")
 app=troca(app,"  async function decidir(ids, acao) {\n    try { await api('/api/acao', { ids, acao }); }","  async function decidir(ids, acao, motivo) {\n    if (acao === 'reprovar' && !motivo) { motivo = await window.PEDIR_MOTIVO(ids.length); if (!motivo) return false; }\n    try { await api('/api/acao', { ids, acao, motivo }); }")

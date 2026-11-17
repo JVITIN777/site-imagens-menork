@@ -1436,6 +1436,15 @@ async def acao(request: Request):
         elif oque in ("ref_sim", "ref_nao"):
             c.execute(f"UPDATE imagens SET ref=? WHERE id IN ({marcas}) AND status='aprovada'",
                       [1 if oque == "ref_sim" else 0, *ids])
+        elif oque == "excluir":  # apaga de vez (entrou por engano): sem virar reprovacao nem ir para a Lista de erros
+            for l in c.execute(f"SELECT * FROM imagens WHERE id IN ({marcas})", ids).fetchall():
+                try:
+                    if l["arquivo"]:
+                        n.caminho_imagem(l).unlink(missing_ok=True)
+                    (n.pasta_miniaturas() / f"{l['id']}.jpg").unlink(missing_ok=True)
+                except OSError as e:
+                    n.registrar(f"nao consegui apagar o arquivo da imagem {l['id']}: {e}")
+            c.execute(f"DELETE FROM imagens WHERE id IN ({marcas})", ids)
         elif oque == "estilo":
             estilo = " ".join(str(d.get("estilo", "")).split())[:40]
             estilo = estilo[:1].upper() + estilo[1:]
