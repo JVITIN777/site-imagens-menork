@@ -252,10 +252,21 @@ def anuncio(loja: str, anuncio: str, canal: str = ""):
                 for cor in _cores_do(x):
                     por_cor.setdefault(cor, str(x.get("anuncio_id") or ""))
         cores = list(por_cor) or cores
+    fotos = []
+    for f in (a.get("fotos") or a.get("imagens") or a.get("fotos_urls") or [])[:20]:
+        u = f if isinstance(f, str) else (f.get("url") or f.get("link") or "") if isinstance(f, dict) else ""
+        if str(u).startswith("http"):
+            fotos.append(u)
+    lista = [{"cor": str(v.get("cor") or ""), "tamanho": str(v.get("tamanho") or ""), "preco": v.get("preco"),
+              "estoque": v.get("estoque"), "sku": str(v.get("sku") or v.get("seller_sku") or "")}
+             for v in (a.get("variacoes") or [])[:150] if isinstance(v, dict)]
+    desc = a.get("descricao") or a.get("descricao_texto") or ""
     return {"id": str(a.get("anuncio_id") or anuncio), "titulo": a.get("titulo_completo") or a.get("titulo") or "",
-            "capa": a.get("capa_url") or "", "qtd_fotos": a.get("qtd_fotos"), "status": a.get("status") or "",
-            "cores": cores, "familia": bool(por_cor), "anuncio_da_cor": por_cor,
-            "variacoes": len(a.get("variacoes") or []) or len(familia), "url": a.get("url") or ""}
+            "capa": a.get("capa_url") or (fotos[0] if fotos else ""), "qtd_fotos": a.get("qtd_fotos"), "status": a.get("status") or "",
+            "cores": cores, "familia": bool(por_cor) or len(familia) > 1, "anuncio_da_cor": por_cor,
+            "variacoes": len(a.get("variacoes") or []) or len(familia), "url": a.get("url") or a.get("link") or "",
+            "fotos": fotos, "lista_variacoes": lista, "descricao": str(desc)[:5000] if isinstance(desc, str) else "",
+            "preco": a.get("preco"), "estoque": a.get("estoque")}
 
 
 # ------------------------------------------------------------ trocar as fotos de um anuncio que ja existe
@@ -342,6 +353,44 @@ def _limpar_preparos():
         _preparos.pop(k, None)
 
 
+@rota.post("/api/b2x/editar/simular")
+async def editar_simular(request: Request):
+    """Muda titulo, descricao, preco ou estoque de um anuncio de qualquer loja. So o que veio preenchido muda."""
+    d = await request.json()
+    loja, anuncio_id = str(d["loja"]), str(d["anuncio"])
+    corpo = {"loja": loja, "anuncio": anuncio_id}
+    if str(d.get("titulo") or "").strip():
+        corpo["titulo"] = str(d["titulo"]).strip()[:255]
+    if str(d.get("descricao") or "").strip():
+        corpo["descricao"] = str(d["descricao"]).strip()[:20000]
+    if str(d.get("preco") or "").strip():
+        p = _preco(d["preco"])
+        if not p:
+            raise HTTPException(400, "Preço inválido. Use por exemplo 49,90.")
+        corpo["preco"] = p
+    if str(d.get("estoque") or "").strip():
+        try:
+            corpo["estoque"] = int(str(d["estoque"]).strip())
+        except ValueError:
+            raise HTTPException(400, "Estoque inválido: use um número inteiro.")
+    if len(corpo) == 2:
+        raise HTTPException(400, "Preencha pelo menos um campo para mudar.")
+    if d.get("familia") and ("preco" in corpo or "estoque" in corpo):
+        corpo["aplicar_em"] = "familia"  # ML com um anuncio por cor/tamanho: o mesmo valor em todos
+    status, r = chamar("POST", "/v1/anuncios/editar", dict(corpo, simular=True), timeout=150)
+    ok = 200 <= status < 300 and r.get("success", True) is not False
+    rot = "Mudar " + ", ".join({"titulo": "título", "descricao": "descrição", "preco": "preço", "estoque": "estoque"}[k]
+                               for k in corpo if k in ("titulo", "descricao", "preco", "estoque"))
+    envio = {"rotulo": rot, "corpo": corpo, "pedido_id": r.get("pedido_id") or ""}
+    token = secrets.token_hex(12)
+    _limpar_preparos()
+    _preparos[token] = {"aid": None, "loja": loja, "anuncio": anuncio_id, "canal": d.get("canal", ""), "envios": [envio], "quando": time.time()}
+    return {"token": token, "pode_confirmar": ok and bool(envio["pedido_id"]),
+            "envios": [{"rotulo": rot, "ok": ok, "mudancas": _mudancas(r), "avisos": [_frase(x) for x in (r.get("avisos") or [])][:8],
+                        "erro": "" if ok else (texto_erro(r) or f"respondeu {status}"), "pedido_id": envio["pedido_id"]}]}
+
+
+@rota.post("/api/b2x/confirmar")
 @rota.post("/api/b2x/fotos/confirmar")
 async def fotos_confirmar(request: Request):
     d = await request.json()
@@ -360,8 +409,11 @@ async def fotos_confirmar(request: Request):
         saida.append({"rotulo": e["rotulo"], "ok": ok, "situacao": r.get("situacao") or ("feito" if ok else "recusado"),
                       "erro": "" if ok else texto_erro(r), "ainda_antigos": conferido.get("campos_ainda_antigos") or [],
                       "desfazer": bool(r.get("desfazer_com"))})
-        _registrar(p["aid"], ok, f"trocar fotos {p['anuncio']} ({e['rotulo']}): {saida[-1]['situacao']}", p["anuncio"],
-                   r.get("desfazer_com"))
+        if p["aid"]:
+            _registrar(p["aid"], ok, f"trocar fotos {p['anuncio']} ({e['rotulo']}): {saida[-1]['situacao']}", p["anuncio"],
+                       r.get("desfazer_com"))
+        else:
+            n.registrar(f"B2X: {e['rotulo']} em {p['anuncio']} (loja {p['loja']}): {saida[-1]['situacao']}")
     _preparos.pop(str(d.get("token")), None)
     return {"envios": saida}
 

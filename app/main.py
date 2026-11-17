@@ -34,6 +34,7 @@ def versao_logo():
 
 
 tpl.env.globals["versao_logo"] = versao_logo
+tpl.env.globals["versao_site"] = lambda: atu.versao_local()
 
 LIVRES = ("/static", "/entrar", "/criar-senha", "/logo")
 LOCAIS = ("127.0.0.1", "::1", "localhost")
@@ -1048,8 +1049,10 @@ def lojas():
     clientes = {}
     for x in r["lojas"]:
         cl = clientes.setdefault(x["cliente_id"], {"id": x["cliente_id"], "nome": x["cliente"], "lojas": []})
-        cl["lojas"].append({"id": x["id"], "nome": x["nome"], "marketplace": b2x.CANAIS.get(x["canal"], x["canal"]).upper(),
-                            "url": "", "anuncios": None})
+        sigla = {"shopee": "SHP", "mercadolivre": "ML", "shein": "SHEIN", "tiktokshop": "TIKTOK", "amazon": "AMAZON",
+                 "magalu": "MAGALU", "temu": "TEMU", "kwai": "KWAI", "netshoes": "NETSHOES"}.get(x["canal"], x["canal"].upper())
+        cl["lojas"].append({"id": x["id"], "nome": x["nome"], "marketplace": sigla, "canal": x["canal"], "url": "",
+                            "anuncios": None, "status": x["status"], "aviso": x["aviso"]})
     return {"sistema": r["sistema"], "clientes": list(clientes.values())}
 
 

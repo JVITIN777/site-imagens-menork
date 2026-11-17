@@ -360,7 +360,7 @@ Object.assign(TELAS, {
         ${itens.length ? `<div class="grade anuncios-loja">${itens.map(a => `<div class="cartao">${a.foto ? `<div class="foto"><img loading="lazy" src="${esc(a.foto)}" alt="" referrerpolicy="no-referrer"></div>` : '<div class="foto sem-foto">Sem foto</div>'}
           <div class="legenda"><b title="${esc(a.titulo)}">${esc(a.titulo)}</b>${a.preco ? `<span class="preco-loja">R$ ${esc(a.preco)}</span>` : ''}
           <span>${[a.status, a.vendas != null ? a.vendas + ' venda(s)' : '', a.estoque != null ? a.estoque + ' em estoque' : ''].filter(Boolean).map(esc).join(' · ')}</span>
-          <span class="pequeno">${esc(a.id)}</span>${a.link ? `<a class="abrir" href="${esc(a.link)}" target="_blank" rel="noopener">Abrir no marketplace</a>` : ''}</div></div>`).join('')}</div>` : (st && !st.carregando && !st.erro ? `<div class="vazio"><h2>Nenhum anúncio${busca ? ' com esse título' : ''}</h2></div>` : '')}
+          <span class="pequeno">${esc(a.id)}</span><button class="b claro" data-abrir-mk="${esc(a.id)}" data-loja="${esc(loja.id)}">Abrir e modificar</button>${a.link ? `<a class="abrir" href="${esc(a.link)}" target="_blank" rel="noopener">Abrir no marketplace</a>` : ''}</div></div>`).join('')}</div>` : (st && !st.carregando && !st.erro ? `<div class="vazio"><h2>Nenhum anúncio${busca ? ' com esse título' : ''}</h2></div>` : '')}
         ${st?.carregando ? `<p class="dica">Buscando anúncios no ${nome}…</p>` : ''}
         ${st && !st.carregando && itens.length < st.total ? `<div class="acoes"><button class="b claro" data-mais-loja="${esc(loja.id)}" data-busca="${esc(busca)}" data-pagina="${st.pagina}">Carregar mais (${st.total - itens.length} restantes)</button></div>` : ''}`;
     }
@@ -526,3 +526,65 @@ document.addEventListener('paste', e => {
     .map((f, k) => f.name && f.name !== 'image.png' ? f : new File([f], `colada_${Date.now()}_${k + 1}.${(f.type.split('/')[1] || 'png').replace('jpeg', 'jpg')}`, { type: f.type }));
   if (!arquivos.length) return; e.preventDefault(); REF_NOVAS.juntar(arquivos, z.dataset.soltaRef);
 });
+
+// ---- Lojas dos clientes: abrir um anuncio e modificar (titulo, descricao, preco, estoque, fotos)
+const MK = { atual: null };
+const lojaPorId = id => (LOJAS.clientes || []).flatMap(c => c.lojas.map(l => ({ ...l, cliente: c.nome }))).find(l => l.id === id);
+async function mkAbrir(lojaId, anuncioId) {
+  const loja = lojaPorId(lojaId); MK.loja = loja; b2Carregando('Lendo o anúncio no ' + INTEG().nome + '…');
+  try { MK.atual = await b2get(`/api/b2x/anuncio?loja=${encodeURIComponent(lojaId)}&anuncio=${encodeURIComponent(anuncioId)}&canal=${encodeURIComponent(loja?.canal || '')}`); mkMostrar(); }
+  catch (err) { b2Erro(err); }
+}
+function mkMostrar() {
+  const d = MK.atual, l = MK.loja, podeFotos = ['shopee', 'mercadolivre'].includes(l?.canal);
+  const fotos = d.fotos.length ? d.fotos : (d.capa ? [d.capa] : []);
+  const vs = d.lista_variacoes;
+  b2Tela(`<h2>${esc(d.titulo || d.id)} <small>${esc(l?.cliente || '')} · ${esc(l?.nome || '')}</small></h2>
+    <p class="pequeno">${esc(d.id)}${d.status ? ' · ' + esc(d.status) : ''}${d.preco != null ? ' · R$ ' + esc(d.preco) : ''}${d.estoque != null ? ' · ' + esc(d.estoque) + ' em estoque' : ''}${d.familia ? ' · um anúncio por cor e tamanho' : ''}</p>
+    ${fotos.length ? `<div class="mk-fotos">${fotos.map(u => `<img src="${esc(u)}" alt="" referrerpolicy="no-referrer" loading="lazy">`).join('')}</div>` : ''}
+    ${vs.length ? `<details class="mk-vars"><summary>${vs.length} variação(ões)</summary><table class="tabela"><tr><th>Cor</th><th>Tamanho</th><th>Preço</th><th>Estoque</th><th>SKU</th></tr>${vs.map(v => `<tr><td>${esc(v.cor)}</td><td>${esc(v.tamanho)}</td><td>${v.preco != null ? esc(v.preco) : ''}</td><td>${v.estoque != null ? esc(v.estoque) : ''}</td><td class="pequeno">${esc(v.sku)}</td></tr>`).join('')}</table></details>` : ''}
+    <form id="mk-editar" class="b2-ficha"><h3>Modificar <small class="pequeno">só o que você preencher muda</small></h3>
+      <div class="b2-grade"><label class="largo2">Título novo<input name="titulo" placeholder="${esc(d.titulo)}" maxlength="255"></label>
+        <label>Preço novo<input name="preco" inputmode="decimal" placeholder="Ex.: 49,90"></label><label>Estoque novo${vs.length > 1 ? ' (todas as variações)' : ''}<input name="estoque" inputmode="numeric" placeholder="Ex.: 20"></label></div>
+      <label class="campo-b2">Descrição nova<textarea name="descricao" rows="4" placeholder="${d.descricao ? 'Deixe vazio para manter a atual' : ''}">${''}</textarea></label>
+      <div class="acoes"><button class="b">Simular a mudança</button>${podeFotos ? '<button type="button" class="b claro" id="mk-fotos">Trocar fotos com um anúncio do site</button>' : ''}${d.url ? `<a class="b claro" href="${esc(d.url)}" target="_blank" rel="noopener">Abrir no marketplace</a>` : ''}<button type="button" class="b claro" data-fechar>Fechar</button></div></form>`);
+}
+function mkEscolherAnuncio() {
+  const modo = MK.loja.canal === 'mercadolivre' ? 'ml' : 'shopee';
+  const ads = DB.anuncios.slice().sort((a, b) => (b.modo === modo) - (a.modo === modo) || a.nome.localeCompare(b.nome));
+  b2Tela(`<h2>Qual anúncio do site tem as fotos? <small>para ${esc(MK.atual.titulo)}</small></h2>
+    <label class="campo-b2">Anúncio do site<select id="mk-aid">${ads.map(a => `<option value="${a.id}">${esc(a.nome)}${a.modo === modo ? '' : ' (vai mudar para o modo ' + (modo === 'ml' ? 'Mercado Livre' : 'Shopee') + ')'}</option>`).join('')}</select></label>
+    <p class="pequeno">As fotos saem do modo ${modo === 'ml' ? 'Mercado Livre (fotos de cada cor)' : 'Shopee (9 fotos e a capa de cada cor)'} desse anúncio. Depois você liga as cores e simula antes de trocar.</p>
+    <div class="acoes"><button class="b" id="mk-seguir">Seguir</button><button class="b claro" id="mk-voltar">Voltar</button></div>`);
+}
+async function mkSeguirFotos() {
+  const aid = +document.getElementById('mk-aid').value, modo = MK.loja.canal === 'mercadolivre' ? 'ml' : 'shopee', a = DB.anuncios.find(x => x.id === aid);
+  if (a && a.modo !== modo) await window.menork.api('/api/anuncios/' + aid, { acao: 'modo', modo });
+  Object.assign(B2, { aid, canal: MK.loja.canal, loja: MK.loja.id, lojaNome: MK.loja.cliente + ' · ' + MK.loja.nome, busca: '' });
+  b2Mapear(MK.atual.id);
+}
+async function mkSimular(f) {
+  const corpo = { loja: MK.loja.id, anuncio: MK.atual.id, canal: MK.loja.canal, familia: MK.atual.familia, titulo: f.titulo.value, preco: f.preco.value, estoque: f.estoque.value, descricao: f.descricao.value };
+  b2Carregando('Simulando a mudança…');
+  try { const r = await b2post('/api/b2x/editar/simular', corpo); B2.token = r.token;
+    b2Tela(`<h2>Simulação <small>nada mudou ainda</small></h2>
+      ${r.envios.map(e => `<div class="nota ${e.ok ? '' : 'ruim'}"><b>${esc(e.rotulo)}: ${e.ok ? 'pronto' : 'recusado'}</b>${e.erro ? `<span>${esc(e.erro)}</span>` : ''}${e.mudancas.length ? `<span>Vai mudar: ${e.mudancas.map(esc).join(', ')}</span>` : ''}${e.avisos.map(a => `<span>${esc(a)}</span>`).join('')}</div>`).join('')}
+      <div class="acoes">${r.pode_confirmar ? '<button class="b verde" id="mk-confirmar">Confirmar a mudança</button>' : ''}<button class="b claro" id="mk-voltar">Voltar</button></div>`);
+  } catch (err) { b2Erro(err); }
+}
+async function mkConfirmar() {
+  b2Carregando('Mudando no marketplace…');
+  try { const r = await b2post('/api/b2x/confirmar', { token: B2.token });
+    b2Tela(`<h2>Resultado</h2>${r.envios.map(e => `<div class="nota ${e.ok ? '' : 'ruim'}"><b>${esc(e.rotulo)}: ${e.ok ? 'feito' : 'não feito'}</b>${e.erro ? `<span>${esc(e.erro)}</span>` : ''}${e.ainda_antigos.length ? '<span>O marketplace ainda mostra o valor antigo em parte; pode levar alguns minutos.</span>' : ''}</div>`).join('')}
+      <div class="acoes"><button class="b" id="mk-reabrir">Ver o anúncio de novo</button><button class="b claro" data-fechar>Fechar</button></div>`);
+  } catch (err) { b2Erro(err); }
+}
+document.addEventListener('click', e => {
+  const a = e.target.closest('[data-abrir-mk]'); if (a) return mkAbrir(a.dataset.loja, a.dataset.abrirMk);
+  if (e.target.closest('#mk-fotos')) return mkEscolherAnuncio();
+  if (e.target.closest('#mk-seguir')) return mkSeguirFotos();
+  if (e.target.closest('#mk-voltar')) return mkMostrar();
+  if (e.target.closest('#mk-confirmar')) return mkConfirmar();
+  if (e.target.closest('#mk-reabrir')) return mkAbrir(MK.loja.id, MK.atual.id);
+});
+document.addEventListener('submit', e => { if (e.target.id !== 'mk-editar') return; e.preventDefault(); mkSimular(e.target); });

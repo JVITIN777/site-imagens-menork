@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Imagens Menork</title>{% if versao_logo() %}<link rel="icon" href="/logo?v={{ versao_logo() }}">{% endif %}<link rel="stylesheet" href="/static/estilo.css"></head>
+<title>Imagens Menork</title>{% if versao_logo() %}<link rel="icon" href="/logo?v={{ versao_logo() }}">{% endif %}<link rel="stylesheet" href="/static/estilo.css?v={{ versao_site() }}"></head>
 <body class="porta">
 <canvas id="cartas" aria-hidden="true"></canvas><div class="vinheta" aria-hidden="true"></div>
 <form method="post" class="cartao-senha curinga">
@@ -12,5 +12,5 @@
   {% if criar %}<label>Repita a senha<input type="password" name="repetir" required></label>{% endif %}
   <button class="b grande">{{ 'Criar senha e entrar' if criar else 'Entrar' }}</button>
 </form>
-<script src="/static/cartas.js"></script>
+<script src="/static/cartas.js?v={{ versao_site() }}"></script>
 </body></html>
