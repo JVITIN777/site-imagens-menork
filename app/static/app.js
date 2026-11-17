@@ -47,10 +47,31 @@
   function atualizarBarra() {
     const b = $('#barra'); if (!b) return;
     const n = marcados().length; b.hidden = n === 0; document.body.classList.toggle('selecionando', n > 0); $('#barra-qtd').textContent = n;
+    const t = $('#selecionar-tudo'), vis = $$('.cartao[data-id]:not([hidden])').length;
+    if (t) t.textContent = vis && n >= vis ? 'Desmarcar tudo' : 'Selecionar tudo';
   }
+  // Shift: marca todas entre a ultima clicada e esta (como no Windows)
+  let ultimoMarcado = null;
+  function marcar(c, sim) { $('.marca input', c).checked = sim; c.classList.toggle('marcado', sim); }
+  function marcarFaixa(c) {
+    const todos = $$('.cartao[data-id]:not([hidden])'), a = todos.findIndex(x => x.dataset.id === ultimoMarcado), b = todos.indexOf(c);
+    if (a < 0 || b < 0) return false;
+    todos.slice(Math.min(a, b), Math.max(a, b) + 1).forEach(x => marcar(x, true)); return true;
+  }
+  document.addEventListener('click', e => {
+    const cx = e.target.closest('.marca input'); if (!cx) return;
+    const c = cx.closest('.cartao');
+    if (e.shiftKey && cx.checked && marcarFaixa(c)) { atualizarBarra(); }
+    ultimoMarcado = c.dataset.id;
+  }, true);
   document.addEventListener('change', e => {
     if (!e.target.matches('.marca input')) return;
     e.target.closest('.cartao').classList.toggle('marcado', e.target.checked); atualizarBarra();
+  });
+  document.addEventListener('click', e => {
+    const b = e.target.closest('#selecionar-tudo'); if (!b) return;
+    const todos = $$('.cartao[data-id]:not([hidden])'), tudo = todos.length && todos.every(c => c.classList.contains('marcado'));
+    todos.forEach(c => marcar(c, !tudo)); atualizarBarra();
   });
   $('#barra-todas')?.addEventListener('click', () => { $$('.cartao[data-id]:not([hidden])').forEach(c => { c.classList.add('marcado'); $('input', c).checked = true; }); atualizarBarra(); });
   $('#barra-limpar')?.addEventListener('click', () => { $$('.cartao.marcado').forEach(c => { c.classList.remove('marcado'); $('input', c).checked = false; }); atualizarBarra(); });
@@ -82,8 +103,8 @@
     const c = e.target.closest('.cartao[data-id]');
     if (!c || e.target.closest('.marca')) return;
     if (marcados().length || e.ctrlKey || e.metaKey || e.shiftKey) {  // selecionando: clicar no cartao marca/desmarca
-      const caixa = $('.marca input', c); caixa.checked = !caixa.checked;
-      c.classList.toggle('marcado', caixa.checked); atualizarBarra(); return;
+      if (e.shiftKey && ultimoMarcado && marcarFaixa(c)) { ultimoMarcado = c.dataset.id; window.getSelection()?.removeAllRanges(); atualizarBarra(); return; }
+      const caixa = $('.marca input', c); marcar(c, !caixa.checked); ultimoMarcado = c.dataset.id; atualizarBarra(); return;
     }
     abrir(+c.dataset.id);
   });

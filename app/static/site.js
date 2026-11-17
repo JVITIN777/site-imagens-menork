@@ -169,11 +169,11 @@ const TELAS = {
     const comAlerta = l.filter(i => i.alertas?.length || i.parecida).length, bots = DB.imgs.filter(i => i.status === 'reprovada' && i.origem !== 'você').length;
     if (q.produto) l = l.filter(i => i.produto === q.produto); if (q.so === 'sem') l = l.filter(i => i.status === 'gerada'); if (q.so === 'alerta') l = l.filter(i => i.alertas?.length || i.parecida);
     return `<div class="cabeca"><h1>Fila de aprovação <small>${l.length} esperando</small></h1><div class="acoes">
-      <button class="b claro" id="ler-agora">Procurar imagens novas</button><label class="b claro">Enviar imagens<input type="file" id="enviar" multiple accept="image/*" hidden></label></div></div>
+      ${l.length ? '<button class="b claro" id="selecionar-tudo">Selecionar tudo</button>' : ''}<button class="b claro" id="ler-agora">Procurar imagens novas</button><label class="b claro">Enviar imagens<input type="file" id="enviar" multiple accept="image/*" hidden></label></div></div>
     <div class="filtros">${elo('/', 'Todas', 'ficha ' + (!q.produto && !q.so ? 'ativo' : ''))}${sem ? elo('/?so=sem', `Falta classificar (${sem})`, 'ficha ' + (q.so === 'sem' ? 'ativo' : '')) : ''}${comAlerta ? elo('/?so=alerta', `Com alerta (${comAlerta})`, 'ficha ' + (q.so === 'alerta' ? 'ativo' : '')) : ''}
       ${Object.keys(porProd).filter(Boolean).sort().map(p => elo(rota('/', { produto: p }), `${esc(p)} (${porProd[p]})`, 'ficha ' + (q.produto === p ? 'ativo' : ''))).join('')}</div>
     ${bots ? `<p class="faixa-bots">Os bots já reprovaram ${bots} imagem(ns) antes de chegar aqui. ${elo('/erros', 'Ver lista de erros')}</p>` : ''}
-    ${l.length ? `<p class="dica">Clique numa imagem para ver grande ao lado do fundo branco. No visor: <kbd>A</kbd> aprova, <kbd>R</kbd> reprova, <kbd>←</kbd> <kbd>→</kbd> trocam de imagem. Para marcar várias, marque a caixinha da primeira; depois é só clicar nas outras imagens.</p>
+    ${l.length ? `<p class="dica">Clique numa imagem para ver grande ao lado do fundo branco. No visor: <kbd>A</kbd> aprova, <kbd>R</kbd> reprova, <kbd>←</kbd> <kbd>→</kbd> trocam de imagem. Para marcar várias, marque a caixinha da primeira e clique nas outras; com <kbd>Shift</kbd> marca todas entre a última e a que você clicar.</p>
       <div class="grade" data-some-ao-decidir="1">${ordenar(l).map(cartao).join('')}</div>` : `<div class="vazio"><h2>Nada esperando aprovação</h2><p>Quando o gerador salvar imagens novas na pasta de entrada, elas aparecem aqui sozinhas.</p></div>`}`;
   },
   catalogo(q) {
@@ -187,7 +187,7 @@ const TELAS = {
     return `<div class="duas"><aside class="arvore"><h3>Produto e cor</h3>${elo('/catalogo', 'Todos os produtos', !q.produto ? 'ativo' : '')}
       ${Object.keys(arv).sort().map(p => `<details ${q.produto === p ? 'open' : ''}><summary>${elo(rota('/catalogo', { produto: p }) + (p ? '' : '?produto='), esc(p || '(sem produto)'), q.produto === p && !q.cor ? 'ativo' : '')}</summary>
         ${Object.keys(arv[p]).sort().map(c => elo(rota('/catalogo', { produto: p, cor: c }), `${esc(c || '(sem cor)')} <small>${arv[p][c]}</small>`, 'filho ' + (q.produto === p && q.cor === c && c ? 'ativo' : ''))).join('')}</details>`).join('')}</aside>
-    <section><div class="cabeca"><h1>Catálogo <small>${l.length} imagem(ns)</small></h1></div>
+    <section><div class="cabeca"><h1>Catálogo <small>${l.length} imagem(ns)</small></h1>${l.length ? '<div class="acoes"><button class="b claro" id="selecionar-tudo">Selecionar tudo</button></div>' : ''}</div>
       <form class="filtros" data-busca="1"><select data-filtro="tipo">${op('', 'Todos os tipos', q.tipo || '')}${TIPOS.map(([k, v]) => op(k, v, q.tipo)).join('')}</select>
       <select data-filtro="status">${op('', 'Todas (menos reprovadas)', q.status || '')}${op('aprovada', `Aprovadas (${cont.aprovada || 0})`, q.status)}${op('conferencia', `Em conferência (${cont.conferencia || 0})`, q.status)}${op('gerada', `Falta classificar (${cont.gerada || 0})`, q.status)}</select>
       <select data-filtro="anuncio">${op('', 'Todos os anúncios', q.anuncio || '')}${DB.anuncios.map(a => op(a.nome, a.nome, q.anuncio)).join('')}</select>
@@ -196,7 +196,7 @@ const TELAS = {
       <p class="pequeno">Reprovadas e já apagadas até hoje: ${cont.reprovada || 0}.</p></section></div>`;
   },
   capas(q) {
-    let l = DB.imgs.filter(i => i.status === 'aprovada' && i.tipo.startsWith('capa'));
+    let l = DB.imgs.filter(i => i.status === 'aprovada' && i.tipo.startsWith('capa') && !i.copia); // copia de marketplace nao entra no historico
     if (q.so === 'usadas') l = l.filter(i => anunciosDe(i.id).length); if (q.so === 'livres') l = l.filter(i => !anunciosDe(i.id).length);
     const g = {}; l.forEach(i => (g[i.produto || '(sem produto)'] ??= []).push(i));
     return `<div class="cabeca"><h1>Histórico de capas <small>${l.length} aprovada(s)</small></h1></div>
@@ -906,10 +906,31 @@ document.addEventListener('submit', e => { if (e.target.id !== 'mk-editar') retu
   function atualizarBarra() {
     const b = $('#barra'); if (!b) return;
     const n = marcados().length; b.hidden = n === 0; document.body.classList.toggle('selecionando', n > 0); $('#barra-qtd').textContent = n;
+    const t = $('#selecionar-tudo'), vis = $$('.cartao[data-id]:not([hidden])').length;
+    if (t) t.textContent = vis && n >= vis ? 'Desmarcar tudo' : 'Selecionar tudo';
   }
+  // Shift: marca todas entre a ultima clicada e esta (como no Windows)
+  let ultimoMarcado = null;
+  function marcar(c, sim) { $('.marca input', c).checked = sim; c.classList.toggle('marcado', sim); }
+  function marcarFaixa(c) {
+    const todos = $$('.cartao[data-id]:not([hidden])'), a = todos.findIndex(x => x.dataset.id === ultimoMarcado), b = todos.indexOf(c);
+    if (a < 0 || b < 0) return false;
+    todos.slice(Math.min(a, b), Math.max(a, b) + 1).forEach(x => marcar(x, true)); return true;
+  }
+  document.addEventListener('click', e => {
+    const cx = e.target.closest('.marca input'); if (!cx) return;
+    const c = cx.closest('.cartao');
+    if (e.shiftKey && cx.checked && marcarFaixa(c)) { atualizarBarra(); }
+    ultimoMarcado = c.dataset.id;
+  }, true);
   document.addEventListener('change', e => {
     if (!e.target.matches('.marca input')) return;
     e.target.closest('.cartao').classList.toggle('marcado', e.target.checked); atualizarBarra();
+  });
+  document.addEventListener('click', e => {
+    const b = e.target.closest('#selecionar-tudo'); if (!b) return;
+    const todos = $$('.cartao[data-id]:not([hidden])'), tudo = todos.length && todos.every(c => c.classList.contains('marcado'));
+    todos.forEach(c => marcar(c, !tudo)); atualizarBarra();
   });
   $('#barra-todas')?.addEventListener('click', () => { $$('.cartao[data-id]:not([hidden])').forEach(c => { c.classList.add('marcado'); $('input', c).checked = true; }); atualizarBarra(); });
   $('#barra-limpar')?.addEventListener('click', () => { $$('.cartao.marcado').forEach(c => { c.classList.remove('marcado'); $('input', c).checked = false; }); atualizarBarra(); });
@@ -941,8 +962,8 @@ document.addEventListener('submit', e => { if (e.target.id !== 'mk-editar') retu
     const c = e.target.closest('.cartao[data-id]');
     if (!c || e.target.closest('.marca')) return;
     if (marcados().length || e.ctrlKey || e.metaKey || e.shiftKey) {  // selecionando: clicar no cartao marca/desmarca
-      const caixa = $('.marca input', c); caixa.checked = !caixa.checked;
-      c.classList.toggle('marcado', caixa.checked); atualizarBarra(); return;
+      if (e.shiftKey && ultimoMarcado && marcarFaixa(c)) { ultimoMarcado = c.dataset.id; window.getSelection()?.removeAllRanges(); atualizarBarra(); return; }
+      const caixa = $('.marca input', c); marcar(c, !caixa.checked); ultimoMarcado = c.dataset.id; atualizarBarra(); return;
     }
     abrir(+c.dataset.id);
   });

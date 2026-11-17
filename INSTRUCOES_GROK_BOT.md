@@ -96,6 +96,16 @@ menork.ps1 demanda -Tarefa "NOME DA TAREFA" -Produto CI9 -Pasta "\\SERVIDOR\past
 `-Info` é o texto do campo INFO JOAO, copiado como está. `-Produto` é o código que aparece no nome das imagens. O site cria sozinho os anúncios (unitário e kits) e as metas. Não crie pastas.
 Siglas dos marketplaces: ML, SHP, SHEIN, TIKTOK, AMAZON, MAGALU, NETSHOES, TEMU, KWAI.
 
+**Copiar as fotos de um anúncio que já existe no marketplace**
+Quando o Menork pedir para copiar um anúncio (fotos baixadas de um anúncio que já está no ar), mande cada foto com `-Copia`. Elas NÃO são fotos geradas: não vão para a fila de aprovação, entram aprovadas e direto no lugar delas no anúncio.
+```
+menork.ps1 enviar -Arquivo "C:\Temp\copia\01.jpg" -Anuncio "TA101 unitário" -Copia -Posicao 1 -Bot "SEU NOME"
+menork.ps1 enviar -Arquivo "C:\Temp\copia\bege.jpg" -Anuncio "TA101 unitário" -Copia -Cor BEGE -Bot "SEU NOME"
+```
+- Sem `-Cor`: a foto vai para as fotos do anúncio, na ordem em que você mandar. `-Posicao 1` é a capa; `-Posicao` é opcional.
+- Com `-Cor`: a foto vai para a variação daquela cor. A primeira foto de uma cor nova vira a capa da variação; as próximas entram nas fotos da cor (Mercado Livre).
+- Mande na ordem do anúncio original. Não use `-Copia` para foto gerada por IA: essas continuam passando pela aprovação.
+
 **Mandar para o marketplace (B2X): só o Menork**
 Trocar fotos de anúncios que já existem e criar anúncios novos na Shopee e no Mercado Livre é feito pelo Menork, no site, com o botão do B2X dentro do anúncio. O comando `enviar-sistema` não envia mais nada: ele só responde com esse aviso. Quando um anúncio ficar completo, avise o Menork.
 

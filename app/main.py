@@ -176,7 +176,7 @@ def estado(request: Request):
         imgs = [{"id": l["id"], "produto": l["produto"], "cor": l["cor"], "tipo": l["tipo"], "status": l["status"],
                  "nome_original": l["nome_original"], "largura": l["largura"], "altura": l["altura"], "criado_em": l["criado_em"],
                  "motivo": l["motivo"] or "", "origem": l["origem_decisao"] or "", "alertas": _alertas(l["alertas"]),
-                 "ref": bool(l["ref"]), "estilo": l["estilo"] or "", "parecida": parecidas.get(l["id"]),
+                 "ref": bool(l["ref"]), "estilo": l["estilo"] or "", "copia": l["origem"] == "cópia", "parecida": parecidas.get(l["id"]),
                  "caminho": str(n.caminho_imagem(l)) if l["arquivo"] else ""} for l in linhas]
         anuncios = [{"id": a["id"], "nome": a["nome"], "formato": a["formato"], "titulo": a["titulo"], "preco": a["preco"],
                      "preco_antigo": a["preco_antigo"], "descricao": a["descricao"], "demanda": a["demanda_id"],
@@ -1084,8 +1084,50 @@ def pacote_guardado(pid: int):
 
 
 # ----------------------------------------------------- entradas dos bots
+def _colocar_copia(c, iid, aid, cor, posicao):
+    """Foto copiada de um anuncio que ja existe no marketplace: nao passa pela fila, entra aprovada e vai direto
+    para o lugar dela no anuncio. Sem cor = fotos do anuncio (posicao 1 = capa). Com cor = variacao daquela cor."""
+    c.execute("UPDATE imagens SET status='aprovada', origem='cópia', origem_decisao='cópia', motivo='', alertas='', "
+              "decidido_em=?, apagar_em=NULL WHERE id=?", (n.agora(), iid))
+    n.vincular(c, [iid], aid)
+    modo = _modo(c.execute("SELECT modo FROM anuncios WHERE id=?", (aid,)).fetchone()[0])
+    if cor:
+        nome = c.execute("SELECT cor FROM anuncio_cores WHERE anuncio_id=? AND cor=?", (aid, cor)).fetchone()
+        if not nome:  # cor nova: esta foto vira a capa da variacao e a principal da cor
+            pos = c.execute("SELECT COALESCE(MAX(posicao),0)+1 FROM anuncio_cores WHERE anuncio_id=?", (aid,)).fetchone()[0]
+            c.execute("INSERT INTO anuncio_cores(anuncio_id,cor,imagem_id,posicao) VALUES(?,?,?,?)", (aid, cor, iid, pos))
+            nome = cor
+        else:
+            nome = nome[0]
+        fotos = [r[0] for r in c.execute("SELECT imagem_id FROM fotos_cor WHERE anuncio_id=? AND cor=? ORDER BY posicao", (aid, nome))]
+        if iid not in fotos and len(fotos) < MODOS["ml"]["fotos"]:
+            fotos.insert(min(max(posicao - 1, 0), len(fotos)) if posicao else len(fotos), iid)
+            c.execute("DELETE FROM fotos_cor WHERE anuncio_id=? AND cor=?", (aid, nome))
+            c.executemany("INSERT INTO fotos_cor(anuncio_id,cor,imagem_id,posicao) VALUES(?,?,?,?)",
+                          [(aid, nome, f, k) for k, f in enumerate(fotos)])
+        return f"{'Mercado Livre' if modo == 'ml' else 'Shopee'}: cor {nome}"
+    atual = c.execute("SELECT papel FROM imagem_anuncio WHERE imagem_id=? AND anuncio_id=?", (iid, aid)).fetchone()[0]
+    if atual in ("capa", "galeria") and not posicao:
+        return "já estava nas fotos do anúncio"
+    capa = c.execute("SELECT imagem_id FROM imagem_anuncio WHERE anuncio_id=? AND papel='capa'", (aid,)).fetchone()
+    galeria = [r[0] for r in c.execute("SELECT imagem_id FROM imagem_anuncio WHERE anuncio_id=? AND papel='galeria' "
+                                       "AND imagem_id<>? ORDER BY posicao", (aid, iid))]
+    ordem = ([capa[0]] if capa and capa[0] != iid else []) + galeria
+    ordem.insert(min(max(posicao - 1, 0), len(ordem)) if posicao else len(ordem), iid)
+    ordem = ordem[:MODOS["shopee"]["fotos"]]
+    c.execute("UPDATE imagem_anuncio SET papel='', posicao=0 WHERE anuncio_id=? AND papel IN ('capa','galeria')", (aid,))
+    for k, f in enumerate(ordem):
+        c.execute("UPDATE imagem_anuncio SET papel=?, posicao=? WHERE imagem_id=? AND anuncio_id=?",
+                  ("capa" if k == 0 else "galeria", k, f, aid))
+    return "capa do anúncio" if ordem and ordem[0] == iid else (f"foto {ordem.index(iid) + 1} do anúncio" if iid in ordem
+                                                               else "ficou no anúncio, fora das 9 fotos")
+
+
 async def _receber(request, reprovada=False):
     q = request.query_params
+    copia = (q.get("copia") or "").lower() in ("1", "sim", "true") and not reprovada
+    if copia and not (q.get("anuncio") or "").strip():
+        raise HTTPException(400, "Foto copiada precisa do anúncio: mande -Anuncio junto com -Copia.")
     nome = Path(q.get("nome") or "imagem.png").name
     if Path(nome).suffix.lower() not in n.EXTENSOES:
         raise HTTPException(400, "Mande PNG, JPG ou WEBP e diga o nome do arquivo em ?nome=.")
@@ -1131,12 +1173,20 @@ async def _receber(request, reprovada=False):
         if reprovada and novo:
             c.execute("UPDATE imagens SET status='reprovada', motivo=?, origem_decisao=?, decidido_em=?, apagar_em=? WHERE id=?",
                       (" ".join(str(q.get("motivo") or "Sem motivo").split())[:200], (q.get("bot") or "bot").strip(), n.agora(), time.time(), iid))
-        linha = c.execute("SELECT status FROM imagens WHERE id=?", (iid,)).fetchone()
+        lugar = ""
+        if copia:
+            try:
+                posicao = max(0, int(q.get("posicao") or 0))
+            except ValueError:
+                posicao = 0
+            lugar = _colocar_copia(c, iid, n.obter_anuncio(c, q["anuncio"].strip()), (q.get("cor") or "").strip().upper(), posicao)
         linha = c.execute("SELECT * FROM imagens WHERE id=?", (iid,)).fetchone()
     aviso = "" if novo else ("Esta imagem já existia no site: os dados foram atualizados." if atualizada
                              else "Esta imagem já existia no site com estes mesmos dados; nada mudou.")
+    if copia:
+        aviso = f"Cópia colocada direto no anúncio ({lugar}), sem passar pela fila."
     return {"id": iid, "nova": novo, "atualizada": atualizada, "status": linha["status"], "produto": linha["produto"],
-            "cor": linha["cor"], "tipo": linha["tipo"], "aviso": aviso}
+            "cor": linha["cor"], "tipo": linha["tipo"], "aviso": aviso, "lugar": lugar}
 
 
 @app.post("/bot/imagem")
