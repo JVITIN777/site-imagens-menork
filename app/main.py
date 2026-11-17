@@ -947,9 +947,9 @@ async def pedir_publicar(request: Request):
 @app.get("/api/pedidos/publicar")
 def pedidos_publicar():
     with n.con() as c:
-        return {"pedidos": [{"id": p["id"], "anuncio_id": p["anuncio_id"], "status": p["status"], "bot": p["bot"],
+        return {"pedidos": [{"id": p["id"], "anuncio_id": p["anuncio_id"], "tipo": p["tipo"], "status": p["status"], "bot": p["bot"],
                              "resposta": p["resposta"], "criado_em": p["criado_em"], **json.loads(p["dados"] or "{}")}
-                            for p in c.execute("SELECT * FROM pedidos WHERE tipo='publicar' ORDER BY id DESC LIMIT 200")]}
+                            for p in c.execute("SELECT * FROM pedidos WHERE tipo IN ('publicar','tarefa') ORDER BY id DESC LIMIT 200")]}
 
 
 def _pedido_publicar(c, anuncio):
@@ -958,7 +958,7 @@ def _pedido_publicar(c, anuncio):
     if not a:
         raise HTTPException(404, f"Anúncio {anuncio!r} não existe no site.")
     p = c.execute("SELECT * FROM pedidos WHERE anuncio_id=? AND tipo='publicar' AND status IN ('aberto','pego') ORDER BY id DESC",
-                  (a["id"],)).fetchone()
+                  (a["id"],)).fetchone() or _tarefa_com(c, a["id"])
     if not p:
         raise HTTPException(403, f"O Menork não mandou o anúncio {a['nome']} para publicar. Só publique o que estiver em menork.ps1 pedidos.")
     return a, p, json.loads(p["dados"] or "{}")
@@ -972,7 +972,8 @@ async def bot_anuncio_dados(request: Request):
         a = c.execute("SELECT id, nome FROM anuncios WHERE nome=? COLLATE NOCASE", (str(d.get("anuncio") or "").strip(),)).fetchone()
         if not a:
             raise HTTPException(404, "Anúncio não existe no site.")
-        if not c.execute("SELECT 1 FROM pedidos WHERE anuncio_id=? AND status IN ('aberto','pego')", (a["id"],)).fetchone():
+        if not c.execute("SELECT 1 FROM pedidos WHERE anuncio_id=? AND status IN ('aberto','pego')", (a["id"],)).fetchone() \
+                and not _tarefa_com(c, a["id"]):
             raise HTTPException(403, "Só dá para mudar os dados de um anúncio que o Menork pediu (menork.ps1 pedidos).")
         mudou = []
         for campo in ("titulo", "descricao", "preco", "preco_antigo", "tamanhos"):
@@ -1047,6 +1048,161 @@ async def bot_publicar(request: Request):
                        ("Ficou incerto: NAO publique de novo, avise o Menork." if final.get("incerto") else "Arrume os problemas e tente de novo.")}
 
 
+TEXTO_TAREFA = """PEDIDO {pid}: o Menork pediu, na loja {loja} ({mk}):
+"{texto}"
+Anuncios do site neste pedido: {anuncios}
+Anuncios da loja que voce PODE mexer: {alvos}
+Como fazer:
+1. menork.ps1 pedido -Id {pid} -Status pego -Bot "SEU NOME"
+2. Leia cada anuncio da loja: menork.ps1 loja-anuncio -Id {pid} -Alvo CODIGO   (cores, titulo e fotos que ele tem hoje)
+3. Para SUBSTITUIR um anuncio da loja por um do site (fotos, e se o Menork pediu, titulo/descricao/preco):
+   menork.ps1 substituir -Id {pid} -Anuncio "NOME NO SITE" -Alvo CODIGO -Validar   (so simula, nada muda)
+   Confira a simulacao; estando certo, rode o mesmo comando sem -Validar.
+   As cores sao ligadas pelo nome. Se o nome for diferente, mande -Json '{{"mapa":{{"Cor na loja":"COR NO SITE"}}}}'.
+4. Para PUBLICAR um anuncio novo deste pedido, use os comandos de publicar (categorias, ficha, publicar).
+5. Faca so o que o Menork escreveu. Nao mexa em nenhum outro anuncio da loja. Nunca apague nada. Na duvida, pergunte ao Menork.
+6. No fim: menork.ps1 pedido -Id {pid} -Status feito -Resposta "o que foi feito em cada anuncio"."""
+
+
+def _tarefa_com(c, aid):
+    """Pedido de tarefa aberto que inclui este anuncio do site (o Menork mandou)."""
+    for p in c.execute("SELECT * FROM pedidos WHERE tipo='tarefa' AND status IN ('aberto','pego') ORDER BY id DESC"):
+        if any(int(x["id"]) == int(aid) for x in json.loads(p["dados"] or "{}").get("anuncios") or []):
+            return p
+    return None
+
+
+@app.post("/api/pedidos/tarefa")
+async def pedir_tarefa(request: Request):
+    """O Menork escolhe anuncios do site, uma loja, os anuncios da loja que o Grok pode mexer e escreve o que quer."""
+    from . import b2x
+    d = await request.json()
+    ids = [int(x) for x in d.get("ids") or []][:50]
+    loja, texto = str(d.get("loja") or "").strip(), str(d.get("texto") or "").strip()[:3000]
+    if not ids or not loja:
+        raise HTTPException(400, "Escolha os anúncios e a loja.")
+    if len(texto) < 5:
+        raise HTTPException(400, "Escreva o que o Grok deve fazer.")
+    l = next((x for x in b2x.lojas()["lojas"] if x["id"] == loja), None)
+    if not l:
+        raise HTTPException(400, "Loja não encontrada no B2X.")
+    if l["canal"] not in b2x.CANAIS:
+        raise HTTPException(400, "Por enquanto o Grok mexe só na Shopee e no Mercado Livre.")
+    alvos = []
+    for x in (d.get("alvos") or [])[:100]:
+        x = x if isinstance(x, dict) else {"id": x}
+        if str(x.get("id") or "").strip():
+            alvos.append({"id": str(x["id"]).strip(), "titulo": str(x.get("titulo") or "")[:120]})
+    with n.con() as c:
+        ads = [{"id": a["id"], "nome": a["nome"]} for a in
+               (c.execute("SELECT id, nome FROM anuncios WHERE id=?", (i,)).fetchone() for i in ids) if a]
+        if not ads:
+            raise HTTPException(400, "Nenhum anúncio encontrado.")
+        nome_loja = f"{l['cliente']} · {l['nome']}"
+        dados = {"loja": l["id"], "loja_nome": nome_loja, "canal": l["canal"], "marketplace": b2x.CANAIS[l["canal"]],
+                 "texto": texto, "anuncios": ads, "alvos": alvos}
+        pid = c.execute("INSERT INTO pedidos(anuncio_id,criado_em,texto,atualizado,tipo,dados) VALUES(?,?,'',?,'tarefa',?)",
+                        (ads[0]["id"], n.agora(), n.agora(), json.dumps(dados, ensure_ascii=False))).lastrowid
+        c.execute("UPDATE pedidos SET texto=? WHERE id=?", (TEXTO_TAREFA.format(
+            pid=pid, loja=nome_loja, mk=b2x.CANAIS[l["canal"]], texto=texto, anuncios=", ".join(a["nome"] for a in ads),
+            alvos=", ".join(f"{x['id']}" + (f" ({x['titulo']})" if x["titulo"] else "") for x in alvos) or "nenhum (so publicar novos)"), pid))
+    return {"pedido": pid, "texto": f"Grok, o Menork mandou um pedido (número {pid}) para a loja {nome_loja}: \"{texto}\". "
+                                     "Rode: menork.ps1 instrucoes  e depois  menork.ps1 pedidos  e siga o passo a passo do pedido."}
+
+
+def _tarefa_alvo(pedido_id, alvo, anuncio=None):
+    with n.con() as c:
+        p = c.execute("SELECT * FROM pedidos WHERE id=? AND tipo='tarefa'", (int(pedido_id),)).fetchone()
+        if not p or p["status"] not in ("aberto", "pego"):
+            raise HTTPException(403, "Esse pedido não está aberto. Só mexa no que estiver em menork.ps1 pedidos.")
+        dados = json.loads(p["dados"] or "{}")
+        if str(alvo).strip() not in [x["id"] for x in dados.get("alvos") or []]:
+            raise HTTPException(403, f"O Menork não liberou o anúncio {alvo} da loja neste pedido. Não mexa nele.")
+        a = None
+        if anuncio is not None:
+            a = c.execute("SELECT id, nome FROM anuncios WHERE nome=? COLLATE NOCASE", (str(anuncio).strip(),)).fetchone()
+            if not a or a["id"] not in [x["id"] for x in dados.get("anuncios") or []]:
+                raise HTTPException(403, f"O anúncio {anuncio!r} do site não está neste pedido.")
+    return p, dados, a
+
+
+class _Corpo:
+    def __init__(self, d):
+        self.d = d
+
+    async def json(self):
+        return self.d
+
+
+@app.get("/bot/b2x/anuncio")
+def bot_loja_anuncio(id: int, alvo: str):
+    from . import b2x
+    p, dados, _ = _tarefa_alvo(id, alvo)
+    info = b2x.anuncio(dados["loja"], str(alvo).strip(), dados["canal"])
+    return {"loja": dados["loja_nome"], "anuncio": alvo, "titulo": info.get("titulo"), "cores": info.get("cores") or
+            [v.get("cor") for v in info.get("lista_variacoes") or [] if v.get("cor")],
+            "fotos": len(info.get("fotos") or []), "familia": bool(info.get("familia"))}
+
+
+def _sem_ac(t):
+    import unicodedata
+    return "".join(ch for ch in unicodedata.normalize("NFKD", str(t or "")) if not unicodedata.combining(ch)).strip().lower()
+
+
+@app.post("/bot/substituir")
+async def bot_substituir(request: Request):
+    """Troca um anuncio que ja existe na loja pelo anuncio do site: fotos (e titulo/descricao/preco, se vierem)."""
+    from . import b2x
+    d = await request.json()
+    alvo = str(d.get("alvo") or "").strip()
+    p, dados, a = _tarefa_alvo(d.get("id"), alvo, d.get("anuncio") or "")
+    extra = d.get("json") or {}
+    if isinstance(extra, str):
+        try:
+            extra = json.loads(extra or "{}")
+        except ValueError:
+            raise HTTPException(400, "O -Json não é um JSON válido.")
+    canal, loja = dados["canal"], dados["loja"]
+    with n.con() as c:
+        c.execute("UPDATE anuncios SET modo=? WHERE id=?", ("ml" if canal == "mercadolivre" else "shopee", a["id"]))
+    info = b2x.anuncio(loja, alvo, canal)
+    cores_mk = info.get("cores") or [v.get("cor") for v in info.get("lista_variacoes") or [] if v.get("cor")]
+    m = b2x._anuncio_local(a["id"])
+    cores_site = [v["cor"] for v in m["linhas"]["variacoes"]]
+    mapa = {str(k): str(v) for k, v in (extra.get("mapa") or {}).items() if v}
+    if not mapa:
+        por_nome = {_sem_ac(cs): cs for cs in cores_site}
+        mapa = {cm: por_nome[_sem_ac(cm)] for cm in cores_mk if _sem_ac(cm) in por_nome}
+    sem_par = [cm for cm in cores_mk if cm not in mapa]
+    saida = {"anuncio_site": a["nome"], "alvo": alvo, "cores_da_loja": cores_mk, "cores_do_site": cores_site, "mapa_usado": mapa,
+             "cores_da_loja_sem_par": sem_par}
+    resultados, tokens = [], []
+    galeria = canal == "shopee" and extra.get("galeria", True) is not False
+    if mapa or galeria:
+        r = await b2x.fotos_simular(_Corpo({"aid": a["id"], "loja": loja, "anuncio": alvo, "canal": canal, "mapa": mapa, "galeria": galeria}))
+        resultados += r["envios"]; tokens.append(r["token"])
+    textos = {k: str(d.get(k) or "").strip() for k in ("titulo", "descricao", "preco")}
+    if any(textos.values()):
+        r = await b2x.editar_simular(_Corpo(dict(textos, loja=loja, anuncio=alvo, canal=canal, familia=bool(info.get("familia")))))
+        resultados += r["envios"]; tokens.append(r["token"])
+    if not tokens:
+        raise HTTPException(400, "Nada para trocar: nenhuma cor da loja bate com as cores do site. Mande -Json com o mapa.")
+    saida["simulacao"] = resultados
+    if d.get("validar") or not all(x["ok"] for x in resultados):
+        saida["proximo"] = ("Confira: se estiver certo, rode o mesmo comando sem -Validar." if all(x["ok"] for x in resultados)
+                            else "Algo nao passou: veja 'erro' em simulacao, arrume e simule de novo. Na duvida avise o Menork.")
+        if sem_par:
+            saida["proximo"] += f" Atencao: as cores {', '.join(sem_par)} da loja ficam com as fotos antigas (sem par no site)."
+        return saida
+    feitos = []
+    for t in tokens:
+        feitos += (await b2x.fotos_confirmar(_Corpo({"token": t})))["envios"]
+    saida["feito"] = feitos
+    saida["proximo"] = "Pronto. Conte isso ao Menork na resposta do pedido." if all(x["ok"] for x in feitos) else "Nem tudo entrou: avise o Menork o que falhou."
+    n.registrar(f"Grok substituiu {alvo} ({dados['loja_nome']}) pelo anuncio {a['nome']} no pedido {p['id']}")
+    return saida
+
+
 @app.get("/bot/pedidos")
 def bot_pedidos():
     with n.con() as c:
@@ -1060,6 +1216,13 @@ def bot_pedidos():
                 item.update(anuncio=c.execute("SELECT nome FROM anuncios WHERE id=?", (p["anuncio_id"],)).fetchone()[0],
                             loja=dados.get("loja_nome"), marketplace=dados.get("marketplace"),
                             agora=checagem(c, p["anuncio_id"], modo="ml" if dados.get("canal") == "mercadolivre" else "shopee"))
+            elif p["tipo"] == "tarefa":
+                dados = json.loads(p["dados"] or "{}")
+                item.update(pedido_do_menork=dados.get("texto"), loja=dados.get("loja_nome"), marketplace=dados.get("marketplace"),
+                            anuncios_do_site=[x["nome"] for x in dados.get("anuncios") or []],
+                            anuncios_da_loja_que_pode_mexer=dados.get("alvos") or [],
+                            agora={x["nome"]: checagem(c, x["id"], modo="ml" if dados.get("canal") == "mercadolivre" else "shopee")["faltas"]
+                                   for x in dados.get("anuncios") or [] if c.execute("SELECT 1 FROM anuncios WHERE id=?", (x["id"],)).fetchone()})
             else:
                 item["agora"] = checagem(c, p["anuncio_id"])
             saida.append(item)

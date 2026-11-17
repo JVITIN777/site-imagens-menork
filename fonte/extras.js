@@ -142,10 +142,61 @@ async function b2Inicio(aid) {
   b2Carregando(`Buscando as lojas de ${B2CANAL[B2.canal]} no ${INTEG().nome}…`);
   try { const r = await b2get('/api/b2x/lojas?canal=' + B2.canal); B2.lojas = r.lojas; b2Lojas(); } catch (err) { b2Erro(err); }
 }
+// ---- escolher a loja: cartões de cliente com busca, depois as lojas do cliente separadas por CNPJ (no lugar da lista enorme)
+// Fica no lugar de um <select>: guarda o valor num <input type=hidden id=...> e avisa com o evento change.
+const SL = {};
+const MK_NOME_SL = { shopee: 'Shopee', mercadolivre: 'Mercado Livre', tiktokshop: 'TikTok', shein: 'Shein' };
+function seletorLoja(id, lojas, atual) {
+  const st = SL[id] = { ...(SL[id] || {}), lojas, valor: lojas.some(l => l.id === atual) ? atual : '' };
+  if (st.valor && st.trocando === undefined) st.trocando = false;
+  if (!st.valor) st.trocando = true;
+  return `<div class="sl" id="sl-${esc(id)}" data-sl="${esc(id)}">${slCorpo(id)}</div><input type="hidden" id="${esc(id)}" value="${esc(st.valor)}">`;
+}
+function slCorpo(id) {
+  const st = SL[id], l = st.lojas.find(x => x.id === st.valor);
+  if (l && !st.trocando) return `<div class="sl-escolhida"><span class="sl-ini">${esc((l.cliente || '?').slice(0, 1))}</span><span><b>${esc(l.cliente)}</b><small>${esc(l.nome)}${l.pj ? ' · ' + esc(l.pj) : ''} · ${esc(MK_NOME_SL[l.canal] || MKN[l.marketplace] || l.canal || '')}${l.aviso ? ` · <em class="aviso-txt">⚠ ${esc(l.aviso)}</em>` : ''}</small></span><button type="button" class="b claro mini" data-sl-trocar>Trocar loja</button></div>`;
+  return `<input class="sl-busca" data-sl-busca placeholder="Buscar cliente ou loja…" value="${esc(st.busca || '')}" autocomplete="off"><div class="sl-lista">${slLista(id)}</div>`;
+}
+function slLista(id) {
+  const st = SL[id], q = semAcento(st.busca || ''), grupos = new Map();
+  st.lojas.forEach(l => { const g = grupos.get(l.cliente) || []; g.push(l); grupos.set(l.cliente, g); });
+  if (st.cliente && grupos.has(st.cliente) && !q) {
+    const ls = grupos.get(st.cliente), pjs = new Map();
+    ls.forEach(l => { const k = l.pj || 'Sem CNPJ'; pjs.set(k, [...(pjs.get(k) || []), l]); });
+    return `<button type="button" class="sl-voltar" data-sl-cliente="">‹ Todos os clientes</button><h4 class="sl-titulo">${esc(st.cliente)}</h4>
+      ${[...pjs.entries()].sort().map(([pj, ls]) => `<div class="sl-pj"><span class="sl-pj-nome">${esc(pj)}</span><div class="sl-lojas">${ls.map(slBotao).join('')}</div></div>`).join('')}`;
+  }
+  const cli = [...grupos.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+  if (q) {
+    const achadas = st.lojas.filter(l => semAcento(l.cliente + ' ' + l.nome + ' ' + (l.pj || '')).includes(q));
+    return achadas.length ? `<div class="sl-lojas">${achadas.slice(0, 60).map(l => slBotao(l, true)).join('')}</div>` : '<p class="pequeno">Nada encontrado.</p>';
+  }
+  return `<div class="sl-clientes">${cli.map(([c, ls]) => `<button type="button" class="sl-cli" data-sl-cliente="${esc(c)}"><span class="sl-ini">${esc(c.slice(0, 1))}</span><span><b>${esc(c)}</b><small>${ls.length} loja(s)${ls.some(l => l.aviso) ? ' · ⚠' : ''}</small></span></button>`).join('')}</div>`;
+}
+function slBotao(l, comCliente) {
+  return `<button type="button" class="sl-loja ${l.aviso ? 'com-aviso' : ''}" data-sl-loja="${esc(l.id)}" title="${esc(l.aviso || '')}">${comCliente ? `<small>${esc(l.cliente)}</small>` : ''}<b>${esc(l.nome)}</b><small>${esc(MK_NOME_SL[l.canal] || MKN[l.marketplace] || l.canal || '')}${l.pj && comCliente ? ' · ' + esc(l.pj) : ''}${l.aviso ? ' · ⚠ ' + esc(l.aviso) : ''}</small></button>`;
+}
+function semAcento(t) { return String(t || '').normalize('NFKD').replace(/[̀-ͯ]/g, '').toLowerCase(); }
+function slRedesenhar(id) { const el = document.getElementById('sl-' + id); if (el) el.innerHTML = slCorpo(id); }
+document.addEventListener('click', e => {
+  const box = e.target.closest('[data-sl]'); if (!box) return;
+  const id = box.dataset.sl, st = SL[id];
+  if (e.target.closest('[data-sl-trocar]')) { st.trocando = true; st.cliente = (st.lojas.find(l => l.id === st.valor) || {}).cliente || ''; slRedesenhar(id); return; }
+  const c = e.target.closest('[data-sl-cliente]'); if (c) { st.cliente = c.dataset.slCliente; st.busca = ''; slRedesenhar(id); return; }
+  const lj = e.target.closest('[data-sl-loja]'); if (lj) {
+    st.valor = lj.dataset.slLoja; st.trocando = false; st.busca = ''; slRedesenhar(id);
+    const h = document.getElementById(id); h.value = st.valor; h.dispatchEvent(new Event('change', { bubbles: true }));
+  }
+});
+document.addEventListener('input', e => {
+  const b = e.target.closest('[data-sl-busca]'); if (!b) return;
+  const id = b.closest('[data-sl]').dataset.sl; SL[id].busca = b.value; b.parentElement.querySelector('.sl-lista').innerHTML = slLista(id);
+});
+
 function b2Lojas() {
   const nomeAn = DB.anuncios.find(x => x.id === B2.aid).nome;
   b2Tela(`<h2>${esc(INTEG().nome)}: ${esc(nomeAn)} <small>modo ${B2CANAL[B2.canal]}</small></h2>
-    ${B2.lojas.length ? `<label class="campo-b2">Loja<select id="b2-loja">${B2.lojas.map(l => `<option value="${esc(l.id)}" ${l.id === B2.loja ? 'selected' : ''}>${esc(l.cliente)} · ${esc(l.nome)}${l.pj ? ' (' + esc(l.pj) + ')' : ''}${l.status && l.status !== 'active' ? ' · ' + esc(l.status) : ''}</option>`).join('')}</select></label>
+    ${B2.lojas.length ? `<div class="campo-b2"><span>Loja</span>${seletorLoja('b2-loja', B2.lojas.map(l => ({ ...l, canal: B2.canal })), B2.loja)}</div>
     <p class="pequeno" id="b2-aviso-loja"></p>
     <div class="b2-escolha"><button class="b" data-b2="trocar">Trocar fotos de um anúncio que já existe</button><button class="b claro" data-b2="criar">Criar anúncio novo</button></div>
     <p class="pequeno">Para usar outro marketplace, troque o modo do anúncio (botões em cima do celular).</p>`
@@ -269,6 +320,7 @@ document.addEventListener('click', e => {
   const cat = e.target.closest('[data-b2-cat]'); if (cat) { B2.form = null; return b2Ficha(cat.dataset.b2Cat, cat.dataset.b2Cam); }
   const b = e.target.closest('[data-b2]'); if (!b) return;
   const p = b.dataset.b2; b2AvisoLoja();
+  if (['trocar', 'criar'].includes(p) && !B2.loja) return window.menork.aviso('Escolha a loja primeiro.');
   ({ lojas: b2Lojas, trocar: () => b2Anuncios(''), anuncios: () => b2Anuncios(B2.busca || ''), mapear: () => b2Mapear(B2.anuncio), simular: b2Simular, confirmar: b2Confirmar,
      criar: () => b2Categorias(''), categorias: () => b2Categorias(''), ficha: () => b2Ficha(B2.categoria, B2.caminho), publicar: b2Publicar }[p] || (() => {}))();
 });
@@ -921,10 +973,11 @@ window.PEDIDOS_PUBLICAR = () => {
   const abertos = PUB.lista.filter(p => ['aberto', 'pego'].includes(p.status)), feitos = PUB.lista.filter(p => p.status === 'feito').slice(0, 12);
   if (!abertos.length && !feitos.length) return '';
   const nome = id => DB.anuncios.find(a => a.id === id)?.nome || ('#' + id);
-  const linha = p => `<li><b class="${p.status === 'feito' ? 'ok-mini' : 'alerta-mini'}">${{ aberto: 'Esperando o Grok', pego: 'Grok publicando', feito: 'Feito' }[p.status] || esc(p.status)}</b> ${esc(nome(p.anuncio_id))} → ${esc(p.loja_nome || '')} (${esc(p.marketplace || '')})${p.bot ? ' · ' + esc(p.bot) : ''}${p.resposta ? ' · ' + esc(p.resposta) : ''}</li>`;
-  return `<div class="bloco pedidos-pub"><h2>Mandados para o Grok publicar <small>${abertos.length} em andamento</small><button class="b claro mini" id="atualizar-pub">Atualizar</button></h2><ul class="envios-feitos">${abertos.map(linha).join('')}${feitos.map(linha).join('')}</ul></div>`;
+  const linha = p => p.tipo === 'tarefa' ? `<li><b class="${p.status === 'feito' ? 'ok-mini' : 'alerta-mini'}">${{ aberto: 'Esperando o Grok', pego: 'Grok fazendo', feito: 'Feito' }[p.status] || esc(p.status)}</b> Pedido ${p.id}: “${esc((p.texto || '').slice(0, 90))}${(p.texto || '').length > 90 ? '…' : ''}” · ${(p.anuncios || []).length} anúncio(s) → ${esc(p.loja_nome || '')}${(p.alvos || []).length ? ` · ${p.alvos.length} da loja liberado(s)` : ''}${p.bot ? ' · ' + esc(p.bot) : ''}${p.resposta ? ' · ' + esc(p.resposta) : ''}</li>`
+    : `<li><b class="${p.status === 'feito' ? 'ok-mini' : 'alerta-mini'}">${{ aberto: 'Esperando o Grok', pego: 'Grok publicando', feito: 'Feito' }[p.status] || esc(p.status)}</b> ${esc(nome(p.anuncio_id))} → ${esc(p.loja_nome || '')} (${esc(p.marketplace || '')})${p.bot ? ' · ' + esc(p.bot) : ''}${p.resposta ? ' · ' + esc(p.resposta) : ''}</li>`;
+  return `<div class="bloco pedidos-pub"><h2>Mandados para o Grok <small>${abertos.length} em andamento</small><button class="b claro mini" id="atualizar-pub">Atualizar</button></h2><ul class="envios-feitos">${abertos.map(linha).join('')}${feitos.map(linha).join('')}</ul></div>`;
 };
-window.BARRA_SEL_AN = () => SEL_AN.size ? `<div class="barra-sel-an"><b>${SEL_AN.size} anúncio(s) marcado(s)</b><button class="b verde" id="mandar-grok">Mandar para o Grok publicar</button><button class="b claro" id="marcar-familia" title="Marca também os outros anúncios da mesma família">Marcar a família</button><button class="b claro" id="limpar-sel-an">Limpar</button></div>` : '';
+window.BARRA_SEL_AN = () => SEL_AN.size ? `<div class="barra-sel-an"><b>${SEL_AN.size} anúncio(s) marcado(s)</b><button class="b verde" id="mandar-grok">Mandar para o Grok publicar</button><button class="b" id="mandar-grok-pedido" title="Escreva o que o Grok deve fazer com estes anúncios, por exemplo substituir anúncios que já estão na loja">Mandar para o Grok com pedido</button><button class="b claro" id="marcar-familia" title="Marca também os outros anúncios da mesma família">Marcar a família</button><button class="b claro" id="limpar-sel-an">Limpar</button></div>` : '';
 async function pubJanela() {
   if (!LOJAS.clientes) { b2Carregando('Buscando as lojas no B2X…'); await carregarLojas(); if (!LOJAS.clientes) return b2Erro(new Error(LOJAS.erro || 'Não consegui ler as lojas.')); }
   const ads = [...SEL_AN].map(id => DB.anuncios.find(a => a.id === id)).filter(Boolean);
@@ -932,12 +985,65 @@ async function pubJanela() {
   lojas.forEach(l => (grupos[l.cliente] = grupos[l.cliente] || []).push(l));
   b2Tela(`<h2>Mandar para o Grok publicar <small>${ads.length} anúncio(s)</small></h2>
     <ul class="envios-feitos pub-lista">${ads.map(a => { const fl = faltas(a.id).itens.length; return `<li><b>${esc(a.nome)}</b>${a.titulo ? ' · ' + esc(a.titulo) : ' · <span class="aviso-txt">sem título (o Grok cria)</span>'}${fl ? ` · ${fl} pendência(s)` : ''}</li>`; }).join('')}</ul>
-    <label class="campo-b2">Loja onde o Grok vai publicar<select id="pub-loja">${Object.entries(grupos).map(([c, ls]) => `<optgroup label="${esc(c)}">${ls.map(l => `<option value="${esc(l.id)}">${esc(l.nome)} · ${esc(MKN[l.marketplace] || l.marketplace)}${l.aviso ? ' ⚠' : ''}</option>`).join('')}</optgroup>`).join('')}</select></label>
+    <div class="campo-b2"><span>Loja onde o Grok vai publicar</span>${seletorLoja('pub-loja', lojas, PUB.loja)}</div>
     <p class="pequeno">O Grok arruma o que estiver incompleto (título diferente para cada um, descrição, tamanhos), valida e publica. Ele só consegue publicar estes anúncios, nesta loja. Na Shopee o anúncio nasce oculto e no Mercado Livre pausado. O modo de cada anúncio muda para o marketplace da loja.</p>
     <div class="acoes"><button class="b verde" id="pub-confirmar">Mandar ${ads.length} para o Grok</button><button class="b claro" data-fechar>Cancelar</button></div>`);
 }
+// pedido escrito para o Grok: anuncios do site + loja + anuncios da loja que ele pode mexer + o texto
+const TF = { alvos: new Map(), busca: '', lista: null, texto: '', loja: '' };
+async function tfJanela() {
+  if (!LOJAS.clientes) { b2Carregando('Buscando as lojas no B2X…'); await carregarLojas(); if (!LOJAS.clientes) return b2Erro(new Error(LOJAS.erro || 'Não consegui ler as lojas.')); }
+  TF.ads = [...SEL_AN].map(id => DB.anuncios.find(a => a.id === id)).filter(Boolean);
+  const lojas = todasLojas().filter(l => ['shopee', 'mercadolivre'].includes(l.canal)), grupos = {};
+  lojas.forEach(l => (grupos[l.cliente] = grupos[l.cliente] || []).push(l));
+  if (!lojas.some(l => l.id === TF.loja)) { TF.loja = ''; TF.alvos.clear(); TF.lista = null; }
+  b2Tela(`<h2>Mandar para o Grok com pedido <small>${TF.ads.length} anúncio(s) do site</small></h2>
+    <ol class="envios-feitos pub-lista tf-ads">${TF.ads.map(a => `<li><b>${esc(a.nome)}</b>${a.titulo ? ' · ' + esc(a.titulo) : ''}</li>`).join('')}</ol>
+    <div class="campo-b2"><span>Loja</span>${seletorLoja('tf-loja', lojas, TF.loja)}</div>
+    ${!TF.loja ? '' : `<div class="tf-alvos"><div class="tf-cab"><b>Anúncios da loja que o Grok pode mexer</b> <span class="pequeno">${TF.alvos.size ? TF.alvos.size + ' escolhido(s)' : 'nenhum: o Grok só pode publicar novos'}</span></div>
+      <div class="tf-chips">${[...TF.alvos.values()].map(x => `<span class="tf-chip">${x.foto ? `<img src="${esc(x.foto)}" alt="">` : ''}${esc(x.id)} · ${esc((x.titulo || '').slice(0, 40))}<button type="button" data-tf-tirar="${esc(x.id)}" title="Tirar">×</button></span>`).join('')}</div>
+      <form id="tf-busca" class="b2-linha"><input name="busca" value="${esc(TF.busca)}" placeholder="Buscar na loja pelo título ou código"><button class="b claro">Buscar</button></form>
+      <div class="tf-lista">${TF.lista === null ? '<p class="pequeno">Carregando os anúncios da loja…</p>' : TF.lista.length ? TF.lista.map(x => `<label class="tf-item ${TF.alvos.has(x.id) ? 'escolhido' : ''}"><input type="checkbox" data-tf-alvo="${esc(x.id)}" ${TF.alvos.has(x.id) ? 'checked' : ''}>${x.foto ? `<img src="${esc(x.foto)}" alt="" onerror="this.style.visibility='hidden'">` : '<span class="tf-semfoto"></span>'}<span><b>${esc(x.titulo)}</b><small>${esc(x.id)}${x.preco ? ' · R$ ' + esc(x.preco) : ''}${x.status ? ' · ' + esc(x.status) : ''}</small></span></label>`).join('') : '<p class="pequeno">Nada encontrado.</p>'}</div></div>`}
+    <label class="campo-b2">O que o Grok deve fazer<textarea id="tf-texto" rows="3" placeholder="Ex.: Substitua os anúncios que separei pelos do site, na ordem: o primeiro da loja pelo TA101 unitário 02, o segundo pelo 03… Troque também o título.">${esc(TF.texto)}</textarea></label>
+    <p class="pequeno">O Grok só consegue mexer nos anúncios da loja que você marcou e só usa os anúncios do site desta lista. Ele simula antes de trocar e nunca apaga nada.</p>
+    <div class="acoes"><button class="b verde" id="tf-confirmar">Mandar pedido para o Grok</button><button class="b claro" data-fechar>Cancelar</button></div>`);
+  if (TF.loja && TF.lista === null) tfBuscar();
+}
+async function tfBuscar() {
+  const loja = TF.loja;
+  try { const r = await SRV.anunciosLoja(loja, TF.busca, 1, false); if (loja !== TF.loja) return; TF.lista = r.anuncios || []; }
+  catch (err) { TF.lista = []; window.menork.aviso(err.message); }
+  if (document.getElementById('tf-texto')) { TF.texto = document.getElementById('tf-texto').value; tfJanela(); }
+}
+async function tfConfirmar() {
+  TF.texto = document.getElementById('tf-texto').value.trim();
+  if (!TF.loja) return window.menork.aviso('Escolha a loja.');
+  if (TF.texto.length < 5) return window.menork.aviso('Escreva o que o Grok deve fazer.');
+  b2Carregando('Criando o pedido…');
+  try { const r = await b2post('/api/pedidos/tarefa', { ids: TF.ads.map(a => a.id), loja: TF.loja, texto: TF.texto, alvos: [...TF.alvos.values()].map(x => ({ id: x.id, titulo: x.titulo })) });
+    SEL_AN.clear(); PUB.lista = null; TF.alvos.clear(); TF.texto = ''; TF.lista = null;
+    b2Tela(`<h2>Pronto: pedido ${r.pedido} para o Grok</h2><p>Mande esta mensagem para o Grok no Grok Bot:</p>
+      <textarea id="txt-pub" rows="4" readonly>${esc(r.texto)}</textarea>
+      <div class="acoes"><button class="b" data-copiar-de="txt-pub">Copiar mensagem</button><button class="b claro" data-fechar>Fechar</button></div>
+      <p class="pequeno">O andamento aparece na página Anúncios, em "Mandados para o Grok".</p>`);
+    await SRV.carregar(); RENDER();
+  } catch (err) { b2Erro(err); }
+}
+document.addEventListener('click', e => {
+  if (e.target.closest('#mandar-grok-pedido')) return tfJanela();
+  if (e.target.closest('#tf-confirmar')) return tfConfirmar();
+  const t = e.target.closest('[data-tf-tirar]'); if (t) { TF.texto = document.getElementById('tf-texto')?.value || TF.texto; TF.alvos.delete(t.dataset.tfTirar); return tfJanela(); }
+});
+document.addEventListener('change', e => {
+  if (e.target.id === 'tf-loja') { TF.texto = document.getElementById('tf-texto')?.value || TF.texto; TF.loja = e.target.value; TF.alvos.clear(); TF.lista = null; TF.busca = ''; return tfJanela(); }
+  const cx = e.target.closest('[data-tf-alvo]'); if (!cx) return;
+  const x = (TF.lista || []).find(i => i.id === cx.dataset.tfAlvo); TF.texto = document.getElementById('tf-texto')?.value || TF.texto;
+  cx.checked && x ? TF.alvos.set(x.id, x) : TF.alvos.delete(cx.dataset.tfAlvo); tfJanela();
+});
+document.addEventListener('submit', e => { if (e.target.id !== 'tf-busca') return; e.preventDefault(); TF.texto = document.getElementById('tf-texto')?.value || TF.texto; TF.busca = e.target.busca.value.trim(); TF.lista = null; tfJanela(); });
+
 async function pubConfirmar() {
-  const loja = document.getElementById('pub-loja').value; b2Carregando('Criando os pedidos…');
+  const loja = document.getElementById('pub-loja').value; if (!loja) return window.menork.aviso('Escolha a loja.'); PUB.loja = loja; b2Carregando('Criando os pedidos…');
   try { const r = await b2post('/api/pedidos/publicar', { ids: [...SEL_AN], loja }); SEL_AN.clear(); PUB.lista = null;
     b2Tela(`<h2>Pronto: ${r.pedidos.length} pedido(s) para o Grok</h2><p>Mande esta mensagem para o Grok no Grok Bot:</p>
       <textarea id="txt-pub" rows="4" readonly>${esc(r.texto)}</textarea>

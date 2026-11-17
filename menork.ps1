@@ -10,7 +10,7 @@ param(
   [string]$Limite, [string]$Marketplace, [string]$Destino, [string]$Tarefa, [string]$Info, [string]$Pasta,
   [string[]]$Marketplaces, [int]$Max = 5, [int]$Id, [string]$Estilo, [switch]$Copia, [int]$Posicao,
   [string]$Titulo, [string]$Descricao, [string]$Preco, [string]$PrecoAntigo, [string]$Tamanhos, [string]$Categoria,
-  [string]$Json, [switch]$Validar, [string]$Resposta, [string]$Busca
+  [string]$Json, [switch]$Validar, [string]$Resposta, [string]$Busca, [string]$Alvo
 )
 $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"
@@ -61,6 +61,8 @@ try {
     "categorias"  { if (-not $Anuncio) { throw "Diga -Anuncio" }; Mostrar (Pegar "/bot/b2x/categorias" @{ anuncio = $Anuncio; busca = $Busca }) }
     "ficha"       { if (-not $Anuncio -or -not $Categoria) { throw "Diga -Anuncio e -Categoria" }; Mostrar (Pegar "/bot/b2x/ficha" @{ anuncio = $Anuncio; categoria = $Categoria }) }
     "publicar"    { if (-not $Anuncio -or -not $Categoria) { throw "Diga -Anuncio e -Categoria" }; Mostrar (MandarJson "/bot/publicar" @{ anuncio = $Anuncio; categoria = $Categoria; json = $Json; validar = [bool]$Validar }) }
+    "loja-anuncio" { if (-not $Id -or -not $Alvo) { throw "Diga -Id (pedido) e -Alvo (codigo do anuncio na loja)" }; Mostrar (Pegar "/bot/b2x/anuncio" @{ id = $Id; alvo = $Alvo }) }
+    "substituir"  { if (-not $Id -or -not $Anuncio -or -not $Alvo) { throw "Diga -Id, -Anuncio e -Alvo" }; Mostrar (MandarJson "/bot/substituir" @{ id = $Id; anuncio = $Anuncio; alvo = $Alvo; json = $Json; titulo = $Titulo; descricao = $Descricao; preco = $Preco; validar = [bool]$Validar }) }
     "demanda"     {
       if (-not $Tarefa -or -not $Info) { throw "Diga -Tarefa e -Info" }
       Mostrar (MandarJson "/bot/demanda" @{ tarefa = $Tarefa; info = $Info; pasta = $Pasta; produto = $Produto; marketplaces = @($Marketplaces) })
@@ -84,6 +86,8 @@ Comandos (respostas em JSON):
   categorias  -Anuncio "X" [-Busca "chinelo feminino"]       (pedido de PUBLICAR: categorias da loja escolhida)
   ficha       -Anuncio "X" -Categoria ID                     (o que a categoria pede e o formato do -Json)
   publicar    -Anuncio "X" -Categoria ID -Json '{...}' [-Validar]   (so o que o Menork mandou em pedidos)
+  loja-anuncio -Id N -Alvo CODIGO                          (pedido do Menork: le um anuncio da loja que ele liberou)
+  substituir  -Id N -Anuncio "X" -Alvo CODIGO [-Json '{"mapa":{"Cor loja":"COR SITE"}}'] [-Titulo] [-Descricao] [-Preco] [-Validar]
   pedido      -Id N -Status feito -Resposta "codigo criado ou motivo"
   reprovada   -Arquivo <png/jpg> -Motivo "Sola errada" -Bot CONFERENTE [-Produto -Cor -Tipo -Conta]
   referencias -Tipo informativo|cena|capa|tabela [-Estilo Academia] [-Produto CI9] [-Max 5]

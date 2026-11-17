@@ -136,6 +136,21 @@ menork.ps1 publicar -Anuncio "TA101 copia 3" -Categoria 100559 -Json '{"atributo
    - Mercado Livre com promoção: se o anúncio tiver **preço cheio** (preco_antigo) maior que o **preço**, ele sobe com o cheio e o site aplica sozinho a promoção (desconto direto) com o preço menor. Para mudar, use `dados -Preco 59,90 -PrecoAntigo 89,90`.
 6. Termine: `menork.ps1 pedido -Id N -Status feito -Resposta "criado 999888"` (ou o motivo de não ter subido).
 
+**Pedido escrito pelo Menork (substituir anúncios da loja e outros)**
+Em `menork.ps1 pedidos`, os pedidos com `"tipo": "tarefa"` trazem o texto do Menork em `pedido_do_menork`, os anúncios do site (`anuncios_do_site`) e os anúncios da loja que ele liberou (`anuncios_da_loja_que_pode_mexer`). Faça SÓ o que ele escreveu, só nesses anúncios. Os outros anúncios da loja são recusados. Nunca apague nada.
+1. `menork.ps1 pedido -Id N -Status pego -Bot "SEU NOME"`
+2. Leia o anúncio da loja: `menork.ps1 loja-anuncio -Id N -Alvo 123456789` (título, cores e quantas fotos ele tem).
+3. Substituir um anúncio da loja por um do site (troca as fotos; na Shopee as 9 fotos e a capa de cada cor, no Mercado Livre as fotos de cada cor):
+```
+menork.ps1 substituir -Id N -Anuncio "TA101 unitario 02" -Alvo 123456789 -Validar
+```
+   - `-Validar` só simula. Confira `simulacao` e `cores_da_loja_sem_par`; se estiver certo, rode o MESMO comando sem `-Validar`.
+   - As cores são ligadas pelo nome. Se o nome for diferente, mande `-Json '{"mapa":{"Bege":"OFF/DOURADO"}}'` (cor na loja → cor no site).
+   - Se o Menork pediu para trocar também título, descrição ou preço, acrescente `-Titulo "..."`, `-Descricao "..."`, `-Preco 89,90`.
+   - Um anúncio do site para cada anúncio da loja, na ordem que o Menork escreveu. Na dúvida sobre qual troca por qual, pergunte ao Menork antes.
+4. Se o pedido também mandar publicar anúncios novos, use os comandos de publicar (categorias, ficha, publicar) com os anúncios do pedido.
+5. Termine: `menork.ps1 pedido -Id N -Status feito -Resposta "123456789 trocado pelo TA101 unitario 02; ..."`.
+
 **Baixar o pacote aprovado para subir o anúncio**
 ```
 menork.ps1 pacote -Anuncio "CI9 unitário" -Marketplace SHP -Destino "C:\Temp\ci9-shopee" -Bot "SEU NOME"
