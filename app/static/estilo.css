@@ -521,3 +521,12 @@ body.porta{background:#050505!important}
 .dados-topo .dados.compacto label:first-child,.dados-topo .dados.compacto label:last-child{grid-column:1/-1}
 .dados-topo .dados.compacto textarea{min-height:52px}
 @media (max-width:1100px){.topo-anuncio{grid-template-columns:1fr}}
+.ps-lista{display:grid;gap:8px;margin:6px 0 14px;max-height:340px;overflow:auto}
+.ps-promo{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border:1px solid var(--borda);border-radius:10px;cursor:pointer;background:var(--chao)}
+.ps-promo > span{display:flex;flex-direction:column;gap:3px}
+.ps-promo small{color:var(--fraco);font-size:12px}
+.ps-promo.escolhida{border-color:var(--luz)}
+.ps-promo.fechada{opacity:.5;cursor:default}
+.ps-promo .ps-tipo{font-style:normal;font-size:11px;padding:1px 7px;border-radius:999px;background:var(--relevo);color:var(--fraco);margin-left:4px}
+.ps-promo .ps-motivo{color:var(--vermelho)}
+.ps-promo input{margin-top:3px}

@@ -549,7 +549,8 @@ def criar_do_site(d, por="você"):
         raise HTTPException(400, "Preencha o preço do anúncio no site antes de criar.")
     cheio = _preco(a["preco_antigo"])
     promo_ml = preco if canal == "mercadolivre" and cheio and cheio > preco else None
-    if promo_ml:  # ML: o anuncio sobe com o preco cheio; o promocional entra como desconto direto depois de criado
+    promo_shopee = preco if canal == "shopee" and cheio and cheio > preco else None
+    if promo_ml or promo_shopee:  # sobe com o preco cheio; ML: desconto direto depois; Shopee: voce coloca numa promocao da loja
         preco = cheio
     if not (a["titulo"] or "").strip() or not (a["descricao"] or "").strip():
         raise HTTPException(400, "Preencha o título e a descrição do anúncio no site antes de criar.")
@@ -612,6 +613,10 @@ def criar_do_site(d, por="você"):
              "variacoes": len(variacoes), "fotos": len(links)}
     if promo_ml and validar:
         saida["avisos"].insert(0, f"Mercado Livre: sobe com o preço cheio R$ {preco:.2f} e, depois de criado, entra a promoção de R$ {promo_ml:.2f}.")
+    if promo_shopee:
+        saida["promocao_shopee"] = promo_shopee
+        if validar:
+            saida["avisos"].insert(0, f"Shopee: sobe com o preço cheio R$ {preco:.2f}. Depois de criado, coloque numa promoção da loja com R$ {promo_shopee:.2f} (botão Colocar numa promoção).")
     if not validar:
         ids = r.get("anuncio_ids") or ([r["anuncio_id"]] if r.get("anuncio_id") else [])
         ok = 200 <= status < 300 and r.get("success", True) is not False and bool(ids)
@@ -985,3 +990,82 @@ def acompanhar(loja, pedido_id, promo=None, pedido_bot=None, aid=None):
         finally:
             _acompanhando.discard(pedido_id)
     threading.Thread(target=rodar, daemon=True).start()
+
+
+# ------------------------------------------------------------ Shopee: colocar o anuncio numa promocao que a loja ja tem
+# Na Shopee o anuncio sobe com o preco cheio e entra numa promocao existente (desconto ou relampago) com o preco promocional.
+# GET /v1/promocoes lista as promocoes; POST /v1/promocoes/editar com mudancas.incluir (simular -> pedido_id -> confirmar).
+TIPO_PROMO = {"desconto": "Desconto", "relampago": "Relâmpago", "oferta_relampago": "Relâmpago"}
+
+
+@rota.get("/api/b2x/promocoes-loja")
+def promocoes_loja(loja: str):
+    status, d = chamar("GET", "/v1/promocoes?" + urllib.parse.urlencode({"loja": loja}), timeout=120)
+    _ok(status, d, "Ler as promoções da loja")
+    lista = []
+    for p in d.get("promocoes") or []:
+        if not isinstance(p, dict):
+            continue
+        tipo = str(p.get("tipo") or "")
+        if tipo not in TIPO_PROMO:
+            continue  # cupom, combo e campanha nao recebem anuncio com preco proprio por aqui
+        pode = p.get("pode") or {}
+        obs = (p.get("pode_obs") or {}).get("incluir") if isinstance(p.get("pode_obs"), dict) else ""
+        vagas = p.get("vagas") or {}
+        lista.append({"id": str(p.get("id") or ""), "tipo": "relampago" if "relampago" in tipo else tipo,
+                      "tipo_nome": TIPO_PROMO[tipo], "nome": p.get("nome") or p.get("tipo_nome") or "",
+                      "status": str(p.get("status") or ""), "inicio": p.get("inicio_brasilia") or "", "fim": p.get("fim_brasilia") or "",
+                      "produtos": p.get("produtos"), "pode_incluir": pode.get("incluir") is not False,
+                      "motivo": _frase(obs) if obs else "", "vagas_livres": vagas.get("livres") if isinstance(vagas, dict) else None,
+                      "renova": bool(p.get("renovacao_automatica"))})
+    lista.sort(key=lambda x: (not x["pode_incluir"], x["tipo"] != "desconto", x["inicio"]))
+    return {"promocoes": lista, "avisos": [_frase(x) for x in (d.get("avisos") or [])][:5]}
+
+
+@rota.post("/api/b2x/promocao-incluir")
+async def promocao_incluir(request: Request):
+    """Coloca um anuncio numa promocao que ja existe. Sem confirmar = simula (nada muda)."""
+    d = await request.json()
+    loja, pid, tipo, anuncio_ = str(d["loja"]), str(d["id"]), str(d.get("tipo") or "desconto"), str(d["anuncio"])
+    preco = _preco(d.get("preco"))
+    if not preco:
+        raise HTTPException(400, "Digite o preço promocional. Ex.: 49,90")
+    por_cor = {str(k): _preco(v) for k, v in (d.get("precos_cor") or {}).items() if _preco(v)}
+    a, _ = _detalhe(loja, anuncio_)
+    cores = _cores_do(a)
+    relampago = tipo == "relampago"
+    try:
+        estoque = max(1, int(str(d.get("estoque_promocional") or "10").strip()))
+    except ValueError:
+        raise HTTPException(400, "Estoque da relâmpago inválido.")
+
+    def var(base):
+        return dict(base, **({"estoque_promocional": estoque} if relampago else {}))
+    variacoes = [var({"cor": c, "preco_promocional": por_cor.get(c, preco)}) for c in cores] or [var({"id": None, "preco_promocional": preco})]
+    corpo = {"loja": loja, "id": pid, "tipo": tipo, "mudancas": {"incluir": [{"produto_id": anuncio_, "variacoes": variacoes}]}}
+    if relampago and d.get("forcar"):
+        corpo["forcar"] = True
+    confirmar = bool(d.get("confirmar"))
+    if confirmar:
+        corpo["pedido_id"] = str(d.get("pedido_id") or "")
+    else:
+        corpo["simular"] = True
+    status, r = chamar("POST", "/v1/promocoes/editar", corpo, timeout=180)
+    problemas = [_frase(x) for x in (r.get("problemas") or r.get("erros") or [])][:12]
+    falhas = [_frase(x) for x in (r.get("falhas") or [])][:12]
+    if not 200 <= status < 300 and not problemas:
+        problemas = [texto_erro(r) or f"O {config()['nome']} respondeu {status}."]
+    itens = []
+    for x in (r.get("itens_resolvidos") or [])[:80]:
+        if isinstance(x, list) and len(x) > 5:
+            itens.append({"variacao": x[2], "preco_atual": x[3], "preco_promocional": x[4], "desconto": x[5]})
+        elif isinstance(x, dict):
+            itens.append({"variacao": x.get("variacao") or x.get("cor") or "", "preco_atual": x.get("preco_atual"),
+                          "preco_promocional": x.get("preco_promocional"), "desconto": x.get("desconto") or x.get("desconto_%")})
+    ok = 200 <= status < 300 and r.get("success", True) is not False and not problemas and not (not confirmar and r.get("validado") is False)
+    if confirmar:
+        ok = ok and not (falhas and not r.get("aplicadas"))
+        n.registrar(f"B2X: anúncio {anuncio_} {'entrou' if ok else 'não entrou'} na promoção {pid} ({tipo}) da loja {loja}")
+    return {"ok": ok, "simulado": not confirmar, "pedido_id": r.get("pedido_id") or "", "problemas": problemas + falhas,
+            "avisos": [_frase(x) for x in (r.get("avisos") or [])][:8], "itens": itens, "cores": cores,
+            "criterios": r.get("criterios_shopee") if relampago else None}

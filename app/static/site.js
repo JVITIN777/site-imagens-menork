@@ -524,7 +524,7 @@ async function b2Publicar() {
   b2Carregando('Criando o anúncio no marketplace. Não feche esta janela…');
   try { const r = await b2post('/api/b2x/criar', { ...B2.corpo, confirmar: true, pedido_id: B2.pedido });
     if (r.na_fila) return b2Fila(r.pedido_id);
-    b2Tela(r.criado ? `<h2>Anúncio criado</h2><div class="nota"><b>${esc(B2CANAL[B2.canal])}: ${r.anuncio_ids.map(esc).join(', ')}</b><span>Situação: ${esc(({ UNLIST: 'oculto', unlist: 'oculto', paused: 'pausado', PAUSED: 'pausado', active: 'ativo', NORMAL: 'ativo' })[r.status] || r.status || (B2.canal === 'shopee' ? 'oculto' : 'pausado'))}. Revise no marketplace e ative.</span>${r.divergencias.map(x => `<span>Ficou diferente: ${esc(x)}</span>`).join('')}</div>${r.promocao ? `<div class="nota ${r.promocao.ok ? '' : 'ruim'}"><span>${esc(r.promocao.msg)}</span></div>` : ''}${b2Lista('Avisos', r.avisos)}<div class="acoes"><button class="b" data-fechar>Fechar</button></div>`
+    b2Tela(r.criado ? `<h2>Anúncio criado</h2><div class="nota"><b>${esc(B2CANAL[B2.canal])}: ${r.anuncio_ids.map(esc).join(', ')}</b><span>Situação: ${esc(({ UNLIST: 'oculto', unlist: 'oculto', paused: 'pausado', PAUSED: 'pausado', active: 'ativo', NORMAL: 'ativo' })[r.status] || r.status || (B2.canal === 'shopee' ? 'oculto' : 'pausado'))}. Revise no marketplace e ative.</span>${r.divergencias.map(x => `<span>Ficou diferente: ${esc(x)}</span>`).join('')}</div>${r.promocao ? `<div class="nota ${r.promocao.ok ? '' : 'ruim'}"><span>${esc(r.promocao.msg)}</span></div>` : ''}${b2Lista('Avisos', r.avisos)}<div class="acoes">${B2.canal === 'shopee' && r.anuncio_ids.length ? `<button class="b verde" data-promo-shp="${esc(r.anuncio_ids[0])}" data-loja="${esc(B2.loja)}" data-preco="${esc(r.promocao_shopee || '')}">Colocar numa promoção</button>` : ''}<button class="b ${B2.canal === 'shopee' ? 'claro' : ''}" data-fechar>Fechar</button></div>`
       : `<h2>Não foi criado</h2>${r.incerto ? '<div class="nota ruim"><span>A resposta ficou incerta. Não crie de novo: confira a loja no marketplace antes. Repetir por aqui usa o mesmo pedido e não duplica.</span></div>' : ''}<div class="nota ruim">${r.problemas.map(p => `<span>${esc(p)}</span>`).join('') || '<span>O marketplace não devolveu o código do anúncio.</span>'}</div><div class="acoes"><button class="b" data-b2="publicar">Tentar de novo (não duplica)</button><button class="b claro" data-b2="ficha">Voltar</button></div>`);
     window.AO_DESENHAR?.(B2.aid);
   } catch (err) { b2Erro(err, 'ficha'); }
@@ -853,6 +853,8 @@ function mkMostrar() {
       <div class="b2-grade"><label class="largo2">Título novo<input name="titulo" placeholder="${esc(d.titulo)}" maxlength="255"></label>
         <label>Preço novo<input name="preco" inputmode="decimal" placeholder="Ex.: 49,90"></label><label>Estoque novo${vs.length > 1 ? ' (todas as variações)' : ''}<input name="estoque" inputmode="numeric" placeholder="Ex.: 20"></label></div>
       <label class="campo-b2">Descrição nova<textarea name="descricao" rows="4" placeholder="${d.descricao ? 'Deixe vazio para manter a atual' : ''}">${''}</textarea></label>
+      ${l?.canal === 'shopee' ? `<h3>Promoção <small class="pequeno">coloque este anúncio numa promoção que a loja já tem e ajuste o preço</small></h3>
+        <div class="b2-linha"><button type="button" class="b claro" data-promo-shp="${esc(d.id)}" data-loja="${esc(l.id)}">Colocar numa promoção</button></div>` : ''}
       ${l?.canal === 'mercadolivre' ? `<h3>Promoção <small class="pequeno">desconto direto do Mercado Livre; o preço do anúncio fica como o cheio, riscado</small></h3>
         <div class="b2-linha"><input id="mk-promo" inputmode="decimal" placeholder="Preço promocional, ex.: 59,90"><button type="button" class="b claro" id="mk-promo-simular">Simular promoção</button></div>` : ''}
       <div class="acoes"><button class="b">Simular a mudança</button>${podeFotos ? '<button type="button" class="b claro" id="mk-fotos">Trocar fotos com um anúncio do site</button>' : ''}${d.url ? `<a class="b claro" href="${esc(d.url)}" target="_blank" rel="noopener">Abrir no marketplace</a>` : ''}<button type="button" class="b claro" data-fechar>Fechar</button></div></form>`);
@@ -1246,6 +1248,57 @@ document.addEventListener('click', e => {
   if (e.target.closest('#mk-promo-confirmar')) return mkPromoConfirmar();
 });
 
+// Shopee: mostra as promocoes que a loja ja tem; voce escolhe uma, ajusta o preco, simula e confirma
+const PS = {};
+const reais = v => v == null || v === '' || isNaN(Number(String(v).replace(',', '.'))) ? (v ?? '') : 'R$ ' + Number(String(v).replace(',', '.')).toFixed(2).replace('.', ',');
+async function psAbrir(loja, anuncio, preco) {
+  Object.assign(PS, { loja, anuncio, preco: preco ? String(preco).replace('.', ',') : (PS.anuncio === anuncio ? PS.preco : ''), escolhida: null, lista: null, voltarMk: !!(MK.atual && MK.atual.id === anuncio) });
+  b2Carregando('Lendo as promoções da loja na Shopee…');
+  try { const r = await b2get('/api/b2x/promocoes-loja?loja=' + encodeURIComponent(loja)); PS.lista = r.promocoes; PS.avisos = r.avisos; psMostrar(); }
+  catch (err) { b2Erro(err); }
+}
+function psMostrar(msg = '') {
+  const L = PS.lista || [], abertas = L.filter(p => p.pode_incluir);
+  if (!PS.escolhida && abertas.length) PS.escolhida = abertas[0].id;
+  const esc_ = PS.lista.find(p => p.id === PS.escolhida), relampago = esc_?.tipo === 'relampago';
+  const card = p => `<label class="ps-promo ${p.pode_incluir ? '' : 'fechada'} ${p.id === PS.escolhida ? 'escolhida' : ''}"><input type="radio" name="ps" value="${esc(p.id)}" ${p.id === PS.escolhida ? 'checked' : ''} ${p.pode_incluir ? '' : 'disabled'}>
+    <span><div><b>${esc(p.nome || p.tipo_nome)}</b>${p.nome ? ` <em class="ps-tipo">${esc(p.tipo_nome)}</em>` : ''}${p.renova ? ' <em class="ps-tipo">renova sozinha</em>' : ''}</div>
+    <small>${esc(p.inicio)} até ${esc(p.fim)}${p.produtos != null ? ` · ${esc(p.produtos)} produto(s)` : ''}${p.vagas_livres != null ? ` · ${esc(p.vagas_livres)} vaga(s)` : ''}${p.status ? ' · ' + esc(p.status.replace(/_/g, ' ')) : ''}</small>
+    ${p.pode_incluir ? '' : `<small class="ps-motivo">Não aceita anúncio novo agora${p.motivo ? ': ' + esc(p.motivo) : ''}</small>`}</span></label>`;
+  b2Tela(`<h2>Colocar numa promoção <small>anúncio ${esc(PS.anuncio)} · Shopee</small></h2>
+    ${msg}
+    ${L.length ? `<div class="ps-lista">${L.map(card).join('')}</div>` : '<div class="nota ruim"><span>Esta loja não tem promoção de desconto ou relâmpago em andamento ou agendada. Crie uma no painel da Shopee (ou no B2X) e volte aqui.</span></div>'}
+    ${PS.avisos?.length ? b2Lista('Avisos', PS.avisos) : ''}
+    ${abertas.length ? `<div class="b2-grade"><label>Preço promocional<input id="ps-preco" inputmode="decimal" value="${esc(PS.preco || '')}" placeholder="Ex.: 49,90"></label>
+      ${relampago ? `<label>Estoque da relâmpago (por variação)<input id="ps-estoque" inputmode="numeric" value="${esc(PS.estoque || '10')}"></label>` : ''}</div>
+      <p class="pequeno">O mesmo preço vai para todas as cores e tamanhos. O preço cheio do anúncio continua como o riscado.</p>` : ''}
+    <div class="acoes">${abertas.length ? '<button class="b" id="ps-simular">Simular</button>' : ''}${PS.voltarMk ? '<button class="b claro" id="mk-voltar">Voltar</button>' : ''}<button class="b claro" data-fechar>Fechar</button></div>`);
+}
+async function psEnviar(confirmar) {
+  const p = PS.lista.find(x => x.id === PS.escolhida); if (!p) return window.menork.aviso('Escolha uma promoção.');
+  if (!confirmar) { PS.preco = document.getElementById('ps-preco')?.value.trim() || ''; PS.estoque = document.getElementById('ps-estoque')?.value.trim() || '10'; }
+  if (!PS.preco) return window.menork.aviso('Digite o preço promocional.');
+  b2Carregando(confirmar ? 'Colocando o anúncio na promoção…' : 'Simulando…');
+  try {
+    const r = await b2post('/api/b2x/promocao-incluir', { loja: PS.loja, id: p.id, tipo: p.tipo, anuncio: PS.anuncio, preco: PS.preco, estoque_promocional: PS.estoque, confirmar, pedido_id: confirmar ? PS.pedido : '' });
+    if (!confirmar) PS.pedido = r.pedido_id;
+    const tabela = r.itens.length ? `<table class="tabela"><tr><th>Variação</th><th>Preço cheio</th><th>Na promoção</th><th>Desconto</th></tr>${r.itens.map(i => `<tr><td>${esc(i.variacao)}</td><td>${esc(reais(i.preco_atual))}</td><td><b>${esc(reais(i.preco_promocional))}</b></td><td>${i.desconto != null ? esc(i.desconto) + '%' : ''}</td></tr>`).join('')}</table>` : '';
+    if (confirmar) return b2Tela(`<h2>${r.ok ? 'Anúncio na promoção' : 'Não entrou na promoção'}</h2>
+      <div class="nota ${r.ok ? '' : 'ruim'}"><span>${r.ok ? `Anúncio ${esc(PS.anuncio)} em <b>${esc(p.nome || p.tipo_nome)}</b> por ${esc(reais(PS.preco))}. A Shopee pode levar 1 minuto para mostrar.` : ''}</span>${r.problemas.map(x => `<span>${esc(x)}</span>`).join('')}</div>${tabela}
+      <div class="acoes">${PS.voltarMk ? '<button class="b" id="mk-reabrir">Ver o anúncio de novo</button>' : ''}<button class="b claro" data-fechar>Fechar</button></div>`);
+    b2Tela(`<h2>Simulação <small>nada mudou ainda</small></h2>
+      <div class="nota ${r.ok ? '' : 'ruim'}"><b>${r.ok ? 'Pronto para colocar' : 'A Shopee recusaria'}: ${esc(p.nome || p.tipo_nome)}</b>${r.problemas.map(x => `<span>${esc(x)}</span>`).join('')}${r.avisos.map(x => `<span>${esc(x)}</span>`).join('')}</div>${tabela}
+      <div class="acoes">${r.ok ? '<button class="b verde" id="ps-confirmar">Confirmar e colocar na promoção</button>' : ''}<button class="b claro" id="ps-voltar">Voltar e ajustar</button></div>`);
+  } catch (err) { b2Erro(err); }
+}
+document.addEventListener('click', e => {
+  const a = e.target.closest('[data-promo-shp]'); if (a) return psAbrir(a.dataset.loja, a.dataset.promoShp, a.dataset.preco);
+  if (e.target.closest('#ps-simular')) return psEnviar(false);
+  if (e.target.closest('#ps-confirmar')) return psEnviar(true);
+  if (e.target.closest('#ps-voltar')) return psMostrar();
+});
+document.addEventListener('change', e => { if (e.target.name !== 'ps' || !PS.lista) return; PS.preco = document.getElementById('ps-preco')?.value.trim() || PS.preco; PS.escolhida = e.target.value; psMostrar(); });
+
 // criacao na fila do B2X (janela do anuncio do site): o servidor acompanha e aplica a promocao; a tela so mostra
 async function b2Fila(pedido) {
   clearTimeout(B2.relogio);
@@ -1536,8 +1589,8 @@ window.ANUNCIO = (ID) => {
         <label class="largo">Título <small id="conta-titulo"></small><input id="c-titulo" data-campo="titulo" value="${esc(a.titulo)}"${limite} placeholder="Ex.: Chinelo feminino nuvem confortável"></label>
         ${ml() ? `<label>Preço cheio (riscado)<input id="c-preco_antigo" data-campo="preco_antigo" value="${esc(a.preco_antigo)}" placeholder="79,90" inputmode="decimal"></label>
         <label title="O anúncio sobe com o preço cheio e este entra como Desconto direto do Mercado Livre (o desconto do próprio vendedor, igual ao da Central de promoções; não entra em campanha do ML). O B2X renova a cada 30 dias. Depois de criado, para tirar o desconto pode ser preciso ir no painel do ML.">Preço promocional ⓘ<input id="c-preco" data-campo="preco" value="${esc(a.preco)}" placeholder="49,90" inputmode="decimal"></label>`
-        : `<label>Preço<input id="c-preco" data-campo="preco" value="${esc(a.preco)}" placeholder="49,90" inputmode="decimal"></label>
-        <label>Preço antigo, riscado<input id="c-preco_antigo" data-campo="preco_antigo" value="${esc(a.preco_antigo)}" placeholder="79,90" inputmode="decimal"></label>`}
+        : `<label>Preço cheio (riscado)<input id="c-preco_antigo" data-campo="preco_antigo" value="${esc(a.preco_antigo)}" placeholder="79,90" inputmode="decimal"></label>
+        <label title="Na Shopee o anúncio sobe com o preço cheio. Depois de criado você coloca ele numa promoção que a loja já tem (desconto ou relâmpago) com este preço: botão Colocar numa promoção.">Preço promocional ⓘ<input id="c-preco" data-campo="preco" value="${esc(a.preco)}" placeholder="49,90" inputmode="decimal"></label>`}
         <label class="largo">Descrição<textarea id="c-descricao" data-campo="descricao" rows="2" placeholder="Texto da descrição do anúncio">${esc(a.descricao)}</textarea></label>
       </div>`;
 
