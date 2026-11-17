@@ -233,7 +233,7 @@ function montagem(aid) {
     cores: cores.map(c => Object.assign(resumo(img(c.img)), { nome_cor: c.cor })), disponiveis: lig.filter(l => !usados.has(l.img)).map(l => resumo(img(l.img))),
     sugestoes: produto ? DB.imgs.filter(i => i.produto === produto && i.status === 'aprovada' && !dentro.has(i.id)).map(resumo) : [],
     modo: a.modo || 'shopee', tamanhos: listaTamanhos(a.tamanhos), todas: lig.filter(ok).map(l => resumo(img(l.img))),
-    variacoes: cores.map(c => ({ cor: c.cor, capa: resumo(img(c.img)), fotos: DB.fotosCor.filter(f => f.an === aid && f.cor.toLowerCase() === c.cor.toLowerCase() && img(f.img)?.status === 'aprovada').sort((x, y) => x.pos - y.pos).map(f => resumo(img(f.img))) })) };
+    variacoes: cores.map(c => ({ cor: c.cor, capa: resumo(img(c.img)), fotos: (DB.fotosCor || []).filter(f => f.an === aid && f.cor.toLowerCase() === c.cor.toLowerCase() && img(f.img)?.status === 'aprovada').sort((x, y) => x.pos - y.pos).map(f => resumo(img(f.img))) })) };
 }
 function listaTamanhos(t) {
   const out = []; String(t || '').replace(/(\d{1,2})\s*(?:-|a|até|ate)\s*(\d{1,2})\b/gi, '$1~$2').split(/[,;\s]+/).forEach(p => { const f = /^(\d{1,2})~(\d{1,2})$/.exec(p); if (f && +f[1] < +f[2] && +f[2] <= +f[1] + 20) for (let x = +f[1]; x <= +f[2]; x++) out.push(String(x)); else if (p) out.push(p.replace('~', '-').slice(0, 12)); });
