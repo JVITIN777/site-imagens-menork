@@ -305,12 +305,26 @@ window.AO_DESENHAR = async aid => {
   await SRV.carregar(); const c = document.getElementById('faltas'); if (!c) return; const f = faltas(aid), pd = PEDIDO(aid), pk = PACOTES(aid);
   const hora = t => esc(String(t || '').slice(0, 16));
   const pedido = !pd ? '' : pd.status === 'feito' ? `Pedido nº ${pd.id}: o bot ${esc(pd.bot || '')} marcou como feito em ${hora(pd.atualizado)}.` : pd.status === 'pego' ? `Pedido nº ${pd.id}: o bot ${esc(pd.bot || '')} pegou em ${hora(pd.atualizado)} e está fazendo.` : `Pedido nº ${pd.id} feito em ${hora(pd.quando)}. Esperando um bot pegar.`;
-  c.innerHTML = `<h2>O que falta ${f.produto ? 'para ' + esc(f.produto) : ''} <small>${f.tarefa ? 'metas lidas da tarefa ' + esc(f.tarefa) + ' no ClickUp' : 'anúncio sem tarefa: você define as metas'}</small></h2>
-    <div class="metas">${f.kit ? '' : `<label>Fotos IA por cor <input type="number" min="0" max="30" data-meta="ia" data-an="${aid}" value="${f.metaIA}"></label>`}<label>Capas a produzir <input type="number" min="0" max="40" data-meta="capa" data-an="${aid}" value="${f.metaCapa}"></label>${f.kit ? '' : `<span class="pequeno">Por cor: ${f.info} informativos e ${f.tab} tabela. Só contam as imagens colocadas nas fotos do anúncio.</span>`}</div>` +
-    (f.itens.length ? `<ul>${f.itens.map(t => `<li>${esc(t)}</li>`).join('')}</ul><div class="acoes pedir"><button class="b" id="pedir-bot" data-an="${aid}">Pedir ao bot o que falta</button><span class="pequeno">${pedido}</span></div>` : `<p class="completo">Nada faltando. O pacote deste anúncio pode ser montado.</p>${pedido ? `<p class="pequeno">${pedido}</p>` : ''}`) +
-    `<p class="pequeno linha-capas">Capas deste anúncio: ${f.capas.aprovadas} aprovada(s) de ${f.capas.meta} pedida(s)${f.capas.esperando_aprovacao ? `, ${f.capas.esperando_aprovacao} esperando aprovação` : ''}.</p>` +
-    (ENVIOS(aid).length ? `<h3>Envios para o ${esc(INTEG().nome)}</h3><ul class="envios-feitos">${ENVIOS(aid).map(v => `<li><b class="${v.ok ? 'ok-mini' : 'alerta-mini'}">${v.ok ? 'Enviado' : 'Falhou'}</b> em ${hora(v.quando)} por ${esc(v.por)}${v.id ? ` · código no ${esc(INTEG().nome)}: ${esc(v.id)}` : ''}${v.resposta ? ` · ${esc(v.resposta)}` : ''}</li>`).join('')}</ul>` : '') +
-    (pk.length ? `<h3>Pacotes montados</h3><ul class="pacotes-feitos">${pk.map(p => `<li><b class="${p.status === 'completo' ? 'ok-mini' : 'alerta-mini'}">${p.status === 'completo' ? 'Completo' : 'Incompleto'}</b> Montado em ${hora(p.quando)} por ${esc(p.por)}${p.mk ? ' para ' + esc(MKT[p.mk] || p.mk) : ''}, ${p.arquivos} arquivo(s).${p.tem_zip ? ` <a href="/pacotes/${p.id}/zip">Abrir o ZIP guardado</a>` : ''}</li>`).join('')}</ul>` : '');
+  // pendencias agrupadas: uma linha por cor, os campos de texto em etiquetas, o resto em lista
+  const L = f.lista || f.itens.map(t => ({ tipo: '', cor: '', faltam: 1, texto: t, fora: 0, esperando: 0 }));
+  const NOME = { ia: ['foto IA', 'fotos IA'], informativo: ['informativo', 'informativos'], tabela: ['tabela', 'tabelas'] };
+  const CAMPO = { titulo: 'Título', preco: 'Preço', descricao: 'Descrição', tamanhos: 'Tamanhos' };
+  const porCor = {}, campos = [], outros = [];
+  L.forEach(i => { if (NOME[i.tipo] && i.cor) (porCor[i.cor] = porCor[i.cor] || []).push(i); else if (CAMPO[i.tipo] && /^Falta preencher/.test(i.texto)) campos.push(i.tipo); else outros.push(i.texto); });
+  const prontas = L.reduce((n, i) => n + (i.fora || 0), 0), esperando = L.reduce((n, i) => n + (i.esperando || 0), 0);
+  const linhasCor = Object.entries(porCor).map(([cor, it]) => `<div class="falta-cor"><b>${esc(cor)}</b>${it.map(i => `<span class="chip-falta" title="${esc(i.texto)}">${i.faltam} ${NOME[i.tipo][i.faltam === 1 ? 0 : 1]}</span>`).join('')}</div>`).join('');
+  const pedidoHtml = pedido ? `<span class="pequeno">${pedido}</span>` : '';
+  const hist = (ENVIOS(aid).length ? `<h3>Envios para o ${esc(INTEG().nome)}</h3><ul class="envios-feitos">${ENVIOS(aid).map(v => `<li><b class="${v.ok ? 'ok-mini' : 'alerta-mini'}">${v.ok ? 'Enviado' : 'Falhou'}</b> em ${hora(v.quando)} por ${esc(v.por)}${v.id ? ` · código no ${esc(INTEG().nome)}: ${esc(v.id)}` : ''}${v.resposta ? ` · ${esc(v.resposta)}` : ''}</li>`).join('')}</ul>` : '') +
+    (pk.length ? `<ul class="pacotes-feitos">${pk.map(p => `<li><b class="${p.status === 'completo' ? 'ok-mini' : 'alerta-mini'}">${p.status === 'completo' ? 'Completo' : 'Incompleto'}</b> Montado em ${hora(p.quando)} por ${esc(p.por)}${p.mk ? ' para ' + esc(MKT[p.mk] || p.mk) : ''}, ${p.arquivos} arquivo(s).${p.tem_zip ? ` <a href="/pacotes/${p.id}/zip">Abrir o ZIP guardado</a>` : ''}</li>`).join('')}</ul>` : '');
+  c.innerHTML = `<div class="faltas-topo"><h2>${f.itens.length ? `Falta${f.itens.length === 1 ? '' : 'm'} ${f.itens.length} coisa${f.itens.length === 1 ? '' : 's'}` : 'Tudo pronto'} ${f.produto ? '<small>' + esc(f.produto) + '</small>' : ''}</h2>
+    <div class="metas">${f.kit ? '' : `<label>IA por cor <input type="number" min="0" max="30" data-meta="ia" data-an="${aid}" value="${f.metaIA}"></label>`}<label>Capas <input type="number" min="0" max="40" data-meta="capa" data-an="${aid}" value="${f.metaCapa}"></label>
+    <span class="pequeno" title="${f.tarefa ? 'Metas lidas da tarefa ' + esc(f.tarefa) + ' no ClickUp' : 'Anúncio sem tarefa: você define as metas'}">${f.kit ? '' : `+ ${f.info} info e ${f.tab} tabela por cor`} · capas ${f.capas.aprovadas}/${f.capas.meta}${f.capas.esperando_aprovacao ? ` (${f.capas.esperando_aprovacao} esperando)` : ''}</span></div></div>` +
+    (f.itens.length ? `${linhasCor ? `<div class="faltas-cores">${linhasCor}</div>` : ''}
+      ${campos.length ? `<div class="falta-cor"><b>Preencher</b>${campos.map(t => `<button type="button" class="chip-falta campo" data-foco="c-${t}" title="Ir para o campo">${CAMPO[t]}</button>`).join('')}</div>` : ''}
+      ${outros.length ? `<ul>${outros.map(t => `<li>${esc(t)}</li>`).join('')}</ul>` : ''}
+      <div class="acoes pedir">${prontas ? `<button class="b verde" id="colocar-prontas" title="Coloca no anúncio as imagens aprovadas que já existem">Colocar ${prontas} aprovada${prontas === 1 ? '' : 's'} que já ${prontas === 1 ? 'existe' : 'existem'}</button>` : ''}<button class="b ${prontas ? 'claro' : ''}" id="pedir-bot" data-an="${aid}">Pedir ao bot o que falta</button>${esperando ? `<span class="pequeno">${esperando} esperando sua aprovação na fila.</span>` : ''}${pedidoHtml}</div>`
+      : `<p class="completo">Nada faltando. O pacote deste anúncio pode ser montado.</p>${pedido ? `<p class="pequeno">${pedido}</p>` : ''}`) +
+    (hist ? `<details class="historico"><summary>Pacotes e envios (${pk.length + ENVIOS(aid).length})</summary>${hist}</details>` : '');
 };
 document.addEventListener('click', async e => { const b = e.target.closest('#pedir-bot'); if (!b) return; const aid = +b.dataset.an;
   try { const texto = await SRV.pedir(aid); let copiou = true; try { await navigator.clipboard.writeText(texto); } catch (_) { copiou = false; }
@@ -550,6 +564,8 @@ document.addEventListener('click', e => {
   if (n) { const u = MEDIDAS[p][MEDIDAS[p].length - 1]; MEDIDAS[p].push([u ? String(+u[0] + 1 || '') : '', '']); } else MEDIDAS[p].splice(+t.dataset.tirarMed, 1);
   SRV.medidas(p, MEDIDAS[p]).then(RENDER);
 });
+document.addEventListener('click', e => { if (e.target.closest('#colocar-prontas')) document.getElementById('montar-auto')?.click(); });
+document.addEventListener('click', e => { const b = e.target.closest('[data-foco]'); if (!b) return; const c = document.getElementById(b.dataset.foco); if (c) { c.scrollIntoView({ block: 'center', behavior: 'smooth' }); c.focus({ preventScroll: true }); } });
 
 (() => {
   const $ = (s, r = document) => r.querySelector(s);

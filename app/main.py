@@ -192,6 +192,9 @@ def estado(request: Request):
         for a in anuncios:
             k = checagem(c, a["id"])
             faltas[a["id"]] = {"produto": k["produto"], "itens": [i["texto"] for i in k["faltas"]], "metaIA": k["metas"]["ia"],
+                               "lista": [{"tipo": i["tipo"], "cor": i["cor"], "faltam": i["faltam"], "texto": i["texto"],
+                                          "fora": i["aprovadas_fora_do_anuncio"], "esperando": i["esperando_aprovacao"]}
+                                         for i in k["faltas"]],
                                "metaCapa": k["metas"]["capa"], "info": k["metas"]["informativo"], "tab": k["metas"]["tabela"],
                                "kit": a["formato"] != "unitario", "tarefa": k["tarefa"], "capas": k["capas_a_produzir"]}
         for p in c.execute("SELECT * FROM pacotes ORDER BY id DESC"):
