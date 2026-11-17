@@ -334,3 +334,16 @@ button.chip-falta{color:var(--texto);cursor:pointer;font:inherit;font-size:13px}
 .b2-grade{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:10px}.b2-grade label{display:grid;gap:5px;font-size:13px;color:var(--fraco)}
 .b2-grade input,.b2-grade select{width:100%}
 .b2x .nota{display:flex;flex-direction:column;gap:4px;margin:8px 0}
+/* referencias novas: arrastar e prévia */
+.solta-ref{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;margin:14px 0;padding:22px 16px;border:1.5px dashed var(--borda-forte);border-radius:12px;background:rgba(255,255,255,.02);text-align:center;cursor:pointer;color:var(--fraco);transition:border-color .15s,background .15s}
+.solta-ref b{color:var(--texto);font-size:15px}.solta-ref span{font-size:13px}
+.solta-ref:hover,.solta-ref:focus-visible,.solta-ref.em-cima{border-color:var(--luz);background:rgba(255,255,255,.05);outline:none}
+.ref-previa h2 small{font-weight:400}
+.ref-todas{display:flex;flex-wrap:wrap;align-items:end;gap:10px;margin:0 0 12px;padding:0 0 12px;border-bottom:1px solid var(--borda)}
+.ref-todas label,.ref-nova label{display:grid;gap:4px;font-size:12px;color:var(--fraco)}.ref-todas input{width:170px}
+.ref-novas{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:12px}
+.ref-nova{display:flex;flex-direction:column;gap:8px;padding:10px;border:1px solid var(--borda);border-radius:12px;background:var(--relevo)}
+.ref-nova .foto{aspect-ratio:1;border-radius:8px;overflow:hidden;background:#f3f2ee}.ref-nova .foto img{width:100%;height:100%;object-fit:contain}
+.ref-nova .nome{font-size:12px;color:var(--fraco);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ref-nova input{width:100%}
+.b.vermelho{border-color:#c4473a;color:#ff9a8d}

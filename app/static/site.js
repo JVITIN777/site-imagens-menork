@@ -674,7 +674,7 @@ Object.assign(TELAS, {
     const grupos = {}; l.forEach(i => (grupos[comEstilo ? (i.estilo || 'Sem estilo') : (i.produto || 'Sem produto')] ??= []).push(i));
     const cmd = '-Referencias ' + REFS_ESCOLHIDAS.map(id => '"' + CAMINHO(img(id)) + '"').join(',');
     const ficha = i => { const on = REFS_ESCOLHIDAS.includes(i.id);
-      return `<div class="ref ${on ? 'escolhida' : ''}">${cartao(i)}${comEstilo ? `<label class="estilo-ref">Estilo${campoEstilo(i.id, i.estilo)}</label>` : ''}<div class="caminho"><code>${esc(CAMINHO(i))}</code><div class="acoes"><button class="b ${on ? '' : 'claro'}" data-usar-ref="${i.id}">${on ? 'No comando (' + (REFS_ESCOLHIDAS.indexOf(i.id) + 1) + '). Tirar' : 'Usar no comando'}</button><button class="b claro" data-copiar="${esc(CAMINHO(i))}">Copiar caminho</button></div></div></div>`; };
+      return `<div class="ref ${on ? 'escolhida' : ''}">${cartao(i)}${comEstilo ? `<label class="estilo-ref">Estilo${campoEstilo(i.id, i.estilo)}</label>` : ''}<div class="caminho"><code>${esc(CAMINHO(i))}</code><div class="acoes"><button class="b ${on ? '' : 'claro'}" data-usar-ref="${i.id}">${on ? 'No comando (' + (REFS_ESCOLHIDAS.indexOf(i.id) + 1) + '). Tirar' : 'Usar no comando'}</button><button class="b claro" data-copiar="${esc(CAMINHO(i))}">Copiar caminho</button><button class="b claro tirar-ref" data-tirar-ref="${i.id}" title="Deixa de ser referência dos bots; a imagem continua no Catálogo">Remover referência</button></div></div></div>`; };
     const semEstilo = comEstilo ? l.filter(i => !i.estilo).length : 0;
     return `<div class="cabeca"><h1>Referências aprovadas <small>${refs.length} imagem(ns) que os bots devem copiar</small></h1></div>
     <div class="bloco comando"><h2>Comando para o gerar.ps1 <small>${REFS_ESCOLHIDAS.length} de 5 arquivos escolhidos</small></h2>
@@ -682,6 +682,7 @@ Object.assign(TELAS, {
     <div class="abas-ref">${ABAS.map(([k, nome]) => elo(rota('/referencias', { tipo: k }), `${nome} <small>${qtd[k]}</small>`, k === aba ? 'ativo' : '')).join('')}</div>
     ${comEstilo && estilos.length ? `<div class="filtros">${elo(rota('/referencias', { tipo: aba }), 'Todos os estilos', 'ficha ' + (!q.estilo ? 'ativo' : ''))}${estilos.map(e => elo(rota('/referencias', { tipo: aba, estilo: e || '—' }), esc(e || 'Sem estilo'), 'ficha ' + (q.estilo === (e || '—') ? 'ativo' : ''))).join('')}</div>` : ''}
     ${aba === 'cena' ? '<p class="dica">São as cenas que o gerador usa para criar as fotos IA: ele junta o fundo branco do modelo com uma cena do estilo certo.</p>' : ''}
+    ${REF_NOVAS.soltar(aba, ABAS.find(([k]) => k === aba)[1], comEstilo || aba === 'capa' || aba === 'tabela')}
     ${semEstilo ? `<p class="dica aviso-txt">${semEstilo} referência(s) sem estilo. Para dar estilo a várias de uma vez, marque a caixinha no canto de cada imagem, escreva o estilo no campo "Estilo" da barra que aparece embaixo e clique em Aplicar.</p>` : ''}
     ${Object.keys(grupos).sort((a, b) => (a === 'Sem estilo') - (b === 'Sem estilo') || a.localeCompare(b)).map(g => `<h2 class="grupo">${esc(g)} <small>${grupos[g].length}</small></h2><div class="grade larga">${grupos[g].map(ficha).join('')}</div>`).join('')
       || `<div class="vazio"><h2>Nenhuma referência de ${esc(ABAS.find(([k]) => k === aba)[1].toLowerCase())}</h2><p>Abra uma imagem aprovada desse tipo e clique em "Usar como referência dos bots"${comEstilo ? '; depois escolha o estilo dela' : ''}.</p></div>`}`;
@@ -720,6 +721,76 @@ document.addEventListener('click', e => {
 });
 document.addEventListener('click', e => { if (e.target.closest('#colocar-prontas')) document.getElementById('montar-auto')?.click(); });
 document.addEventListener('click', e => { const b = e.target.closest('[data-foco]'); if (!b) return; const c = document.getElementById(b.dataset.foco); if (c) { c.scrollIntoView({ block: 'center', behavior: 'smooth' }); c.focus({ preventScroll: true }); } });
+
+// ---- referencias novas: arrastar, escolher ou colar (Ctrl+V) na pagina Referencias
+const REF_NOVAS = {
+  itens: [], tipo: '', seq: 0,
+  TIPO_NOME: { capa: 'Capa', informativo: 'Informativo', cena: 'Cena', tabela: 'Tabela' },
+  aceita: f => /^image\/(jpeg|png|webp)$/.test(f.type) || /\.(jpe?g|png|webp)$/i.test(f.name || ''),
+  soltar(aba, nomeAba) {
+    const lista = this.tipo === aba ? this.itens : [];
+    const campo = (it, k, rot, lista_, ph) => `<label>${rot}<input data-ref-nova="${it.id}" data-campo="${k}" value="${esc(it[k])}" ${lista_ ? `list="${lista_}"` : ''} placeholder="${ph}" ${k === 'estilo' ? '' : 'style="text-transform:uppercase"'}></label>`;
+    return `<div class="solta-ref" data-solta-ref="${aba}" tabindex="0" role="button" aria-label="Adicionar referências de ${esc(nomeAba)}">
+        <input type="file" id="ref-arquivos" multiple accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" hidden>
+        <b>Arraste imagens aqui ou clique para escolher</b><span>JPG, PNG ou WEBP, várias de uma vez. Também dá para colar com Ctrl+V. Entram como ${esc(this.TIPO_NOME[aba].toLowerCase())}.</span></div>
+      ${lista.length ? `<div class="bloco ref-previa"><h2>${lista.length} referência(s) nova(s) <small>${esc(nomeAba)} · ainda não salvas</small></h2>
+        <div class="ref-todas"><span class="pequeno">Preencher todas:</span>${campo({ id: 'todas', produto: '', cor: '', estilo: '' }, 'produto', 'Produto/REF', 'dl-produtos', 'TA01')}${campo({ id: 'todas', produto: '', cor: '', estilo: '' }, 'cor', 'Cor', 'dl-cores', 'CREME PALHA')}${campo({ id: 'todas', produto: '', cor: '', estilo: '' }, 'estilo', 'Estilo', 'dl-estilos-ref', 'Casual')}</div>
+        <div class="ref-novas">${lista.map(it => `<div class="ref-nova" data-item="${it.id}"><div class="foto"><img src="${it.url}" alt=""></div><span class="nome" title="${esc(it.arquivo.name)}">${esc(it.arquivo.name)}</span>
+          ${campo(it, 'produto', 'Produto/REF', 'dl-produtos', 'TA01')}${campo(it, 'cor', 'Cor', 'dl-cores', 'CREME PALHA')}${campo(it, 'estilo', 'Estilo', 'dl-estilos-ref', 'Casual')}
+          <button type="button" class="b claro" data-tirar-nova="${it.id}">Tirar</button></div>`).join('')}</div>
+        <datalist id="dl-estilos-ref">${estilosConhecidos().map(e => `<option value="${esc(e)}">`).join('')}</datalist>
+        <div class="acoes"><button class="b" id="salvar-refs">Salvar ${lista.length} como referência</button><button class="b claro" id="cancelar-refs">Cancelar</button></div></div>` : ''}`;
+  },
+  juntar(arquivos, aba) {
+    const bons = [...arquivos].filter(f => this.aceita(f)), ruins = arquivos.length - bons.length;
+    if (ruins) window.menork.aviso(`${ruins} arquivo(s) ignorado(s): só JPG, PNG ou WEBP.`);
+    if (!bons.length) return;
+    if (this.tipo !== aba) this.limpar();
+    this.tipo = aba;
+    bons.forEach(f => this.itens.push({ id: ++this.seq, arquivo: f, url: URL.createObjectURL(f), produto: '', cor: '', estilo: (ROTA.match(/estilo=([^&]+)/) || [])[1] ? decodeURIComponent(ROTA.match(/estilo=([^&]+)/)[1]).replace(/^—$/, '') : '' }));
+    this.redesenhar();
+  },
+  limpar() { this.itens.forEach(it => URL.revokeObjectURL(it.url)); this.itens = []; this.tipo = ''; },
+  redesenhar() { const y = window.scrollY; document.querySelector('main').innerHTML = TELAS.referencias(Object.fromEntries(new URLSearchParams(ROTA.split('?')[1] || ''))); window.scrollTo(0, y); },
+  async salvar(botao) {
+    if (!this.itens.length) return;
+    const f = new FormData(); f.append('tipo', this.tipo);
+    this.itens.forEach(it => f.append('arquivos', it.arquivo, it.arquivo.name || 'colada.png'));
+    f.append('dados', JSON.stringify(this.itens.map(it => ({ produto: it.produto, cor: it.cor, estilo: it.estilo }))));
+    botao.disabled = true; botao.textContent = 'Salvando…';
+    try {
+      const r = await window.menork.api('/api/referencias/nova', f, true);
+      this.limpar(); await RENDER();
+      window.menork.aviso(`${r.salvas} referência(s) salva(s)` + (r.repetidas ? `, ${r.repetidas} já existia(m) no catálogo e virou(aram) referência` : '') + (r.erros.length ? `. Não deu: ${r.erros.join('; ')}` : '.'), null, null, 12);
+    } catch (err) { botao.disabled = false; botao.textContent = 'Tentar salvar de novo'; window.menork.aviso(err.message, null, null, 12); }
+  },
+};
+document.addEventListener('click', async e => {
+  const z = e.target.closest('[data-solta-ref]'); if (z && !e.target.closest('input')) return document.getElementById('ref-arquivos')?.click();
+  const t = e.target.closest('[data-tirar-nova]'); if (t) { const k = REF_NOVAS.itens.findIndex(x => x.id === +t.dataset.tirarNova); if (k >= 0) { URL.revokeObjectURL(REF_NOVAS.itens[k].url); REF_NOVAS.itens.splice(k, 1); } return REF_NOVAS.redesenhar(); }
+  if (e.target.closest('#cancelar-refs')) { REF_NOVAS.limpar(); return REF_NOVAS.redesenhar(); }
+  const s = e.target.closest('#salvar-refs'); if (s) return REF_NOVAS.salvar(s);
+  const r = e.target.closest('[data-tirar-ref]'); if (!r) return;
+  if (!r.dataset.ok) { r.dataset.ok = 1; r.textContent = 'Confirmar: remover'; r.classList.add('vermelho'); setTimeout(() => { if (r.isConnected) { delete r.dataset.ok; r.textContent = 'Remover referência'; r.classList.remove('vermelho'); } }, 5000); return; }
+  try { await window.menork.api('/api/acao', { ids: [+r.dataset.tirarRef], acao: 'ref_nao' }); REFS_ESCOLHIDAS = REFS_ESCOLHIDAS.filter(x => x !== +r.dataset.tirarRef); await RENDER(); window.menork.aviso('Removida das referências. A imagem continua no Catálogo.'); } catch (err) { window.menork.aviso(err.message); }
+});
+document.addEventListener('keydown', e => { const z = e.target.closest?.('[data-solta-ref]'); if (z && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); document.getElementById('ref-arquivos')?.click(); } });
+document.addEventListener('change', e => { if (e.target.id !== 'ref-arquivos') return; const z = e.target.closest('[data-solta-ref]'); REF_NOVAS.juntar(e.target.files, z.dataset.soltaRef); e.target.value = ''; });
+document.addEventListener('input', e => {
+  const c = e.target.closest('[data-ref-nova]'); if (!c) return; const k = c.dataset.campo, v = c.value;
+  if (c.dataset.refNova === 'todas') { REF_NOVAS.itens.forEach(it => { it[k] = v; }); document.querySelectorAll(`.ref-nova [data-campo="${k}"]`).forEach(x => { x.value = v; }); return; }
+  const it = REF_NOVAS.itens.find(x => x.id === +c.dataset.refNova); if (it) it[k] = v;
+});
+['dragenter', 'dragover'].forEach(ev => document.addEventListener(ev, e => { const z = e.target.closest?.('[data-solta-ref]'); if (!z) return; e.preventDefault(); z.classList.add('em-cima'); }));
+document.addEventListener('dragleave', e => { const z = e.target.closest?.('[data-solta-ref]'); if (z && !z.contains(e.relatedTarget)) z.classList.remove('em-cima'); });
+document.addEventListener('drop', e => { const z = e.target.closest?.('[data-solta-ref]'); if (!z) return; e.preventDefault(); z.classList.remove('em-cima'); REF_NOVAS.juntar(e.dataTransfer.files, z.dataset.soltaRef); });
+document.addEventListener('paste', e => {
+  const z = document.querySelector('[data-solta-ref]'); if (!z) return;
+  if (e.target.closest?.('input, textarea')) return; // colar texto num campo continua normal
+  const arquivos = [...(e.clipboardData?.items || [])].filter(i => i.kind === 'file').map(i => i.getAsFile()).filter(Boolean)
+    .map((f, k) => f.name && f.name !== 'image.png' ? f : new File([f], `colada_${Date.now()}_${k + 1}.${(f.type.split('/')[1] || 'png').replace('jpeg', 'jpg')}`, { type: f.type }));
+  if (!arquivos.length) return; e.preventDefault(); REF_NOVAS.juntar(arquivos, z.dataset.soltaRef);
+});
 
 (() => {
   const $ = (s, r = document) => r.querySelector(s);

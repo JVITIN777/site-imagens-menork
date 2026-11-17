@@ -368,7 +368,7 @@ def parecenca(a, b):
 
 
 def importar(caminho, nome=None, pastas=(), origem="", mover=False, anuncio_nome="",
-             dados=None, conta="", alertas=None):
+             dados=None, conta="", alertas=None, sem_anuncio=False):
     """Guarda UMA copia do arquivo no repositorio e cadastra. Devolve (id, novo)."""
     caminho = Path(caminho)
     nome = nome or caminho.name
@@ -411,7 +411,7 @@ def importar(caminho, nome=None, pastas=(), origem="", mover=False, anuncio_nome
              destino.stat().st_size, agora(), conta, json.dumps(alertas, ensure_ascii=False) if alertas is not None else "",
              digital))
         imagem_id = cur.lastrowid
-        alvo = anuncio_nome or info["anuncio"]
+        alvo = "" if sem_anuncio else (anuncio_nome or info["anuncio"])
         if alvo:
             vincular(c, [imagem_id], obter_anuncio(c, alvo))
     try:

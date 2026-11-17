@@ -3,6 +3,7 @@ import io
 import json
 import re
 import secrets
+import shutil
 import tempfile
 import time
 import zipfile
@@ -1415,6 +1416,60 @@ async def enviar(arquivos: list[UploadFile] = File(...), anuncio: str = Form("")
             except Exception:
                 erros.append(nome)
     return {"novas": novas, "repetidas": repetidas, "erros": erros}
+
+
+TIPOS_REF = {"capa": "capa", "informativo": "informativo", "cena": "cena", "tabela": "tabela"}
+
+
+@app.post("/api/referencias/nova")
+async def referencias_nova(arquivos: list[UploadFile] = File(...), tipo: str = Form(...), dados: str = Form("[]")):
+    """Referencias novas arrastadas na pagina Referencias. Entram no mesmo repositorio das outras imagens
+    (pasta do repositorio/arquivos/AAAA-MM) ja aprovadas e marcadas como referencia dos bots."""
+    tipo = TIPOS_REF.get(tipo)
+    if not tipo:
+        raise HTTPException(400, "Aba inválida: use Capas, Informativos, Cenas ou Tabelas.")
+    try:
+        campos = json.loads(dados or "[]")
+    except ValueError:
+        campos = []
+    novas, repetidas, erros = [], 0, []
+    for k, a in enumerate(arquivos):
+        nome = Path(a.filename or "referencia.png").name
+        if Path(nome).suffix.lower() not in (".jpg", ".jpeg", ".png", ".webp"):
+            erros.append(f"{nome}: só JPG, PNG ou WEBP")
+            continue
+        f = campos[k] if k < len(campos) and isinstance(campos[k], dict) else {}
+        produto = str(f.get("produto") or "").strip().upper()[:40]
+        cor = str(f.get("cor") or "").strip().upper()[:60]
+        estilo = str(f.get("estilo") or "").strip()[:40]
+        with tempfile.TemporaryDirectory() as tmp:
+            p = Path(tmp) / "arquivo"
+            p.write_bytes(await a.read())
+            try:
+                iid, novo = n.importar(p, nome, origem="referência", dados={"produto": produto, "cor": cor, "tipo": tipo},
+                                       sem_anuncio=True)
+            except Exception:
+                erros.append(f"{nome}: não é uma imagem válida")
+                continue
+            with n.con() as c:  # ja existia mas o arquivo foi apagado (reprovada antes): guarda de novo
+                r = c.execute("SELECT arquivo, sha256 FROM imagens WHERE id=?", (iid,)).fetchone()
+                if not r["arquivo"]:
+                    import datetime as _dt
+                    rel = Path("arquivos") / _dt.date.today().strftime("%Y-%m") / f"{r['sha256'][:12]}_{n._nome_seguro(nome)}"
+                    (n.pasta_repo() / rel).parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(str(p), str(n.pasta_repo() / rel))
+                    c.execute("UPDATE imagens SET arquivo=? WHERE id=?", (rel.as_posix(), iid))
+        with n.con() as c:
+            if novo:
+                c.execute("UPDATE imagens SET produto=?, cor=?, tipo=?, estilo=? WHERE id=?", (produto, cor, tipo, estilo, iid))
+            else:  # ja estava no catalogo: vira referencia sem perder o que ja tinha
+                repetidas += 1
+                c.execute("UPDATE imagens SET produto=COALESCE(NULLIF(?,''),produto), cor=COALESCE(NULLIF(?,''),cor), "
+                          "tipo=?, estilo=COALESCE(NULLIF(?,''),estilo) WHERE id=?", (produto, cor, tipo, estilo, iid))
+            c.execute("UPDATE imagens SET status='aprovada', ref=1, motivo='', origem_decisao='você', decidido_em=?, "
+                      "apagar_em=NULL WHERE id=?", (n.agora(), iid))
+        novas.append(iid)
+    return {"salvas": len(novas), "repetidas": repetidas, "erros": erros, "ids": novas}
 
 
 @app.post("/api/ler-agora")
