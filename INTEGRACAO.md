@@ -1,3 +1,5 @@
+> **Atualização (versão 2026.11.16.24):** o site agora fala direto com a API pública do B2X (`/v1/clientes`, `/v1/anuncios`, `/v1/fotos`, `/v1/anuncios/editar`, `/v1/anuncios/criar*`), pelo código em `app/b2x.py`. As rotas `/menork/*` descritas abaixo não são mais usadas; ficam só como histórico.
+
 # Integração: site de imagens → seu sistema (ex.: B2X)
 
 O site de imagens envia anúncios prontos para o seu sistema. Para isso, o seu sistema precisa ter **dois endereços**, abaixo do "Endereço da API" cadastrado em **Integrações** no site.

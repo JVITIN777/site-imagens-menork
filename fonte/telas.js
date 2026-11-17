@@ -74,7 +74,7 @@ const TELAS = {
       <button class="b claro" id="montar-auto" title="Preenche capa, fotos e cores vazias com as imagens aprovadas deste anúncio">Montar sozinho</button>
       <button class="b claro" id="copiar-anuncio" data-id="${a.id}" title="Cria cópias deste anúncio ou leva as fotos dele para outros anúncios">Copiar fotos para outros</button>
       <label class="b claro">Enviar imagens<input type="file" id="enviar" data-anuncio="${esc(a.nome)}" multiple accept="image/*" hidden></label>
-      ${INTEG().url ? `<button class="b" id="enviar-sistema" data-id="${a.id}">Enviar para o ${esc(INTEG().nome)}</button>` : ''}
+      ${INTEG().url && INTEG().tem_chave ? `<button class="b" id="enviar-sistema" data-id="${a.id}">${esc(INTEG().nome)}: fotos e anúncio</button>` : ''}
       <button class="b verde" id="baixar-zip" data-id="${a.id}">Exportar</button><button class="b claro" id="excluir-anuncio" data-id="${a.id}">Excluir</button></div></div>
     <div class="montagem"><div class="editor"><div class="bloco faltas" id="faltas"></div><section id="editor" class="editor"></section></div><aside class="previa">
       <div class="troca" role="group" aria-label="Marketplace do anúncio"><button data-modo="ml"><span class="mk-marca ml"><img src="/marca-mk/ml" alt="" onerror="this.remove()"></span>Mercado Livre</button><button data-modo="shopee"><span class="mk-marca shopee"><img src="/marca-mk/shopee" alt="" onerror="this.remove()"></span>Shopee</button></div>

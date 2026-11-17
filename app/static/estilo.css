@@ -320,3 +320,17 @@ main{max-width:2400px}
 .historico{margin-top:10px;font-size:13px;color:var(--fraco)}.historico summary{cursor:pointer}.historico ul{margin-top:8px}
 @media (min-width:1900px){.montagem{grid-template-columns:minmax(0,1fr) 400px}.celular{width:372px}}
 button.chip-falta{color:var(--texto);cursor:pointer;font:inherit;font-size:13px}button.chip-falta:hover{border-color:var(--luz)}
+/* janela do B2X */
+.b2x{min-width:min(640px,86vw);max-width:820px}.b2x h2 small{font-weight:400}
+.b2x h3{font:600 15px var(--titulo);margin:16px 0 8px}
+.campo-b2{display:grid;gap:6px;font-size:14px;color:var(--fraco)}.campo-b2 select{width:100%}
+.b2-escolha{display:flex;flex-wrap:wrap;gap:10px;margin:16px 0 6px}
+.b2-linha{display:flex;gap:8px;margin:8px 0}.b2-linha input{flex:1}
+.b2-anuncios{display:flex;flex-direction:column;gap:6px;max-height:46vh;overflow:auto;margin:8px 0}
+.b2-anuncio{display:flex;gap:10px;align-items:center;text-align:left;border:1px solid var(--borda);background:var(--relevo);color:var(--texto);border-radius:10px;padding:8px 10px;cursor:pointer;font:inherit}
+.b2-anuncio:hover{border-color:var(--luz)}.b2-anuncio img{width:44px;height:44px;object-fit:cover;border-radius:6px;background:#fff}
+.b2-anuncio span{display:flex;flex-direction:column;gap:2px;min-width:0}.b2-anuncio small{color:var(--fraco)}
+.b2-mapa{display:grid;gap:8px}.b2-mapa label{display:grid;grid-template-columns:minmax(120px,1fr) 1fr;gap:10px;align-items:center}
+.b2-grade{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:10px}.b2-grade label{display:grid;gap:5px;font-size:13px;color:var(--fraco)}
+.b2-grade input,.b2-grade select{width:100%}
+.b2x .nota{display:flex;flex-direction:column;gap:4px;margin:8px 0}

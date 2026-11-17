@@ -983,67 +983,24 @@ async def integracao_salvar(request: Request):
 
 @app.post("/api/integracao/testar")
 def integracao_testar():
+    from . import b2x
     i = integ()
     if not i["url"] or not i["chave"]:
         raise HTTPException(400, "Preencha o endereço e a chave e salve antes de testar.")
-    status, texto = _chamar("GET", i["url"] + "/menork/ping", i["chave"], timeout=20)
-    if 200 <= status < 300:
-        try:
-            json.loads(texto or "{}")
-        except ValueError:
-            return {"ok": False, "msg": f"O endereço respondeu uma página do site, e não a API do {i['nome']}. "
-                                        "Confira o Endereço da API (não é o endereço do painel)."}
-        return {"ok": True, "msg": f"Conexão com o {i['nome']} funcionando."}
-    dica = {401: "a chave foi recusada", 403: "a chave não tem permissão", 404: "o endereço /menork/ping não existe lá"}
-    return {"ok": False, "msg": f"O {i['nome']} respondeu {status}: {dica.get(status, texto[:160] or 'erro')}."}
+    try:
+        r = b2x.lojas()
+    except HTTPException as e:
+        return {"ok": False, "msg": str(e.detail)}
+    lojas_ = r["lojas"]
+    clientes = len({x["cliente_id"] for x in lojas_})
+    conta = {k: sum(x["canal"] == k for x in lojas_) for k in b2x.CANAIS}
+    return {"ok": True, "msg": f"Conexão com o {i['nome']} funcionando: {clientes} cliente(s), {len(lojas_)} loja(s) "
+                               f"({conta['shopee']} Shopee, {conta['mercadolivre']} Mercado Livre)."}
 
 
 def enviar_anuncio(aid, por="você", forcar=False):
-    i = integ()
-    if not i["url"] or not i["chave"]:
-        raise HTTPException(400, f"Configure o {i['nome']} em Integrações antes de enviar.")
-    with n.con() as c:
-        m = montagem(c, aid)
-        chk = checagem(c, aid, m)
-        dem = c.execute("SELECT * FROM demandas WHERE id=(SELECT demanda_id FROM anuncios WHERE id=?)", (aid,)).fetchone()
-        id_externo = c.execute("SELECT id_externo FROM anuncios WHERE id=?", (aid,)).fetchone()[0] or ""
-    if not chk["completo"] and not forcar:
-        raise HTTPException(409, {"erro": f"Anúncio incompleto. Nada foi enviado ao {i['nome']}.",
-                                  "faltas": [x["texto"] for x in chk["faltas"]]})
-    L, a = m["linhas"], m["anuncio"]
-    ordem = ([L["capa"]] if L["capa"] else []) + L["galeria"]
-    arquivos, fotos, cores = [], [], []
-    for pos, r in enumerate(ordem, 1):
-        nome = f"{pos:02d}{'_capa' if L['capa'] and pos == 1 else ''}{Path(r['arquivo']).suffix.lower()}"
-        arquivos.append((nome, n.caminho_imagem(r)))
-        fotos.append({"posicao": pos, "capa": bool(L["capa"]) and pos == 1, "arquivo": nome, "tipo": r["tipo"], "cor": r["cor"]})
-    for r in L["cores"]:
-        nome = f"cor_{_pedaco(r['nome_cor']).lower()}{Path(r['arquivo']).suffix.lower()}"
-        arquivos.append((nome, n.caminho_imagem(r)))
-        cores.append({"nome": r["nome_cor"], "arquivo": nome})
-    dados = {"versao": 1, "origem": "site-imagens-menork", "id_menork": aid, "id_externo": id_externo,
-             "rascunho": i["rascunho"], "nome": a["nome"], "formato": a["formato"], "produto": m["produto"],
-             "titulo": a["titulo"], "preco": a["preco"], "preco_antigo": a["preco_antigo"], "descricao": a["descricao"],
-             "marketplaces": json.loads(dem["marketplaces"] or "[]") if dem else [],
-             "tarefa_clickup": dem["url"] if dem else "", "completo": chk["completo"], "fotos": fotos, "cores": cores}
-    corpo, tipo = _multipart(dados, arquivos)
-    status, texto = _chamar("POST", i["url"] + "/menork/anuncios", i["chave"], corpo, tipo, timeout=180)
-    try:
-        resp = json.loads(texto) if texto else {}
-    except ValueError:
-        resp = {}
-    ok = 200 <= status < 300
-    novo_id = str(resp.get("id") or resp.get("id_externo") or "") if ok else ""
-    with n.con() as c:
-        if novo_id:
-            c.execute("UPDATE anuncios SET id_externo=? WHERE id=?", (novo_id, aid))
-        c.execute("INSERT INTO envios(anuncio_id,quando,por,ok,resposta,id_externo) VALUES(?,?,?,?,?,?)",
-                  (aid, n.agora(), por, int(ok), (texto or "")[:500], novo_id or id_externo))
-    if not ok:
-        raise HTTPException(502, f"O {i['nome']} recusou o envio ({status}): {texto[:200]}")
-    acao = "atualizado" if id_externo else "criado"
-    return {"ok": True, "id_externo": novo_id or id_externo,
-            "msg": f"Anúncio {acao} no {i['nome']}" + (" como rascunho" if i["rascunho"] else "") + "."}
+    raise HTTPException(400, f"O envio mudou: abra o anúncio no site e use o botão {integ()['nome']}, que troca as fotos "
+                             "de um anúncio que já existe ou cria um anúncio novo na Shopee ou no Mercado Livre.")
 
 
 @app.post("/api/anuncios/{aid}/enviar")
@@ -1082,29 +1039,24 @@ def _link(v):
 
 @app.get("/api/lojas")
 def lojas():
-    d = _ler_sistema("/menork/clientes")
-    clientes = []
-    for cl in (d.get("clientes") or [])[:500]:
-        lojas_ = [{"id": _txt(l.get("id"), 80), "nome": _txt(l.get("nome")), "marketplace": _txt(l.get("marketplace"), 20).upper(),
-                   "url": _link(l.get("url")), "anuncios": l.get("anuncios") if isinstance(l.get("anuncios"), int) else None}
-                  for l in (cl.get("lojas") or [])[:100] if _txt(l.get("id"))]
-        clientes.append({"id": _txt(cl.get("id"), 80), "nome": _txt(cl.get("nome")), "lojas": lojas_})
-    return {"sistema": integ()["nome"], "clientes": clientes}
+    from . import b2x
+    r = b2x.lojas()
+    clientes = {}
+    for x in r["lojas"]:
+        cl = clientes.setdefault(x["cliente_id"], {"id": x["cliente_id"], "nome": x["cliente"], "lojas": []})
+        cl["lojas"].append({"id": x["id"], "nome": x["nome"], "marketplace": b2x.CANAIS.get(x["canal"], x["canal"]).upper(),
+                            "url": "", "anuncios": None})
+    return {"sistema": r["sistema"], "clientes": list(clientes.values())}
 
 
 @app.get("/api/lojas/{loja}/anuncios")
 def lojas_anuncios(loja: str, pagina: int = 1, busca: str = ""):
-    import urllib.parse
-    q = urllib.parse.urlencode({"pagina": max(1, pagina), "por_pagina": 48, "busca": busca.strip()[:100]})
-    d = _ler_sistema(f"/menork/lojas/{urllib.parse.quote(loja, safe='')}/anuncios?{q}")
-    def num(v):
-        return v if isinstance(v, (int, float)) else None
-    anuncios = [{"id": _txt(a.get("id"), 80), "titulo": _txt(a.get("titulo"), 300), "preco": _txt(a.get("preco"), 30),
-                 "status": _txt(a.get("status"), 30), "foto": _link(a.get("foto")), "link": _link(a.get("link")),
-                 "vendas": num(a.get("vendas")), "estoque": num(a.get("estoque"))}
-                for a in (d.get("anuncios") or [])[:200]]
-    return {"anuncios": anuncios, "total": d.get("total") if isinstance(d.get("total"), int) else len(anuncios),
-            "pagina": max(1, pagina)}
+    from . import b2x
+    r = b2x.anuncios(loja, busca, pagina)
+    return {"anuncios": [{"id": a["id"], "titulo": a["titulo"], "preco": "" if a["preco"] is None else str(a["preco"]),
+                          "status": a["status"], "foto": a.get("capa") or "", "link": "", "vendas": None,
+                          "estoque": a["estoque"] if isinstance(a["estoque"], (int, float)) else None} for a in r["anuncios"]],
+            "total": r["total"], "pagina": r["pagina"]}
 
 
 @app.post("/bot/enviar-sistema")
@@ -1465,3 +1417,8 @@ async def enviar(arquivos: list[UploadFile] = File(...), anuncio: str = Form("")
 @app.post("/api/ler-agora")
 def ler_agora():
     return n.rodada()
+
+
+from . import b2x as _b2x  # noqa: E402  (rotas /api/b2x/*: precisam do app ja montado)
+
+app.include_router(_b2x.rota)

@@ -96,11 +96,8 @@ menork.ps1 demanda -Tarefa "NOME DA TAREFA" -Produto CI9 -Pasta "\\SERVIDOR\past
 `-Info` é o texto do campo INFO JOAO, copiado como está. `-Produto` é o código que aparece no nome das imagens. O site cria sozinho os anúncios (unitário e kits) e as metas. Não crie pastas.
 Siglas dos marketplaces: ML, SHP, SHEIN, TIKTOK, AMAZON, MAGALU, NETSHOES, TEMU, KWAI.
 
-**Mandar o anúncio pronto para o sistema do Menork (B2X)**
-```
-menork.ps1 enviar-sistema -Anuncio "CI9 unitário" -Bot "SEU NOME"
-```
-Só funciona com o anúncio completo e com a integração configurada pelo Menork em Integrações. Se faltar algo, vem `ERRO:` com a lista e nada é enviado. Se o anúncio já foi enviado antes, o comando atualiza o anúncio lá em vez de criar outro.
+**Mandar para o marketplace (B2X): só o Menork**
+Trocar fotos de anúncios que já existem e criar anúncios novos na Shopee e no Mercado Livre é feito pelo Menork, no site, com o botão do B2X dentro do anúncio. O comando `enviar-sistema` não envia mais nada: ele só responde com esse aviso. Quando um anúncio ficar completo, avise o Menork.
 
 **Baixar o pacote aprovado para subir o anúncio**
 ```

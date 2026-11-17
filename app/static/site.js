@@ -223,7 +223,7 @@ const TELAS = {
       <button class="b claro" id="montar-auto" title="Preenche capa, fotos e cores vazias com as imagens aprovadas deste anúncio">Montar sozinho</button>
       <button class="b claro" id="copiar-anuncio" data-id="${a.id}" title="Cria cópias deste anúncio ou leva as fotos dele para outros anúncios">Copiar fotos para outros</button>
       <label class="b claro">Enviar imagens<input type="file" id="enviar" data-anuncio="${esc(a.nome)}" multiple accept="image/*" hidden></label>
-      ${INTEG().url ? `<button class="b" id="enviar-sistema" data-id="${a.id}">Enviar para o ${esc(INTEG().nome)}</button>` : ''}
+      ${INTEG().url && INTEG().tem_chave ? `<button class="b" id="enviar-sistema" data-id="${a.id}">${esc(INTEG().nome)}: fotos e anúncio</button>` : ''}
       <button class="b verde" id="baixar-zip" data-id="${a.id}">Exportar</button><button class="b claro" id="excluir-anuncio" data-id="${a.id}">Excluir</button></div></div>
     <div class="montagem"><div class="editor"><div class="bloco faltas" id="faltas"></div><section id="editor" class="editor"></section></div><aside class="previa">
       <div class="troca" role="group" aria-label="Marketplace do anúncio"><button data-modo="ml"><span class="mk-marca ml"><img src="/marca-mk/ml" alt="" onerror="this.remove()"></span>Mercado Livre</button><button data-modo="shopee"><span class="mk-marca shopee"><img src="/marca-mk/shopee" alt="" onerror="this.remove()"></span>Shopee</button></div>
@@ -389,23 +389,156 @@ document.addEventListener('submit', async e => {
   } catch (err) { window.menork.aviso(err.message); }
 });
 
-// ---- enviar para o sistema do usuario (B2X)
-document.addEventListener('click', async e => {
-  const b = e.target.closest('#enviar-sistema'); if (!b) return; const aid = +b.dataset.id, nome = INTEG().nome, pend = faltas(aid).itens;
-  if (pend.length && !b.dataset.forcar) {
-    abrirJanela(`<h2>Enviar ao ${esc(nome)} incompleto?</h2><div class="nota ruim"><b>O anúncio ainda tem pendências</b>${pend.map(t => `<span>${esc(t)}</span>`).join('')}</div>
-      <p class="pequeno">Os bots só conseguem enviar anúncios completos. Você pode enviar assim mesmo${INTEG().rascunho ? ', e ele entra como rascunho' : ''}.</p>
-      <div class="acoes"><button class="b" data-enviar-forcado="${aid}">Enviar mesmo assim</button><button class="b claro" data-fechar>Cancelar</button></div>`);
-    return;
-  }
-  window.menork.aviso(`Enviando ao ${nome}…`, null, null, 120);
-  try { const r = await SRV.enviarSistema(aid, false); window.menork.aviso(r.msg, null, null, 10); window.AO_DESENHAR(aid); } catch (err) { window.menork.aviso(err.message, null, null, 15); window.AO_DESENHAR(aid); }
+// ---- B2X: trocar as fotos de um anuncio que ja existe ou criar um anuncio novo (Shopee e Mercado Livre)
+const B2 = { passo: '' };
+const b2get = url => window.menork.api(url), b2post = (url, corpo) => window.menork.api(url, corpo);
+const B2CANAL = { shopee: 'Shopee', mercadolivre: 'Mercado Livre' };
+const semAc = t => String(t || '').normalize('NFKD').replace(/[̀-ͯ]/g, '').trim().toLowerCase();
+function b2Tela(html) { abrirJanela(`<div class="b2x">${html}</div>`); }
+function b2Carregando(txt) { b2Tela(`<h2>${esc(INTEG().nome)}</h2><p class="dica">${esc(txt)}</p>`); }
+function b2Erro(err, voltar) { b2Tela(`<h2>Não deu certo</h2><div class="nota ruim"><span>${esc(err.message || err)}</span></div><div class="acoes">${voltar ? `<button class="b" data-b2="${voltar}">Voltar</button>` : ''}<button class="b claro" data-fechar>Fechar</button></div>`); }
+const b2Lista = (t, xs) => xs && xs.length ? `<h3>${t}</h3><ul class="envios-feitos">${xs.map(x => `<li>${esc(x)}</li>`).join('')}</ul>` : '';
+
+async function b2Inicio(aid) {
+  const a = DB.anuncios.find(x => x.id === aid); B2.aid = aid; B2.canal = a.modo === 'ml' ? 'mercadolivre' : 'shopee';
+  b2Carregando(`Buscando as lojas de ${B2CANAL[B2.canal]} no ${INTEG().nome}…`);
+  try { const r = await b2get('/api/b2x/lojas?canal=' + B2.canal); B2.lojas = r.lojas; b2Lojas(); } catch (err) { b2Erro(err); }
+}
+function b2Lojas() {
+  const nomeAn = DB.anuncios.find(x => x.id === B2.aid).nome;
+  b2Tela(`<h2>${esc(INTEG().nome)}: ${esc(nomeAn)} <small>modo ${B2CANAL[B2.canal]}</small></h2>
+    ${B2.lojas.length ? `<label class="campo-b2">Loja<select id="b2-loja">${B2.lojas.map(l => `<option value="${esc(l.id)}" ${l.id === B2.loja ? 'selected' : ''}>${esc(l.cliente)} · ${esc(l.nome)}${l.pj ? ' (' + esc(l.pj) + ')' : ''}${l.status && l.status !== 'active' ? ' · ' + esc(l.status) : ''}</option>`).join('')}</select></label>
+    <p class="pequeno" id="b2-aviso-loja"></p>
+    <div class="b2-escolha"><button class="b" data-b2="trocar">Trocar fotos de um anúncio que já existe</button><button class="b claro" data-b2="criar">Criar anúncio novo</button></div>
+    <p class="pequeno">Para usar outro marketplace, troque o modo do anúncio (botões em cima do celular).</p>`
+    : `<div class="nota ruim"><span>Nenhuma loja de ${B2CANAL[B2.canal]} apareceu para esta chave.</span></div>`}
+    <div class="acoes"><button class="b claro" data-fechar>Fechar</button></div>`);
+  b2AvisoLoja();
+}
+function b2AvisoLoja() { const s = document.getElementById('b2-loja'); if (!s) return; const l = B2.lojas.find(x => x.id === s.value); B2.loja = s.value; B2.lojaNome = l ? l.cliente + ' · ' + l.nome : ''; const p = document.getElementById('b2-aviso-loja'); if (p) p.textContent = l && l.aviso ? 'Atenção: ' + l.aviso : ''; }
+
+// ---------- trocar fotos
+async function b2Anuncios(busca = '') {
+  B2.busca = busca; b2Carregando('Buscando os anúncios da loja…');
+  try { const r = await b2get(`/api/b2x/anuncios?loja=${encodeURIComponent(B2.loja)}&busca=${encodeURIComponent(busca)}`); B2.anuncios = r.anuncios;
+    b2Tela(`<h2>Qual anúncio vai receber as fotos? <small>${esc(B2.lojaNome)}</small></h2>
+      <form id="b2-busca" class="b2-linha"><input name="busca" value="${esc(busca)}" placeholder="Parte do título ou o código do anúncio"><button class="b claro">Buscar</button></form>
+      <p class="pequeno">${r.total} anúncio(s)${r.lido_em ? ' · lista lida às ' + esc(String(r.lido_em).slice(11, 16)) : ''}</p>
+      <div class="b2-anuncios">${r.anuncios.map(x => `<button class="b2-anuncio" data-b2-anuncio="${esc(x.id)}">${x.capa ? `<img src="${esc(x.capa)}" alt="" referrerpolicy="no-referrer">` : ''}<span><b>${esc(x.titulo)}</b><small>${esc(x.id)}${x.preco != null ? ' · R$ ' + esc(x.preco) : ''}${x.status ? ' · ' + esc(x.status) : ''}</small></span></button>`).join('') || '<p class="dica">Nenhum anúncio com esse título.</p>'}</div>
+      <div class="acoes"><button class="b claro" data-b2="lojas">Voltar</button></div>`);
+  } catch (err) { b2Erro(err, 'lojas'); }
+}
+async function b2Mapear(id) {
+  B2.anuncio = id; b2Carregando('Lendo o anúncio e as cores dele…');
+  try { const d = await b2get(`/api/b2x/anuncio?loja=${encodeURIComponent(B2.loja)}&anuncio=${encodeURIComponent(id)}&canal=${B2.canal}`); B2.det = d;
+    const nossas = (await b2get('/api/anuncios/' + B2.aid)).variacoes.map(v => v.cor);
+    const casa = c => nossas.find(x => semAc(x) === semAc(c)) || '';
+    b2Tela(`<h2>Trocar as fotos <small>${esc(d.titulo)}</small></h2>
+      <p class="pequeno">${esc(B2.lojaNome)} · ${esc(d.id)}${d.familia ? ' · Mercado Livre com um anúncio por cor e tamanho: cada cor vai para todos os tamanhos dela' : ''}</p>
+      ${B2.canal === 'shopee' ? `<label class="linha"><input type="checkbox" id="b2-galeria" checked> Trocar também as fotos do anúncio (capa e galeria, até 9)</label>` : ''}
+      <h3>Cor no marketplace → cor no site</h3>
+      ${d.cores.length ? `<div class="b2-mapa">${d.cores.map(c => `<label><span>${esc(c)}</span><select data-b2-cor="${esc(c)}"><option value="">não mexer</option>${nossas.map(x => `<option ${x === casa(c) ? 'selected' : ''}>${esc(x)}</option>`).join('')}</select></label>`).join('')}</div>`
+        : '<p class="dica">Este anúncio não tem variação de cor.</p>'}
+      <p class="pequeno">${B2.canal === 'shopee' ? 'Na Shopee vai a capa da variação de cada cor.' : 'No Mercado Livre vão as fotos da cor, na ordem (a 1ª é a principal).'} Primeiro o ${esc(INTEG().nome)} só simula; nada muda até você confirmar.</p>
+      <div class="acoes"><button class="b" data-b2="simular">Simular a troca</button><button class="b claro" data-b2="anuncios">Voltar</button></div>`);
+  } catch (err) { b2Erro(err, 'anuncios'); }
+}
+async function b2Simular() {
+  const mapa = {}; document.querySelectorAll('[data-b2-cor]').forEach(s => { if (s.value) mapa[s.dataset.b2Cor] = s.value; });
+  const galeria = !!document.getElementById('b2-galeria')?.checked;
+  b2Carregando('Subindo as fotos e simulando a troca. Pode levar um minuto…');
+  try { const r = await b2post('/api/b2x/fotos/simular', { aid: B2.aid, loja: B2.loja, anuncio: B2.anuncio, canal: B2.canal, mapa, galeria }); B2.token = r.token;
+    b2Tela(`<h2>Simulação <small>nada foi trocado ainda</small></h2>
+      ${r.envios.map(e => `<div class="nota ${e.ok ? '' : 'ruim'}"><b>${esc(e.rotulo)}: ${e.ok ? 'pronto para trocar' : 'recusado'}</b>${e.erro ? `<span>${esc(e.erro)}</span>` : ''}${e.mudancas.length ? `<span>Vai mudar: ${e.mudancas.map(esc).join(', ')}</span>` : ''}${e.avisos.map(a => `<span>${esc(a)}</span>`).join('')}</div>`).join('')}
+      <div class="acoes">${r.pode_confirmar ? '<button class="b verde" data-b2="confirmar">Confirmar e trocar as fotos agora</button>' : ''}<button class="b claro" data-b2="mapear">Voltar</button></div>`);
+  } catch (err) { b2Erro(err, 'mapear'); }
+}
+async function b2Confirmar() {
+  b2Carregando('Trocando as fotos no marketplace…');
+  try { const r = await b2post('/api/b2x/fotos/confirmar', { token: B2.token });
+    b2Tela(`<h2>Resultado</h2>${r.envios.map(e => `<div class="nota ${e.ok ? '' : 'ruim'}"><b>${esc(e.rotulo)}: ${e.ok ? (e.situacao === 'parcial' ? 'feito em parte' : 'trocado') : 'não trocado'}</b>${e.erro ? `<span>${esc(e.erro)}</span>` : ''}${e.ainda_antigos.length ? `<span>O marketplace ainda mostra o antigo em: ${e.ainda_antigos.map(x => esc(typeof x === 'string' ? x : JSON.stringify(x))).join(', ')}. Pode levar alguns minutos.</span>` : ''}</div>`).join('')}
+      <p class="pequeno">O jeito de desfazer ficou guardado no histórico do anúncio (Pacotes e envios).</p><div class="acoes"><button class="b" data-fechar>Fechar</button></div>`);
+    window.AO_DESENHAR?.(B2.aid);
+  } catch (err) { b2Erro(err, 'mapear'); }
+}
+
+// ---------- criar anuncio novo
+async function b2Categorias(busca) {
+  const a = DB.anuncios.find(x => x.id === B2.aid), det = await b2get('/api/anuncios/' + B2.aid).catch(() => null);
+  B2.titulo = det?.anuncio?.titulo || a.titulo || '';
+  if (!B2.titulo.trim()) return b2Erro(new Error('Preencha o título do anúncio no site antes de criar.'), 'lojas');
+  b2Carregando('Procurando a categoria certa…');
+  try { const r = await b2post('/api/b2x/categorias', { loja: B2.loja, titulo: B2.titulo, busca: busca || '' });
+    b2Tela(`<h2>Categoria <small>${esc(B2.lojaNome)}</small></h2><p class="pequeno">Sugestões para "${esc(B2.titulo)}". Se nenhuma servir, busque com outras palavras.</p>
+      <div class="b2-anuncios">${r.categorias.map(c => `<button class="b2-anuncio" data-b2-cat="${esc(c.id)}" data-b2-cam="${esc(c.caminho)}"><span><b>${esc(c.caminho)}</b><small>${esc(c.id)}${c.motivo ? ' · ' + esc(c.motivo) : ''}</small></span></button>`).join('') || '<p class="dica">Nenhuma sugestão.</p>'}</div>
+      <form id="b2-busca-cat" class="b2-linha"><input name="busca" value="${esc(busca || '')}" placeholder="Ex.: chinelo feminino"><button class="b claro">Buscar</button></form>
+      <div class="acoes"><button class="b claro" data-b2="lojas">Voltar</button></div>`);
+  } catch (err) { b2Erro(err, 'lojas'); }
+}
+async function b2Ficha(cat, caminho) {
+  B2.categoria = cat; B2.caminho = caminho; b2Carregando('Lendo o que essa categoria pede…');
+  try { const f = await b2get(`/api/b2x/ficha?loja=${encodeURIComponent(B2.loja)}&categoria=${encodeURIComponent(cat)}`); B2.ficha = f;
+    const m = await b2get('/api/anuncios/' + B2.aid), temTabela = [...m.galeria, ...m.todas].some(i => i.tipo === 'tabela');
+    const val = B2.form || { peso_g: 600, comprimento_cm: 30, largura_cm: 20, altura_cm: 12, estoque: 10, sku: '', tipo_anuncio: 'gold_special' };
+    const campo = o => o.opcoes.length ? `<label>${esc(o.nome)}<select data-b2-attr="${esc(o.id)}"><option value="">escolha</option>${o.opcoes.map(x => `<option value="${esc(x.id)}" ${(val.attr || {})[o.id] === x.id ? 'selected' : ''}>${esc(x.nome)}</option>`).join('')}</select></label>`
+      : `<label>${esc(o.nome)}<input data-b2-attr="${esc(o.id)}" data-texto="1" value="${esc((val.attr || {})[o.id] || '')}"></label>`;
+    b2Tela(`<h2>Ficha do anúncio <small>${esc(caminho)}</small></h2>
+      <p class="pequeno">${esc(B2.lojaNome)} · ${m.variacoes.length} cor(es) × ${m.tamanhos.length} tamanho(s) = ${m.variacoes.length * m.tamanhos.length} variações · preço R$ ${esc(m.anuncio.preco)}</p>
+      <form id="b2-ficha" class="b2-ficha">
+        ${f.obrigatorios.length ? `<h3>A categoria pede</h3><div class="b2-grade">${f.obrigatorios.map(campo).join('')}</div>` : ''}
+        ${B2.canal === 'shopee' ? `<h3>Marca</h3><div class="b2-grade"><label>Marca<select name="marca">${f.sem_marca ? '<option value="0">Sem marca</option>' : ''}${f.marcas.map(x => `<option value="${esc(x.id)}" ${val.marca === x.id ? 'selected' : ''}>${esc(x.nome)}</option>`).join('')}</select></label></div>` : ''}
+        ${B2.canal === 'mercadolivre' && f.tipos_anuncio.length ? `<h3>Tipo de anúncio</h3><div class="b2-grade"><label>Tipo<select name="tipo_anuncio">${f.tipos_anuncio.map(x => `<option value="${esc(x.id)}" ${val.tipo_anuncio === x.id ? 'selected' : ''}>${esc(x.nome)}</option>`).join('')}</select></label></div>` : ''}
+        <h3>Embalagem e estoque</h3><div class="b2-grade">
+          <label>Peso (g)<input name="peso_g" inputmode="decimal" value="${esc(val.peso_g)}"></label><label>Comprimento (cm)<input name="comprimento_cm" inputmode="decimal" value="${esc(val.comprimento_cm)}"></label>
+          <label>Largura (cm)<input name="largura_cm" inputmode="decimal" value="${esc(val.largura_cm)}"></label><label>Altura (cm)<input name="altura_cm" inputmode="decimal" value="${esc(val.altura_cm)}"></label>
+          <label>Estoque de cada variação<input name="estoque" inputmode="numeric" value="${esc(val.estoque)}"></label><label>Começo do SKU (opcional)<input name="sku" value="${esc(val.sku)}" placeholder="Ex.: TA01"></label></div>
+        ${B2.canal === 'shopee' ? `<label class="linha"><input type="checkbox" name="tabela" ${temTabela ? 'checked' : 'disabled'}> Mandar a tabela de medidas do anúncio ${temTabela ? '' : '(este anúncio não tem tabela aprovada)'}${f.tabela_exige ? ' · esta categoria exige' : ''}</label>` : (f.tabela_exige ? '<p class="pequeno">Esta categoria do Mercado Livre exige tabela de medidas: se a validação reclamar, ela precisa ser criada no B2X.</p>' : '')}
+        ${f.dica ? `<p class="pequeno">${esc(f.dica)}</p>` : ''}
+        <div class="acoes"><button class="b">Validar (nada é publicado)</button><button type="button" class="b claro" data-b2="categorias">Voltar</button></div></form>`);
+  } catch (err) { b2Erro(err, 'categorias'); }
+}
+function b2LerFicha(f) {
+  const attr = {}, atributos = [];
+  f.querySelectorAll('[data-b2-attr]').forEach(x => { if (!x.value.trim()) return; attr[x.dataset.b2Attr] = x.value.trim(); atributos.push(x.dataset.texto ? { id: x.dataset.b2Attr, texto: x.value.trim() } : { id: x.dataset.b2Attr, opcao: x.value }); });
+  const v = k => f.elements[k]?.value ?? '';
+  const marcaSel = f.elements.marca, marca = marcaSel ? { id: marcaSel.value, nome: marcaSel.selectedOptions[0]?.textContent || '' } : null;
+  B2.form = { attr, peso_g: v('peso_g'), comprimento_cm: v('comprimento_cm'), largura_cm: v('largura_cm'), altura_cm: v('altura_cm'), estoque: v('estoque'), sku: v('sku'), tipo_anuncio: v('tipo_anuncio') || 'gold_special', marca: marca?.id, tabela: !!f.elements.tabela?.checked };
+  return { aid: B2.aid, loja: B2.loja, canal: B2.canal, categoria: B2.categoria, atributos, marca, peso_g: B2.form.peso_g, comprimento_cm: B2.form.comprimento_cm, largura_cm: B2.form.largura_cm, altura_cm: B2.form.altura_cm, estoque: B2.form.estoque, sku: B2.form.sku, tipo_anuncio: B2.form.tipo_anuncio, tabela: B2.form.tabela };
+}
+async function b2Validar(corpo) {
+  B2.corpo = corpo; b2Carregando('Subindo as fotos e validando com o marketplace. Pode levar um minuto…');
+  try { const r = await b2post('/api/b2x/criar', corpo); B2.pedido = r.pedido_id;
+    b2Tela(`<h2>${r.validado ? 'Validado: pode criar' : 'O marketplace pediu correções'} <small>nada foi publicado ainda</small></h2>
+      <p class="pequeno">${esc(B2.lojaNome)} · ${esc(B2.caminho)} · ${r.variacoes} variações · ${r.fotos} foto(s) enviadas</p>
+      ${r.problemas.length ? `<div class="nota ruim"><b>Corrigir</b>${r.problemas.map(p => `<span>${esc(p)}</span>`).join('')}</div>` : ''}${b2Lista('Avisos', r.avisos)}
+      <p class="pequeno">${B2.canal === 'shopee' ? 'Na Shopee o anúncio nasce OCULTO' : 'No Mercado Livre o anúncio nasce PAUSADO'}: revise lá e ative quando estiver tudo certo.</p>
+      <div class="acoes">${r.validado ? '<button class="b verde" data-b2="publicar">Criar o anúncio</button>' : ''}<button class="b claro" data-b2="ficha">Voltar e corrigir</button></div>`);
+  } catch (err) { b2Erro(err, 'ficha'); }
+}
+async function b2Publicar() {
+  b2Carregando('Criando o anúncio no marketplace. Não feche esta janela…');
+  try { const r = await b2post('/api/b2x/criar', { ...B2.corpo, confirmar: true, pedido_id: B2.pedido });
+    b2Tela(r.criado ? `<h2>Anúncio criado</h2><div class="nota"><b>${esc(B2CANAL[B2.canal])}: ${r.anuncio_ids.map(esc).join(', ')}</b><span>Situação: ${esc(({ UNLIST: 'oculto', unlist: 'oculto', paused: 'pausado', PAUSED: 'pausado', active: 'ativo', NORMAL: 'ativo' })[r.status] || r.status || (B2.canal === 'shopee' ? 'oculto' : 'pausado'))}. Revise no marketplace e ative.</span>${r.divergencias.map(x => `<span>Ficou diferente: ${esc(x)}</span>`).join('')}</div>${b2Lista('Avisos', r.avisos)}<div class="acoes"><button class="b" data-fechar>Fechar</button></div>`
+      : `<h2>Não foi criado</h2>${r.incerto ? '<div class="nota ruim"><span>A resposta ficou incerta. Não crie de novo: confira a loja no marketplace antes. Repetir por aqui usa o mesmo pedido e não duplica.</span></div>' : ''}<div class="nota ruim">${r.problemas.map(p => `<span>${esc(p)}</span>`).join('') || '<span>O marketplace não devolveu o código do anúncio.</span>'}</div><div class="acoes"><button class="b" data-b2="publicar">Tentar de novo (não duplica)</button><button class="b claro" data-b2="ficha">Voltar</button></div>`);
+    window.AO_DESENHAR?.(B2.aid);
+  } catch (err) { b2Erro(err, 'ficha'); }
+}
+
+document.addEventListener('click', e => {
+  const ini = e.target.closest('#enviar-sistema'); if (ini) return b2Inicio(+ini.dataset.id);
+  const an = e.target.closest('[data-b2-anuncio]'); if (an) return b2Mapear(an.dataset.b2Anuncio);
+  const cat = e.target.closest('[data-b2-cat]'); if (cat) { B2.form = null; return b2Ficha(cat.dataset.b2Cat, cat.dataset.b2Cam); }
+  const b = e.target.closest('[data-b2]'); if (!b) return;
+  const p = b.dataset.b2; b2AvisoLoja();
+  ({ lojas: b2Lojas, trocar: () => b2Anuncios(''), anuncios: () => b2Anuncios(B2.busca || ''), mapear: () => b2Mapear(B2.anuncio), simular: b2Simular, confirmar: b2Confirmar,
+     criar: () => b2Categorias(''), categorias: () => b2Categorias(''), ficha: () => b2Ficha(B2.categoria, B2.caminho), publicar: b2Publicar }[p] || (() => {}))();
 });
-document.addEventListener('click', async e => {
-  const b = e.target.closest('[data-enviar-forcado]'); if (!b) return; const aid = +b.dataset.enviarForcado; fecharJanela();
-  window.menork.aviso(`Enviando ao ${INTEG().nome}…`, null, null, 120);
-  try { const r = await SRV.enviarSistema(aid, true); window.menork.aviso(r.msg, null, null, 10); } catch (err) { window.menork.aviso(err.message, null, null, 15); }
-  window.AO_DESENHAR(aid);
+document.addEventListener('change', e => { if (e.target.id === 'b2-loja') b2AvisoLoja(); });
+document.addEventListener('submit', e => {
+  const f = e.target;
+  if (f.id === 'b2-busca') { e.preventDefault(); return b2Anuncios(f.busca.value.trim()); }
+  if (f.id === 'b2-busca-cat') { e.preventDefault(); return b2Categorias(f.busca.value.trim()); }
+  if (f.id === 'b2-ficha') { e.preventDefault(); return b2Validar(b2LerFicha(f)); }
 });
 
 // ---- exportar por marketplace
@@ -499,21 +632,21 @@ Object.assign(TELAS, {
   },
   integracoes() {
     const i = INTEG();
-    return `<div class="cabeca"><h1>Integrações <small>ligue o site ao seu sistema para enviar anúncios prontos</small></h1></div>
+    return `<div class="cabeca"><h1>Integrações <small>ligue o site ao B2X para mandar fotos e criar anúncios</small></h1></div>
     <div class="bloco"><h2>${esc(i.nome)} <small>${i.url && i.tem_chave ? 'configurado' : 'ainda não configurado'}</small></h2>
       <form class="integ-form" id="form-integ">
         <label>Nome do sistema<input type="text" name="nome" value="${esc(i.nome)}" maxlength="30"></label>
-        <label>Endereço da API<input type="url" name="url" value="${esc(i.url)}" placeholder="https://seu-sistema.com.br/api"></label>
+        <label>Endereço da API<input type="url" name="url" value="${esc(i.url)}" placeholder="a Base da API, no começo da documentação (termina em /api-b2x)"></label>
         <label class="largo">Chave da API ${i.tem_chave ? '<span class="ok-mini">· chave salva (por segurança ela não aparece)</span>' : ''}<input type="password" name="chave" autocomplete="off" placeholder="${i.tem_chave ? 'deixe vazio para manter a chave salva' : 'cole aqui a chave gerada no seu sistema'}"></label>
-        <label class="linha largo"><input type="checkbox" name="rascunho" ${i.rascunho ? 'checked' : ''}> Mandar como rascunho (o anúncio entra no sistema sem ser publicado)</label>
+        <input type="hidden" name="rascunho" value="1">
         <div class="acoes largo"><button class="b">Salvar</button><button type="button" class="b claro" id="testar-integ">Testar conexão</button>${i.tem_chave ? '<button type="button" class="b claro" id="apagar-chave">Apagar a chave</button>' : ''}</div>
       </form></div>
     <div class="bloco"><h2>Como funciona</h2><ul class="envios-feitos">
-      <li>Dentro de cada anúncio aparece o botão <b>Enviar para o ${esc(i.nome)}</b>. Ele manda título, preço, descrição, as fotos na ordem (a 1 é a capa), as cores e os marketplaces da tarefa, com os arquivos das imagens junto.</li>
-      <li>Se o anúncio já foi enviado antes, o mesmo botão <b>atualiza</b> o anúncio lá, em vez de criar outro.</li>
-      <li>Os bots também podem enviar, com <code>menork.ps1 enviar-sistema</code>, mas só anúncios completos.</li>
-      <li>A chave fica guardada só no seu PC. Ela não vai para o GitHub nem aparece na tela.</li>
-      <li>O seu sistema precisa ter dois endereços para receber: <code>/menork/ping</code> (teste) e <code>/menork/anuncios</code> (receber o anúncio). O formato está no arquivo <b>INTEGRACAO.md</b>, na pasta do site.</li></ul></div>`;
+      <li>Dentro de cada anúncio aparece o botão <b>${esc(i.nome)}: fotos e anúncio</b>. Ele segue o modo do anúncio (Shopee ou Mercado Livre).</li>
+      <li><b>Trocar fotos de um anúncio que já existe:</b> você escolhe a loja e o anúncio, liga cada cor do marketplace a uma cor do site, simula e só então confirma.</li>
+      <li><b>Criar anúncio novo:</b> escolhe a loja, a categoria e preenche o que ela pede. O site valida antes; na Shopee o anúncio nasce oculto e no Mercado Livre pausado, para você revisar e ativar.</li>
+      <li>As fotos sobem para o ${esc(i.nome)} na hora de enviar. O site nunca apaga nada no marketplace.</li>
+      <li>A chave fica guardada só no seu PC. Ela não vai para o GitHub nem aparece na tela.</ul></div>`;
   },
   demandas() {
     const campo = (d, chave, rotulo, valor) => `<label>${rotulo}<input type="number" min="0" max="40" data-dem="${d.id}" data-meta="${chave}" value="${valor}"></label>`;

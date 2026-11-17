@@ -151,6 +151,8 @@ def iniciar_banco():
               anuncio_id INTEGER REFERENCES anuncios(id) ON DELETE CASCADE,
               cor TEXT COLLATE NOCASE, imagem_id INTEGER REFERENCES imagens(id) ON DELETE CASCADE,
               posicao INTEGER DEFAULT 0, PRIMARY KEY(anuncio_id, cor));
+            CREATE TABLE IF NOT EXISTS b2x_fotos(
+              imagem_id INTEGER PRIMARY KEY, sha TEXT DEFAULT '', url TEXT, expira_em TEXT DEFAULT '');
             CREATE TABLE IF NOT EXISTS fotos_cor(
               anuncio_id INTEGER REFERENCES anuncios(id) ON DELETE CASCADE,
               cor TEXT COLLATE NOCASE, imagem_id INTEGER REFERENCES imagens(id) ON DELETE CASCADE,
