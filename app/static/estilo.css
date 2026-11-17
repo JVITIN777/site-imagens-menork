@@ -452,3 +452,11 @@ body.porta{background:#050505!important}
 .pedidos-pub h2{display:flex;align-items:center;gap:10px}.pedidos-pub .mini{margin-left:auto;padding:4px 10px;font-size:12px}
 .pub-lista{max-height:30vh;overflow:auto}
 #txt-pub{width:100%;font-size:13px}
+/* coluna de fotos do anuncio: rolagem propria, fica parada onde voce deixou */
+@media (min-width:1181px){
+  .slots-col{max-height:calc(100vh - 40px);overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.25) transparent}
+  .slots-col::-webkit-scrollbar{width:6px}.slots-col::-webkit-scrollbar-thumb{background:rgba(255,255,255,.22);border-radius:3px}
+}
+.abas-cor{max-height:34vh;overflow-y:auto;overscroll-behavior:contain;padding:2px 2px 2px 0;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.25) transparent}
+.abas-cor::-webkit-scrollbar{width:5px}.abas-cor::-webkit-scrollbar-thumb{background:rgba(255,255,255,.22);border-radius:3px}
+.slots-col h2{position:sticky;top:-12px;z-index:2;background:rgba(20,20,21,.96);margin:-12px -12px 10px;padding:12px 12px 8px;border-radius:14px 14px 0 0}

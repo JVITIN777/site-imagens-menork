@@ -90,6 +90,8 @@
     const colocar = ml()
       ? (v ? botao('foto_cor', 'Foto da cor', 'Coloca nas fotos da cor ' + v.cor) : '') + botao('cor', 'Nova cor', 'Cria uma cor nova com esta foto como principal')
       : botao('capa', 'Capa') + botao('foto', 'Foto') + botao('variacao', 'Cor', 'Usa como capa da variação de uma cor');
+    // guarda onde voce deixou as rolagens: redesenhar nao pode jogar a coluna de volta para o topo
+    const rolCol = editor.querySelector('.slots-col')?.scrollTop || 0, rolAbas = editor.querySelector('.abas-cor')?.scrollTop || 0, rolJanela = window.scrollY;
     editor.innerHTML = `<div class="com-slots">
       <div class="slots-col">${fotosCol}</div>
       <div class="resto">${dados}${cores}${blocoTamanhos()}
@@ -98,7 +100,10 @@
       ${E.sugestoes.length ? `<div class="bloco"><h2>Outras aprovadas de ${esc(E.produto)} <small>ainda fora deste anúncio</small></h2>
         <div class="trilho">${E.sugestoes.map(i => peca(i, colocar, { arrasta: true })).join('')}</div></div>` : ''}
       </div></div>`;
-    if (foco) document.getElementById(foco)?.focus();
+    const col = editor.querySelector('.slots-col'), abas = editor.querySelector('.abas-cor');
+    if (col) col.scrollTop = rolCol; if (abas) abas.scrollTop = rolAbas;
+    if (Math.abs(window.scrollY - rolJanela) > 1) window.scrollTo(0, rolJanela);
+    if (foco) document.getElementById(foco)?.focus({ preventScroll: true });
     contarTitulo();
   }
   function contarTitulo() {
