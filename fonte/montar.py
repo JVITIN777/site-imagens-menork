@@ -196,6 +196,6 @@ ABERTURA = """<div id="abertura" aria-hidden="true"><canvas id="cartas"></canvas
   setTimeout(() => window.ABERTURA_FIM(), 6000); })();</script>
 """
 open(R+'templates/app.html','w').write(pagina(ICONE_SITE + '\n<link rel="stylesheet" href="/static/estilo.css?v={{ versao }}">\n<link rel="stylesheet" href="/static/extra.css?v={{ versao }}">', '',
-            '<div class="pulso"><i></i><span>Lendo a pasta de entrada</span></div><a class="sair" href="/sair">Sair</a>',
+            '<div class="gastos" id="gastos" hidden></div><div class="pulso"><i></i><span>Lendo a pasta de entrada</span></div><a class="sair" href="/sair">Sair</a>',
             '<script src="/static/agua.js?v={{ versao }}"></script>\n<script src="/static/site.js?v={{ versao }}"></script>', "Imagens Menork", MARCA_SITE, ABERTURA))
 print('site', len(site_js))

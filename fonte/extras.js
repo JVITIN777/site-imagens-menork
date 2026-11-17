@@ -474,7 +474,8 @@ Object.assign(TELAS, {
       <li><b>Trocar fotos de um anúncio que já existe:</b> você escolhe a loja e o anúncio, liga cada cor do marketplace a uma cor do site, simula e só então confirma.</li>
       <li><b>Criar anúncio novo:</b> escolhe a loja, a categoria e preenche o que ela pede. O site valida antes; na Shopee o anúncio nasce oculto e no Mercado Livre pausado, para você revisar e ativar.</li>
       <li>As fotos sobem para o ${esc(i.nome)} na hora de enviar. O site nunca apaga nada no marketplace.</li>
-      <li>A chave fica guardada só no seu PC. Ela não vai para o GitHub nem aparece na tela.</ul></div>`;
+      <li>A chave fica guardada só no seu PC. Ela não vai para o GitHub nem aparece na tela.</ul></div>
+    ${window.GASTOS_CONFIG ? GASTOS_CONFIG() : ''}`;
   },
   demandas() {
     const campo = (d, chave, rotulo, valor) => `<label>${rotulo}<input type="number" min="0" max="40" data-dem="${d.id}" data-meta="${chave}" value="${valor}"></label>`;
@@ -1152,3 +1153,50 @@ async function b2Fila(pedido) {
     B2.relogio = setTimeout(() => { if (document.querySelector('.cr-andamento')) b2Fila(pedido); }, Math.max(4, s.de_novo_em) * 1000);
   } catch (err) { b2Erro(err); }
 }
+
+// ---- gasto das IAs, pequeno no rodapé da barra lateral (só lê; não gasta crédito)
+const GASTO = { dados: null };
+const usd = v => v == null ? '—' : 'US$ ' + Number(v).toFixed(2).replace('.', ',');
+async function gastoLer(forcar) {
+  try { const r = await fetch(forcar ? '/api/gastos/atualizar' : '/api/gastos', { method: forcar ? 'POST' : 'GET' }); if (!r.ok) return; GASTO.dados = await r.json(); } catch (_) { return; }
+  gastoDesenhar(); if (GASTO.dados.lendo) setTimeout(() => gastoLer(), 4000);
+}
+function gastoDesenhar() {
+  const el = document.getElementById('gastos'), d = GASTO.dados; if (!el || !d) return;
+  el.hidden = !d.configurado;
+  if (!d.configurado) return;
+  el.innerHTML = `<div class="gastos-cab"><span>Gasto das IAs</span><button type="button" id="gastos-atualizar" title="Ler de novo (não gasta crédito)">${d.lendo ? '…' : '↻'}</button></div>` +
+    (d.contas.length ? d.contas.map(c => `<a href="#" data-rota="/integracoes" class="gasto-linha${c.erro ? ' ruim' : ''}" title="${esc(c.erro ? c.nome + ': ' + c.erro : `${c.nome}: hoje ${usd(c.hoje)}, este mês ${usd(c.mes)}${c.limite ? ' de ' + usd(c.limite) : ''}${d.lido_em ? ' · lido às ' + d.lido_em : ''}`)}"><b>${esc(c.nome)}</b><span>${c.erro ? 'erro' : `${usd(c.hoje)} <i>hoje</i> · ${usd(c.mes)}${c.limite ? '/' + Number(c.limite).toFixed(0) : ''} <i>mês</i>`}</span>${c.limite && !c.erro ? `<em class="gasto-barra"><u style="width:${Math.min(100, c.mes / c.limite * 100).toFixed(0)}%" class="${c.mes / c.limite > .8 ? 'alto' : ''}"></u></em>` : ''}</a>`).join('') : '<span class="gasto-linha">Lendo…</span>');
+}
+document.addEventListener('click', e => { if (e.target.closest('#gastos-atualizar')) { e.preventDefault(); e.stopPropagation(); if (GASTO.dados) GASTO.dados.lendo = true; gastoDesenhar(); gastoLer(true); } });
+if (typeof window !== 'undefined' && location.pathname !== '/demo' && !window.DEMO) { setTimeout(() => gastoLer(), 1500); setInterval(() => gastoLer(), 5 * 60 * 1000); }
+
+// configuração na tela Integrações
+const GC = { lista: null, editando: null };
+async function gcCarregar() { try { GC.lista = (await b2get('/api/gastos/contas')).contas; } catch (_) { GC.lista = []; } if (ROTA === '/integracoes') RENDER(); }
+window.GASTOS_CONFIG = () => {
+  if (!GC.lista) { gcCarregar(); return '<div class="bloco"><h2>Gasto das IAs</h2><p class="pequeno">Carregando…</p></div>'; }
+  const ed = GC.editando, c = ed && ed !== 'novo' ? GC.lista.find(x => x.id === ed) : null;
+  const form = ed ? `<form class="integ-form" id="form-gasto" data-id="${esc(c?.id || '')}">
+      <label>Serviço<select name="servico"><option value="xai" ${c?.servico === 'xai' ? 'selected' : ''}>Grok (xAI)</option><option value="openai" ${c?.servico === 'openai' ? 'selected' : ''}>ChatGPT (OpenAI)</option></select></label>
+      <label>Nome na tela<input name="nome" value="${esc(c?.nome || '')}" maxlength="30" placeholder="Ex.: Grok, Chat 1, Chat 2"></label>
+      <label class="largo">Chave ${c?.tem_chave ? '<span class="ok-mini">· salva (não aparece)</span>' : ''}<input type="password" name="chave" autocomplete="off" placeholder="${c?.tem_chave ? 'deixe vazio para manter' : 'xAI: Management Key · OpenAI: Admin Key (sk-admin-…)'}"></label>
+      <label>Team ID (só xAI, opcional)<input name="time" value="${esc(c?.time || '')}" placeholder="console.x.ai > Settings > Team"></label>
+      <label>Limite do mês em US$ (opcional)<input name="limite" value="${esc(c?.limite || '')}" inputmode="decimal" placeholder="Ex.: 50"></label>
+      <div class="acoes largo"><button class="b">Salvar</button><button type="button" class="b claro" id="gasto-cancelar">Cancelar</button>${c ? `<button type="button" class="b claro" data-gasto-apagar="${esc(c.id)}">Tirar esta conta</button>` : ''}</div></form>` : '';
+  return `<div class="bloco"><h2>Gasto das IAs <small>aparece pequeno no canto da barra lateral</small></h2>
+    ${GC.lista.length ? `<ul class="envios-feitos">${GC.lista.map(x => `<li><b>${esc(x.nome)}</b> · ${x.servico === 'xai' ? 'Grok (xAI)' : 'ChatGPT (OpenAI)'}${x.limite ? ' · limite US$ ' + esc(x.limite) : ''} <button type="button" class="b claro mini" data-gasto-editar="${esc(x.id)}">Mudar</button></li>`).join('')}</ul>` : '<p class="pequeno">Nenhuma conta ainda.</p>'}
+    ${form || '<div class="acoes"><button type="button" class="b claro" id="gasto-novo">+ Adicionar conta</button></div>'}
+    <p class="pequeno">Só lê o gasto, de 30 em 30 minutos ou no ↻: isso não gasta crédito. Use uma chave que só lê. xAI: crie uma <b>Management Key</b> em console.x.ai › Settings › Management Keys. OpenAI: crie uma <b>Admin Key</b> em platform.openai.com › Settings › Organization › Admin keys. As chaves ficam só no seu PC.</p></div>`;
+};
+document.addEventListener('click', e => {
+  if (e.target.closest('#gasto-novo')) { GC.editando = 'novo'; return RENDER(); }
+  if (e.target.closest('#gasto-cancelar')) { GC.editando = null; return RENDER(); }
+  const ed = e.target.closest('[data-gasto-editar]'); if (ed) { GC.editando = ed.dataset.gastoEditar; return RENDER(); }
+  const ap = e.target.closest('[data-gasto-apagar]'); if (ap) { b2post('/api/gastos/contas', { apagar: ap.dataset.gastoApagar }).then(r => { GC.lista = r.contas; GC.editando = null; RENDER(); gastoLer(); }).catch(err => window.menork.aviso(err.message)); }
+});
+document.addEventListener('submit', e => {
+  if (e.target.id !== 'form-gasto') return; e.preventDefault();
+  const f = e.target, d = Object.fromEntries(new FormData(f)); d.id = f.dataset.id;
+  b2post('/api/gastos/contas', d).then(r => { GC.lista = r.contas; GC.editando = null; RENDER(); window.menork.aviso('Conta salva. Lendo o gasto…'); setTimeout(() => gastoLer(true), 300); }).catch(err => window.menork.aviso(err.message));
+});

@@ -11,6 +11,7 @@ Site local (Python/FastAPI + SQLite) do Menork para receber, aprovar e organizar
 ## Cuidados
 - O repositório é público: nunca coloque caminhos da TrueNAS, nomes de clientes, chaves nem o `config.json`.
 - Integração com o sistema do usuário (B2X): formato em `INTEGRACAO.md`; endereço e chave ficam no banco local (tabela `ajustes`), nunca no repositório nem em `/api/estado`.
+- Gasto das IAs (`app/gastos.py`): chaves de gerenciamento da xAI e Admin da OpenAI ficam em `ajustes` (gastos_contas); só leitura, de 30 em 30 min; nunca devolver as chaves nas rotas.
 - A logo do usuário fica só no PC dele, em `dados/logo.png` (ou .jpg/.webp/.svg), servida em `/logo`. Nunca a coloque no repositório.
 - O banco ajusta as colunas sozinho ao ligar (`iniciar_banco` em `app/nucleo.py`): ao criar coluna ou tabela, só acrescente, nunca apague.
 - `faltas` e o pacote usam a mesma função `checagem` em `app/main.py`; mantenha assim.
