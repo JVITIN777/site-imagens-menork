@@ -616,3 +616,34 @@ html[data-fundo="coringa"] .cartao,html[data-fundo="coringa"] .bloco,html[data-f
 .fundo-escolha .f-coringa{background:radial-gradient(120px 60px at 60% 0,rgba(122,96,170,.35),transparent),radial-gradient(90px 50px at 100% 100%,rgba(58,140,104,.3),transparent),url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='26' viewBox='0 0 64 104'%3E%3Cpath d='M32 0 64 52 32 104 0 52Z' fill='none' stroke='%23ffffff' stroke-opacity='.12' stroke-width='3'/%3E%3C/svg%3E"),#0e0d12}
 .fundo-escolha .f-agua{background:radial-gradient(ellipse at 30% 30%,#3a3b40,#0a0a0b 70%)}
 .fundo-escolha .f-liso{background:#0b0b0d}
+
+/* ---------- mais fundos: Feltro (mesa de pôquer), Naipes (couro com naipes em relevo), Fumaça (roxo e verde do Coringa, mexendo devagar) */
+html[data-fundo="feltro"],html[data-fundo="naipes"],html[data-fundo="fumaca"]{background:#060607}
+html[data-fundo="feltro"] body::before,html[data-fundo="feltro"] body::after,
+html[data-fundo="naipes"] body::before,html[data-fundo="naipes"] body::after,
+html[data-fundo="fumaca"] body::before,html[data-fundo="fumaca"] body::after{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none}
+html[data-fundo="feltro"] body::before{background:
+  radial-gradient(1400px 900px at 55% 30%,rgba(255,255,255,.07),transparent 60%),
+  radial-gradient(ellipse at 55% 40%,transparent 40%,rgba(0,0,0,.78) 100%),
+  linear-gradient(160deg,#0d2a20 0,#0a1f18 45%,#06130f 100%)}
+html[data-fundo="feltro"] body::after,html[data-fundo="naipes"] body::after{opacity:.5;mix-blend-mode:overlay;
+  background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.1' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 .6 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E")}
+html[data-fundo="naipes"] body::before{background:
+  radial-gradient(1200px 760px at 50% -5%,rgba(255,255,255,.06),transparent 60%),
+  radial-gradient(ellipse at 50% 45%,transparent 38%,rgba(0,0,0,.8) 100%),
+  url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='560' height='560' font-family='Georgia,serif' font-size='190'%3E%3Cg fill='%23ffffff' fill-opacity='.028' stroke='%23000000' stroke-opacity='.35' stroke-width='3'%3E%3Ctext x='40' y='220' transform='rotate(-14 130 160)'%3E%E2%99%A0%3C/text%3E%3Ctext x='330' y='190' transform='rotate(11 420 130)'%3E%E2%99%A5%3C/text%3E%3Ctext x='70' y='500' transform='rotate(8 160 440)'%3E%E2%99%A6%3C/text%3E%3Ctext x='340' y='520' transform='rotate(-9 430 460)'%3E%E2%99%A3%3C/text%3E%3C/g%3E%3C/svg%3E"),
+  linear-gradient(180deg,#141316 0,#0c0c0e 60%,#080809 100%);background-size:auto,auto,560px 560px,auto}
+html[data-fundo="fumaca"] body::before{background:radial-gradient(ellipse at 50% 45%,transparent 30%,rgba(0,0,0,.75) 100%),linear-gradient(180deg,#0c0b10,#070709)}
+html[data-fundo="fumaca"] body::after{inset:-25%;
+  background:radial-gradient(38% 34% at 30% 30%,rgba(118,72,196,.38),transparent 70%),
+             radial-gradient(34% 30% at 72% 68%,rgba(40,160,110,.26),transparent 70%),
+             radial-gradient(30% 26% at 70% 25%,rgba(150,60,170,.16),transparent 70%),
+             radial-gradient(28% 26% at 25% 78%,rgba(70,90,200,.12),transparent 70%);
+  animation:fumaca 48s ease-in-out infinite alternate;will-change:transform}
+@keyframes fumaca{0%{transform:translate3d(0,0,0) rotate(0deg) scale(1)}50%{transform:translate3d(4%,-3%,0) rotate(8deg) scale(1.08)}100%{transform:translate3d(-4%,3%,0) rotate(-6deg) scale(1.03)}}
+@media (prefers-reduced-motion:reduce){html[data-fundo="fumaca"] body::after{animation:none}}
+html:is([data-fundo="feltro"],[data-fundo="naipes"],[data-fundo="fumaca"]) .lateral{background:rgba(9,9,11,.8);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px)}
+html:is([data-fundo="feltro"],[data-fundo="naipes"],[data-fundo="fumaca"]) :is(.cartao,.bloco,.arvore){background:rgba(17,17,20,.86);border-color:rgba(255,255,255,.07)}
+.fundo-escolha .f-feltro{background:radial-gradient(80px 40px at 55% 35%,rgba(255,255,255,.12),transparent),linear-gradient(160deg,#0d2a20,#06130f)}
+.fundo-escolha .f-naipes{background:radial-gradient(ellipse at 50% 50%,transparent 30%,rgba(0,0,0,.7)),url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='70' height='54' font-family='Georgia,serif' font-size='30'%3E%3Cg fill='%23ffffff' fill-opacity='.14'%3E%3Ctext x='4' y='26'%3E%E2%99%A0%3C/text%3E%3Ctext x='40' y='24'%3E%E2%99%A5%3C/text%3E%3Ctext x='8' y='52'%3E%E2%99%A6%3C/text%3E%3Ctext x='42' y='52'%3E%E2%99%A3%3C/text%3E%3C/g%3E%3C/svg%3E"),#121114}
+.fundo-escolha .f-fumaca{background:radial-gradient(60px 40px at 30% 35%,rgba(118,72,196,.6),transparent),radial-gradient(60px 36px at 75% 70%,rgba(40,160,110,.45),transparent),#0b0a0f}
