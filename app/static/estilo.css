@@ -653,3 +653,20 @@ html:is([data-fundo="feltro"],[data-fundo="naipes"],[data-fundo="fumaca"]) :is(.
 .fundo-escolha .f-feltro{background:radial-gradient(80px 40px at 55% 35%,rgba(255,255,255,.12),transparent),linear-gradient(160deg,#0d2a20,#06130f)}
 .fundo-escolha .f-naipes{background:radial-gradient(ellipse at 50% 50%,transparent 30%,rgba(0,0,0,.7)),url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='70' height='54' font-family='Georgia,serif' font-size='30'%3E%3Cg fill='%23ffffff' fill-opacity='.14'%3E%3Ctext x='4' y='26'%3E%E2%99%A0%3C/text%3E%3Ctext x='40' y='24'%3E%E2%99%A5%3C/text%3E%3Ctext x='8' y='52'%3E%E2%99%A6%3C/text%3E%3Ctext x='42' y='52'%3E%E2%99%A3%3C/text%3E%3C/g%3E%3C/svg%3E"),#121114}
 .fundo-escolha .f-fumaca{background:radial-gradient(60px 40px at 30% 35%,rgba(118,72,196,.6),transparent),radial-gradient(60px 36px at 75% 70%,rgba(40,160,110,.45),transparent),#0b0a0f}
+
+/* ---------- fundo "Preto com luz": preto limpo, duas luzes prateadas bem suaves passando devagar e grão fino */
+html[data-fundo="luz"]{background:#050506}
+html[data-fundo="luz"]::before,html[data-fundo="luz"] body::before,html[data-fundo="luz"] body::after{content:"";position:fixed;z-index:-1;pointer-events:none}
+html[data-fundo="luz"]::before{inset:-30%;will-change:transform;
+  background:radial-gradient(32% 28% at 28% 22%,rgba(210,214,230,.15),transparent 70%),
+             radial-gradient(30% 26% at 76% 72%,rgba(190,196,215,.10),transparent 70%),
+             radial-gradient(22% 20% at 62% 18%,rgba(255,255,255,.06),transparent 70%);
+  animation:luz-anda 60s ease-in-out infinite alternate}
+@keyframes luz-anda{0%{transform:translate3d(0,0,0) rotate(0deg)}50%{transform:translate3d(6%,4%,0) rotate(6deg)}100%{transform:translate3d(-5%,-3%,0) rotate(-4deg)}}
+html[data-fundo="luz"] body::before{inset:0;background:radial-gradient(ellipse at 50% 40%,transparent 45%,rgba(0,0,0,.6) 100%)}
+html[data-fundo="luz"] body::after{inset:0;opacity:.28;mix-blend-mode:overlay;
+  background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.1' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 .6 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E")}
+@media (prefers-reduced-motion:reduce){html[data-fundo="luz"]::before{animation:none}}
+html[data-fundo="luz"] .lateral{background:rgba(8,8,9,.72);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border-right-color:rgba(255,255,255,.06)}
+html[data-fundo="luz"] :is(.cartao,.bloco,.arvore){background:rgba(16,16,18,.78);border-color:rgba(255,255,255,.065);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)}
+.fundo-escolha .f-luz{background:radial-gradient(60px 40px at 30% 30%,rgba(210,214,230,.22),transparent),radial-gradient(60px 36px at 75% 70%,rgba(190,196,215,.14),transparent),#050506}
