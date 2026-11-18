@@ -405,7 +405,7 @@ function b2Erro(err, voltar) { b2Tela(`<h2>Não deu certo</h2><div class="nota r
 const b2Lista = (t, xs) => xs && xs.length ? `<h3>${t}</h3><ul class="envios-feitos">${xs.map(x => `<li>${esc(x)}</li>`).join('')}</ul>` : '';
 
 async function b2Inicio(aid) {
-  const a = DB.anuncios.find(x => x.id === aid); B2.aid = aid; B2.canal = a.modo === 'ml' ? 'mercadolivre' : 'shopee';
+  const a = DB.anuncios.find(x => x.id === aid); B2.aid = aid; B2.canal = a.modo === 'ml' ? 'mercadolivre' : 'shopee'; B2.lote = new Set([aid]);
   b2Carregando(`Buscando as lojas de ${B2CANAL[B2.canal]} no ${INTEG().nome}…`);
   try { const r = await b2get('/api/b2x/lojas?canal=' + B2.canal); B2.lojas = r.lojas; b2Lojas(); } catch (err) { b2Erro(err); }
 }
@@ -460,11 +460,35 @@ document.addEventListener('input', e => {
   const id = b.closest('[data-sl]').dataset.sl; SL[id].busca = b.value; b.parentElement.querySelector('.sl-lista').innerHTML = slLista(id);
 });
 
+// anúncios do mesmo produto (as cópias): escolher quantos mandar de uma vez
+function b2IrmaosLista() {
+  const a = DB.anuncios.find(x => x.id === B2.aid); if (!a) return [];
+  const fam = a.familia || a.id, d = a.demanda;
+  return DB.anuncios.filter(x => (x.familia || x.id) === fam || (d && x.demanda === d));
+}
+function b2Irmaos() {
+  const l = b2IrmaosLista(); if (l.length < 2) return '';
+  const enviado = id => (DB.envios?.[id] || []).find(e => e.ok && e.id);
+  return `<div class="b2-irmaos"><div class="b2-irmaos-cab"><b>Quais anúncios deste produto mandar?</b> <span class="pequeno">${B2.lote.size} de ${l.length} marcado(s) · vale para "Criar anúncio novo"</span>
+    <button type="button" class="b claro mini" data-b2-todos>${l.every(x => B2.lote.has(x.id)) ? 'Só este' : 'Marcar todos'}</button></div>
+    <div class="b2-irmaos-lista">${l.map(x => { const e = enviado(x.id); return `<label class="${B2.lote.has(x.id) ? 'marcado' : ''}"><input type="checkbox" data-b2-irmao="${x.id}" ${B2.lote.has(x.id) ? 'checked' : ''}><span><b>${esc(x.nome)}</b><small>${esc((x.titulo || 'sem título').slice(0, 60))}${e ? ` · <em class="ja-criado">já criado (${esc(e.id)})</em>` : ''}</small></span></label>`; }).join('')}</div></div>`;
+}
+document.addEventListener('change', e => {
+  const c = e.target.closest('[data-b2-irmao]'); if (!c) return;
+  const id = +c.dataset.b2Irmao; c.checked ? B2.lote.add(id) : B2.lote.delete(id); if (!B2.lote.size) B2.lote.add(B2.aid);
+  const box = document.querySelector('.b2-irmaos'); if (box) box.outerHTML = b2Irmaos();
+});
+document.addEventListener('click', e => {
+  if (!e.target.closest('[data-b2-todos]')) return;
+  const l = b2IrmaosLista(); B2.lote = l.every(x => B2.lote.has(x.id)) ? new Set([B2.aid]) : new Set(l.map(x => x.id));
+  const box = document.querySelector('.b2-irmaos'); if (box) box.outerHTML = b2Irmaos();
+});
 function b2Lojas() {
   const nomeAn = DB.anuncios.find(x => x.id === B2.aid).nome;
   b2Tela(`<h2>${esc(INTEG().nome)}: ${esc(nomeAn)} <small>modo ${B2CANAL[B2.canal]}</small></h2>
     ${B2.lojas.length ? `<div class="campo-b2"><span>Loja</span>${seletorLoja('b2-loja', B2.lojas.map(l => ({ ...l, canal: B2.canal })), B2.loja)}</div>
     <p class="pequeno" id="b2-aviso-loja"></p>
+    ${b2Irmaos()}
     <div class="b2-escolha"><button class="b" data-b2="trocar">Trocar fotos de um anúncio que já existe</button><button class="b claro" data-b2="criar">Criar anúncio novo</button></div>
     <p class="pequeno">Para usar outro marketplace, troque o modo do anúncio (botões em cima do celular).</p>`
     : `<div class="nota ruim"><span>Nenhuma loja de ${B2CANAL[B2.canal]} apareceu para esta chave.</span></div>`}
@@ -630,10 +654,34 @@ async function b2Validar(corpo) {
       <p class="pequeno">${esc(B2.lojaNome)} · ${esc(B2.caminho)} · ${r.variacoes} variações · ${r.fotos} foto(s) enviadas</p>
       ${r.problemas.length ? `<div class="nota ruim"><b>Corrigir</b>${r.problemas.map(p => `<span>${esc(p)}</span>`).join('')}</div>` : ''}${b2Lista('Avisos', r.avisos)}
       <p class="pequeno">${B2.canal === 'shopee' ? 'Na Shopee o anúncio nasce OCULTO' : 'No Mercado Livre o anúncio nasce PAUSADO'}: revise lá e ative quando estiver tudo certo.</p>
-      <div class="acoes">${r.validado ? '<button class="b verde" data-b2="publicar">Criar o anúncio</button>' : ''}<button class="b claro" data-b2="ficha">Voltar e corrigir</button></div>`);
+      ${r.validado && B2.lote.size > 1 ? `<p class="pequeno">Validei o <b>${esc(DB.anuncios.find(x => x.id === B2.aid).nome)}</b>. Os outros ${B2.lote.size - 1} usam a mesma categoria e ficha; cada um é validado na hora de criar, com o título e as fotos dele.</p>` : ''}
+      <div class="acoes">${r.validado ? `<button class="b verde" data-b2="publicar">${B2.lote.size > 1 ? `Criar os ${B2.lote.size} anúncios` : 'Criar o anúncio'}</button>` : ''}<button class="b claro" data-b2="ficha">Voltar e corrigir</button></div>`);
   } catch (err) { b2Erro(err, 'ficha'); }
 }
+async function b2PublicarLote() {
+  const ids = [B2.aid, ...[...B2.lote].filter(x => x !== B2.aid)], res = [];
+  for (let i = 0; i < ids.length; i++) {
+    const aid = ids[i], nome = DB.anuncios.find(x => x.id === aid)?.nome || '#' + aid;
+    b2Carregando(`Criando ${i + 1} de ${ids.length}: ${nome}… (sobe as fotos e cria; não feche a janela)`);
+    try {
+      let pedido = B2.pedido;
+      const suf = aid === B2.aid ? '' : '-' + ((nome.match(/(\d+)\s*$/) || [])[1] || String(i + 1));
+      const corpo = { ...B2.corpo, aid, sku: B2.corpo.sku ? (B2.corpo.sku + suf).slice(0, 30) : '' };
+      if (aid !== B2.aid) { const v = await b2post('/api/b2x/criar', corpo); if (!v.validado) { res.push({ aid, nome, ok: false, msg: (v.problemas || []).slice(0, 2).join('; ') || 'não passou na validação' }); continue; } pedido = v.pedido_id; }
+      const r = await b2post('/api/b2x/criar', { ...corpo, confirmar: true, pedido_id: pedido });
+      res.push({ aid, nome, ok: r.criado, fila: r.na_fila, ids: r.anuncio_ids || [], msg: r.criado ? '' : r.na_fila ? 'na fila do marketplace (o site acompanha sozinho)' : (r.problemas || []).slice(0, 2).join('; '), promo: r.promocao_shopee });
+    } catch (err) { res.push({ aid, nome, ok: false, msg: err.message }); }
+  }
+  const okN = res.filter(r => r.ok).length;
+  b2Tela(`<h2>${okN} de ${res.length} anúncio(s) criado(s) <small>${esc(B2.lojaNome)}</small></h2>
+    <div class="lt-res">${res.map(r => `<div class="nota ${r.ok || r.fila ? '' : 'ruim'}"><b>${esc(r.nome)}: ${r.ok ? 'criado ' + r.ids.map(esc).join(', ') : r.fila ? 'na fila' : 'não criado'}</b>${r.msg ? `<span>${esc(r.msg)}</span>` : ''}
+      ${r.ok && B2.canal === 'shopee' && r.ids.length ? `<span><button class="b claro mini" data-promo-shp="${esc(r.ids[0])}" data-loja="${esc(B2.loja)}" data-preco="${esc(r.promo || '')}">Colocar numa promoção</button></span>` : ''}</div>`).join('')}</div>
+    <p class="pequeno">${B2.canal === 'shopee' ? 'Na Shopee eles nascem OCULTOS' : 'No Mercado Livre nascem PAUSADOS'}: revise e ative no marketplace. Tudo fica em "Anúncios criados".</p>
+    <div class="acoes"><button class="b" data-fechar>Fechar</button></div>`);
+  window.AO_DESENHAR?.(B2.aid);
+}
 async function b2Publicar() {
+  if (B2.lote && B2.lote.size > 1) return b2PublicarLote();
   b2Carregando('Criando o anúncio no marketplace. Não feche esta janela…');
   try { const r = await b2post('/api/b2x/criar', { ...B2.corpo, confirmar: true, pedido_id: B2.pedido });
     if (r.na_fila) return b2Fila(r.pedido_id);

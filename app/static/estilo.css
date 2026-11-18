@@ -699,3 +699,12 @@ html[data-fundo="luz"] :is(.cartao,.bloco,.arvore){background:rgba(16,16,18,.78)
 .video-caixa.enviando{opacity:.5;pointer-events:none}
 @media (max-width:1100px){.fotos-e-video{flex-direction:column}.video-caixa{flex-basis:auto;width:210px;border-left:0;padding-left:0}}
 .auto-tag.escolher{color:#e0b44c}
+.b2-irmaos{border:1px solid var(--borda);border-radius:12px;padding:10px 12px;margin:10px 0;background:var(--chao)}
+.b2-irmaos-cab{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px}
+.b2-irmaos-cab button{margin-left:auto}
+.b2-irmaos-lista{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:6px}
+.b2-irmaos-lista label{display:flex;gap:8px;align-items:flex-start;padding:8px 10px;border:1px solid var(--borda);border-radius:10px;cursor:pointer}
+.b2-irmaos-lista label.marcado{border-color:var(--luz)}
+.b2-irmaos-lista span{display:flex;flex-direction:column;min-width:0}
+.b2-irmaos-lista small{color:var(--fraco);font-size:11px}
+.ja-criado{font-style:normal;color:var(--verde)}
