@@ -498,6 +498,21 @@ def criacao_mudar(pedido_b2x="", cid=None, **campos):
 @rota.get("/api/criacoes")
 def criacoes():
     with n.con() as c:
+        # os criados antes do historico existir: vem dos envios do anuncio ("criar no Shopee: criado ...")
+        ja = {r[0] for r in c.execute("SELECT anuncio_ids FROM criacoes")}
+        for e in c.execute("SELECT e.*, a.nome, a.titulo FROM envios e LEFT JOIN anuncios a ON a.id=e.anuncio_id "
+                           "WHERE e.ok=1 AND e.id_externo<>'' AND (e.resposta LIKE 'criar%' OR e.resposta='') ORDER BY e.id").fetchall():
+            if e["id_externo"] in ja:
+                continue
+            perto = " ".join(r[0] or "" for r in c.execute("SELECT resposta FROM envios WHERE anuncio_id=? AND resposta LIKE 'criar%'",
+                                                            (e["anuncio_id"],)))
+            texto = (e["resposta"] or "") + " " + perto
+            m = re.search(r'"loja": "([^"]+)"', texto)
+            canal = "mercadolivre" if "Mercado Livre" in texto else "shopee" if "Shopee" in texto else ""
+            c.execute("INSERT INTO criacoes(quando,atualizado,anuncio_id,anuncio_nome,titulo,loja,canal,por,status,anuncio_ids,mensagem) "
+                      "VALUES(?,?,?,?,?,?,?,?,?,?,?)", (e["quando"], e["quando"], e["anuncio_id"], e["nome"] or "", e["titulo"] or "",
+                                                       m.group(1) if m else "", canal, e["por"] or "você", "criado", e["id_externo"], ""))
+            ja.add(e["id_externo"])
         linhas = [dict(r) for r in c.execute("SELECT * FROM criacoes ORDER BY id DESC LIMIT 300")]
         # pedidos ao Grok que ainda nao viraram criacao
         com = {r["pedido_bot"] for r in linhas if r["pedido_bot"]}
