@@ -618,7 +618,7 @@ html[data-fundo="coringa"] .cartao,html[data-fundo="coringa"] .bloco,html[data-f
 .fundo-escolha .f-liso{background:#0b0b0d}
 
 /* ---------- mais fundos: Feltro (mesa de pôquer), Naipes (couro com naipes em relevo), Fumaça (roxo e verde do Coringa, mexendo devagar) */
-html[data-fundo="feltro"],html[data-fundo="naipes"],html[data-fundo="fumaca"]{background:#060607}
+html[data-fundo="feltro"],html[data-fundo="fumaca"]{background:#060607}
 html[data-fundo="feltro"] body::before,html[data-fundo="feltro"] body::after,
 html[data-fundo="naipes"] body::before,html[data-fundo="naipes"] body::after,
 html[data-fundo="fumaca"] body::before,html[data-fundo="fumaca"] body::after{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none}
@@ -628,11 +628,17 @@ html[data-fundo="feltro"] body::before{background:
   linear-gradient(160deg,#0d2a20 0,#0a1f18 45%,#06130f 100%)}
 html[data-fundo="feltro"] body::after,html[data-fundo="naipes"] body::after{opacity:.5;mix-blend-mode:overlay;
   background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.1' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 .6 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E")}
+html[data-fundo="naipes"]{background:linear-gradient(180deg,#141316 0,#0c0c0e 60%,#080809 100%) fixed}
 html[data-fundo="naipes"] body::before{background:
   radial-gradient(1200px 760px at 50% -5%,rgba(255,255,255,.06),transparent 60%),
-  radial-gradient(ellipse at 50% 45%,transparent 38%,rgba(0,0,0,.8) 100%),
-  url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='560' height='560' font-family='Georgia,serif' font-size='190'%3E%3Cg fill='%23ffffff' fill-opacity='.028' stroke='%23000000' stroke-opacity='.35' stroke-width='3'%3E%3Ctext x='40' y='220' transform='rotate(-14 130 160)'%3E%E2%99%A0%3C/text%3E%3Ctext x='330' y='190' transform='rotate(11 420 130)'%3E%E2%99%A5%3C/text%3E%3Ctext x='70' y='500' transform='rotate(8 160 440)'%3E%E2%99%A6%3C/text%3E%3Ctext x='340' y='520' transform='rotate(-9 430 460)'%3E%E2%99%A3%3C/text%3E%3C/g%3E%3C/svg%3E"),
-  linear-gradient(180deg,#141316 0,#0c0c0e 60%,#080809 100%);background-size:auto,auto,560px 560px,auto}
+  radial-gradient(ellipse at 50% 45%,transparent 38%,rgba(0,0,0,.8) 100%)}
+/* naipes passando devagar atras, em duas camadas (perto e longe) */
+html[data-fundo="naipes"]::before,html[data-fundo="naipes"]::after{content:"";position:fixed;z-index:-1;pointer-events:none;will-change:transform}
+html[data-fundo="naipes"]::before{inset:-560px;background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='560' height='560' font-family='Georgia,serif' font-size='190'%3E%3Cg fill='%23ffffff' fill-opacity='.028' stroke='%23000000' stroke-opacity='.35' stroke-width='3'%3E%3Ctext x='40' y='220' transform='rotate(-14 130 160)'%3E%E2%99%A0%3C/text%3E%3Ctext x='330' y='190' transform='rotate(11 420 130)'%3E%E2%99%A5%3C/text%3E%3Ctext x='70' y='500' transform='rotate(8 160 440)'%3E%E2%99%A6%3C/text%3E%3Ctext x='340' y='520' transform='rotate(-9 430 460)'%3E%E2%99%A3%3C/text%3E%3C/g%3E%3C/svg%3E");background-size:560px 560px;animation:naipes-perto 70s linear infinite}
+html[data-fundo="naipes"]::after{inset:-900px;background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='900' height='900' font-family='Georgia,serif' font-size='120'%3E%3Cg fill='%23ffffff' fill-opacity='.018' stroke='%23000000' stroke-opacity='.35' stroke-width='3'%3E%3Ctext x='620' y='160' transform='rotate(18 680 120)'%3E%E2%99%A0%3C/text%3E%3Ctext x='180' y='420' transform='rotate(-20 240 380)'%3E%E2%99%A5%3C/text%3E%3Ctext x='560' y='700' transform='rotate(-6 620 660)'%3E%E2%99%A6%3C/text%3E%3Ctext x='120' y='830' transform='rotate(14 180 790)'%3E%E2%99%A3%3C/text%3E%3C/g%3E%3C/svg%3E");background-size:900px 900px;animation:naipes-longe 140s linear infinite}
+@keyframes naipes-perto{from{transform:translate3d(0,0,0)}to{transform:translate3d(560px,560px,0)}}
+@keyframes naipes-longe{from{transform:translate3d(0,0,0)}to{transform:translate3d(-900px,900px,0)}}
+@media (prefers-reduced-motion:reduce){html[data-fundo="naipes"]::before,html[data-fundo="naipes"]::after{animation:none}}
 html[data-fundo="fumaca"] body::before{background:radial-gradient(ellipse at 50% 45%,transparent 30%,rgba(0,0,0,.75) 100%),linear-gradient(180deg,#0c0b10,#070709)}
 html[data-fundo="fumaca"] body::after{inset:-25%;
   background:radial-gradient(38% 34% at 30% 30%,rgba(118,72,196,.38),transparent 70%),
