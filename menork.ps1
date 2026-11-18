@@ -10,7 +10,7 @@ param(
   [string]$Limite, [string]$Marketplace, [string]$Destino, [string]$Tarefa, [string]$Info, [string]$Pasta,
   [string[]]$Marketplaces, [int]$Max = 5, [int]$Id, [string]$Estilo, [switch]$Copia, [int]$Posicao,
   [string]$Titulo, [string]$Descricao, [string]$Preco, [string]$PrecoAntigo, [string]$Tamanhos, [string]$Categoria,
-  [string]$Json, [switch]$Validar, [string]$Resposta, [string]$Busca, [string]$Alvo
+  [string]$Json, [switch]$Validar, [string]$Resposta, [string]$Busca, [string]$Alvo, [int]$Imagem, [int]$Quantos = 1, [switch]$CapaDaCor
 )
 $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"
@@ -63,6 +63,9 @@ try {
     "publicar"    { if (-not $Anuncio -or -not $Categoria) { throw "Diga -Anuncio e -Categoria" }; Mostrar (MandarJson "/bot/publicar" @{ anuncio = $Anuncio; categoria = $Categoria; json = $Json; validar = [bool]$Validar }) }
     "loja-anuncio" { if (-not $Id -or -not $Alvo) { throw "Diga -Id (pedido) e -Alvo (codigo do anuncio na loja)" }; Mostrar (Pegar "/bot/b2x/anuncio" @{ id = $Id; alvo = $Alvo }) }
     "substituir"  { if (-not $Id -or -not $Anuncio -or -not $Alvo) { throw "Diga -Id, -Anuncio e -Alvo" }; Mostrar (MandarJson "/bot/substituir" @{ id = $Id; anuncio = $Anuncio; alvo = $Alvo; json = $Json; titulo = $Titulo; descricao = $Descricao; preco = $Preco; validar = [bool]$Validar }) }
+    "imagens"     { Mostrar (Pegar "/bot/imagens" @{ produto = $Produto; tipo = $Tipo; cor = $Cor; anuncio = $Anuncio; max = $Max }) }
+    "copiar-anuncio" { if (-not $Anuncio) { throw "Diga -Anuncio" }; Mostrar (MandarJson "/bot/anuncio-copiar" @{ anuncio = $Anuncio; quantos = $Quantos }) }
+    "foto-anuncio" { if (-not $Anuncio -or -not $Imagem) { throw "Diga -Anuncio e -Imagem (id da imagem aprovada)" }; Mostrar (MandarJson "/bot/anuncio-foto" @{ anuncio = $Anuncio; imagem = $Imagem; posicao = $Posicao; cor = $Cor; capa_da_cor = [bool]$CapaDaCor }) }
     "demanda"     {
       if (-not $Tarefa -or -not $Info) { throw "Diga -Tarefa e -Info" }
       Mostrar (MandarJson "/bot/demanda" @{ tarefa = $Tarefa; info = $Info; pasta = $Pasta; produto = $Produto; marketplaces = @($Marketplaces) })
@@ -86,6 +89,9 @@ Comandos (respostas em JSON):
   categorias  -Anuncio "X" [-Busca "chinelo feminino"]       (pedido de PUBLICAR: categorias da loja escolhida)
   ficha       -Anuncio "X" -Categoria ID                     (o que a categoria pede e o formato do -Json)
   publicar    -Anuncio "X" -Categoria ID -Json '{...}' [-Validar]   (so o que o Menork mandou em pedidos)
+  imagens     [-Produto TJ01] [-Tipo ia|capa|informativo|tabela|fb] [-Cor X] [-Anuncio X]   (imagens aprovadas, com id)
+  copiar-anuncio -Anuncio "X" [-Quantos 3]                (copia o anuncio no site, ate 10)
+  foto-anuncio -Anuncio "X" -Imagem ID [-Posicao 1] [-Cor X] [-CapaDaCor]   (poe imagem aprovada num espaco; posicao 1 = capa)
   loja-anuncio -Id N -Alvo CODIGO                          (pedido do Menork: le um anuncio da loja que ele liberou)
   substituir  -Id N -Anuncio "X" -Alvo CODIGO [-Json '{"mapa":{"Cor loja":"COR SITE"}}'] [-Titulo] [-Descricao] [-Preco] [-Validar]
   pedido      -Id N -Status feito -Resposta "codigo criado ou motivo"

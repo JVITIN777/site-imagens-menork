@@ -288,9 +288,10 @@ async def anuncio_copiar(request: Request):
                 numero += 1
             nome = f"{base} {numero:02d}"
             aid = c.execute("INSERT INTO anuncios(nome,formato,titulo,preco,preco_antigo,descricao,criado_em,demanda_id,"
-                            "meta_ia,meta_capa,familia) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+                            "meta_ia,meta_capa,familia,modo,tamanhos) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
                             (nome, a["formato"], a["titulo"] if d.get("titulo") else "", a["preco"], a["preco_antigo"],
-                             a["descricao"], n.agora(), a["demanda_id"], a["meta_ia"], a["meta_capa"], familia)).lastrowid
+                             a["descricao"], n.agora(), a["demanda_id"], a["meta_ia"], a["meta_capa"], familia,
+                             a["modo"], a["tamanhos"])).lastrowid
             copiar_fotos(c, origem, aid, levar_capa)
             novos.append(nome)
             numero += 1
@@ -972,17 +973,57 @@ async def bot_anuncio_dados(request: Request):
         a = c.execute("SELECT id, nome FROM anuncios WHERE nome=? COLLATE NOCASE", (str(d.get("anuncio") or "").strip(),)).fetchone()
         if not a:
             raise HTTPException(404, "Anúncio não existe no site.")
-        if not c.execute("SELECT 1 FROM pedidos WHERE anuncio_id=? AND status IN ('aberto','pego')", (a["id"],)).fetchone() \
-                and not _tarefa_com(c, a["id"]):
-            raise HTTPException(403, "Só dá para mudar os dados de um anúncio que o Menork pediu (menork.ps1 pedidos).")
-        mudou = []
+        mudou = []  # so muda o anuncio aqui no site; publicar no marketplace continua so com pedido do Menork
         for campo in ("titulo", "descricao", "preco", "preco_antigo", "tamanhos"):
             if str(d.get(campo) or "").strip():
                 c.execute(f"UPDATE anuncios SET {campo}=? WHERE id=?", (str(d[campo]).strip()[:4000], a["id"]))
                 mudou.append(campo)
         if not mudou:
             raise HTTPException(400, "Mande pelo menos um: -Titulo, -Descricao, -Preco, -PrecoAntigo ou -Tamanhos.")
+        n.registrar(f"Bot mudou {', '.join(mudou)} do anúncio {a['nome']}")
         return {"ok": True, "mudou": mudou, "faltas": [i["texto"] for i in checagem(c, a["id"])["faltas"]]}
+
+
+@app.post("/bot/anuncio-copiar")
+async def bot_anuncio_copiar(request: Request):
+    """Cria copias de um anuncio no site (como o botao Copiar da tela). So no site; nada vai para o marketplace."""
+    d = await request.json()
+    with n.con() as c:
+        a = c.execute("SELECT id, nome FROM anuncios WHERE nome=? COLLATE NOCASE", (str(d.get("anuncio") or "").strip(),)).fetchone()
+    if not a:
+        raise HTTPException(404, "Anúncio não existe no site. Veja os nomes em menork.ps1 anuncios.")
+    try:
+        quantos = int(d.get("quantos") or 1)
+    except ValueError:
+        raise HTTPException(400, "-Quantos precisa ser um número.")
+    if not 1 <= quantos <= 10:
+        raise HTTPException(400, "De 1 a 10 cópias por vez.")
+    r = await anuncio_copiar(_Corpo({"id": a["id"], "novos": quantos, "capa": True, "titulo": True}))
+    n.registrar(f"Bot copiou o anúncio {a['nome']}: {', '.join(r['novos'])}")
+    return {"ok": True, "novos": r["novos"], "proximo": "Troque a capa e as fotos de cada cópia com menork.ps1 foto-anuncio e o título com menork.ps1 dados."}
+
+
+@app.post("/bot/anuncio-foto")
+async def bot_anuncio_foto(request: Request):
+    """Poe uma imagem APROVADA (de qualquer tipo, inclusive IA) num espaco do anuncio. Nao aprova nada."""
+    d = await request.json()
+    try:
+        iid, posicao = int(d.get("imagem") or 0), int(d.get("posicao") or 0)
+    except ValueError:
+        raise HTTPException(400, "-Imagem e -Posicao precisam ser números.")
+    cor = str(d.get("cor") or "").strip()
+    with n.con() as c:
+        a = c.execute("SELECT id, nome FROM anuncios WHERE nome=? COLLATE NOCASE", (str(d.get("anuncio") or "").strip(),)).fetchone()
+        if not a:
+            raise HTTPException(404, "Anúncio não existe no site.")
+        img = c.execute("SELECT id, status, arquivo FROM imagens WHERE id=?", (iid,)).fetchone()
+        if not img:
+            raise HTTPException(404, f"Imagem {iid} não existe.")
+        if img["status"] != "aprovada":
+            raise HTTPException(403, f"A imagem {iid} está '{img['status']}'. Só imagem aprovada entra no anúncio; quem aprova é o Menork.")
+        lugar = _posicionar(c, iid, a["id"], cor, posicao, capa_da_cor=bool(d.get("capa_da_cor")))
+        n.registrar(f"Bot pôs a imagem {iid} no anúncio {a['nome']}: {lugar}")
+        return {"ok": True, "lugar": lugar, "faltas": [i["texto"] for i in checagem(c, a["id"])["faltas"]]}
 
 
 @app.get("/bot/b2x/categorias")
@@ -1413,6 +1454,12 @@ def _colocar_copia(c, iid, aid, cor, posicao):
     para o lugar dela no anuncio. Sem cor = fotos do anuncio (posicao 1 = capa). Com cor = variacao daquela cor."""
     c.execute("UPDATE imagens SET status='aprovada', origem='cópia', origem_decisao='cópia', motivo='', alertas='', "
               "decidido_em=?, apagar_em=NULL WHERE id=?", (n.agora(), iid))
+    return _posicionar(c, iid, aid, cor, posicao)
+
+
+def _posicionar(c, iid, aid, cor, posicao, capa_da_cor=False):
+    """Poe uma imagem (ja aprovada) no lugar dela no anuncio. Sem cor = fotos do anuncio (posicao 1 = capa).
+    Com cor = fotos daquela cor; capa_da_cor = vira a capa da variacao (Shopee)."""
     n.vincular(c, [iid], aid)
     modo = _modo(c.execute("SELECT modo FROM anuncios WHERE id=?", (aid,)).fetchone()[0])
     if cor:
@@ -1423,6 +1470,8 @@ def _colocar_copia(c, iid, aid, cor, posicao):
             nome = cor
         else:
             nome = nome[0]
+            if capa_da_cor:
+                c.execute("UPDATE anuncio_cores SET imagem_id=? WHERE anuncio_id=? AND cor=?", (iid, aid, nome))
         fotos = [r[0] for r in c.execute("SELECT imagem_id FROM fotos_cor WHERE anuncio_id=? AND cor=? ORDER BY posicao", (aid, nome))]
         if iid not in fotos and len(fotos) < MODOS["ml"]["fotos"]:
             fotos.insert(min(max(posicao - 1, 0), len(fotos)) if posicao else len(fotos), iid)
@@ -1542,6 +1591,28 @@ def bot_referencias(tipo: str = "", produto: str = "", estilo: str = "", max: in
                                            "AND estilo<>'' ORDER BY 1")]
     return {"arquivos": arquivos, "estilos_existentes": estilos,
             "comando": "-Referencias " + ",".join(f'"{a["caminho"]}"' for a in arquivos) if arquivos else ""}
+
+
+@app.get("/bot/imagens")
+def bot_imagens(produto: str = "", tipo: str = "", cor: str = "", anuncio: str = "", max: int = 60):
+    """Imagens APROVADAS para montar anuncio (com o id para o foto-anuncio). Filtra por produto, tipo, cor ou anuncio."""
+    q, args = "SELECT i.* FROM imagens i WHERE i.status='aprovada' AND i.arquivo<>''", []
+    if produto.strip():
+        q += " AND upper(i.produto)=?"; args.append(produto.strip().upper())
+    if tipo.strip():
+        q += " AND i.tipo LIKE ?"; args.append(tipo.strip() + "%")
+    if cor.strip():
+        q += " AND lower(i.cor)=lower(?)"; args.append(cor.strip())
+    with n.con() as c:
+        if anuncio.strip():
+            a = c.execute("SELECT id FROM anuncios WHERE nome=? COLLATE NOCASE", (anuncio.strip(),)).fetchone()
+            if not a:
+                raise HTTPException(404, "Anúncio não existe no site.")
+            q += " AND i.id IN (SELECT imagem_id FROM imagem_anuncio WHERE anuncio_id=?)"; args.append(a["id"])
+        linhas = c.execute(q + " ORDER BY i.id DESC LIMIT ?", [*args, 200 if max > 200 else 1 if max < 1 else max]).fetchall()
+    return {"imagens": [{"id": l["id"], "tipo": l["tipo"] or "", "nome_tipo": n.TIPO_NOME.get(l["tipo"] or "", "Sem tipo"),
+                         "produto": l["produto"], "cor": l["cor"], "estilo": l["estilo"] or "", "referencia": bool(l["ref"]),
+                         "caminho": str(n.caminho_imagem(l))} for l in linhas]}
 
 
 @app.get("/bot/erros")

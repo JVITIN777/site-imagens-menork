@@ -104,14 +104,30 @@ menork.ps1 enviar -Arquivo "C:\Temp\copia\bege.jpg" -Anuncio "TA101 unitário" -
 ```
 - Sem `-Cor`: a foto vai para as fotos do anúncio, na ordem em que você mandar. `-Posicao 1` é a capa; `-Posicao` é opcional.
 - Com `-Cor`: a foto vai para a variação daquela cor. A primeira foto de uma cor nova vira a capa da variação; as próximas entram nas fotos da cor (Mercado Livre).
-- Mande na ordem do anúncio original. Não use `-Copia` para foto gerada por IA: essas continuam passando pela aprovação.
+- Mande na ordem do anúncio original. Não use `-Copia` para foto gerada por IA: essas continuam passando pela aprovação. Para pôr no anúncio uma foto IA (ou capa, informativo, tabela) que o Menork JÁ aprovou, use `foto-anuncio` (abaixo).
+
+**Montar anúncios no site (copiar, pôr fotos aprovadas, título e descrição)**
+Isso só mexe no site, nada vai para o marketplace. Faça quando o Menork pedir (por exemplo, "monte os 3 anúncios do TJ01 conforme a folha").
+1. Copiar um anúncio do site: `menork.ps1 copiar-anuncio -Anuncio "TJ01 unitário" -Quantos 3`. A resposta traz os nomes das cópias novas (ex.: "TJ01 unitário 02"). Leva as fotos, as cores, o preço, a descrição e os tamanhos.
+2. Ver as imagens APROVADAS e os ids: `menork.ps1 imagens -Produto TJ01 [-Tipo ia|capa|informativo|tabela|fb] [-Cor BEGE]`. Só imagem aprovada aparece aqui.
+3. Pôr uma imagem aprovada num espaço do anúncio:
+```
+menork.ps1 foto-anuncio -Anuncio "TJ01 unitário 02" -Imagem 128 -Posicao 1               (posicao 1 = capa do anúncio)
+menork.ps1 foto-anuncio -Anuncio "TJ01 unitário 02" -Imagem 131 -Posicao 3               (3ª foto do anúncio)
+menork.ps1 foto-anuncio -Anuncio "TJ01 unitário 02" -Imagem 140 -Cor BEGE -CapaDaCor     (capa da variação BEGE, Shopee)
+menork.ps1 foto-anuncio -Anuncio "TJ01 unitário 02" -Imagem 141 -Cor BEGE -Posicao 2     (2ª foto da cor BEGE, Mercado Livre)
+```
+   - Imagem que não está aprovada é recusada: quem aprova é o Menork. Nunca use `enviar -Copia` para foto de IA.
+   - A resposta traz `faltas`: siga até não faltar nada.
+4. Título, descrição, preço e tamanhos: `menork.ps1 dados -Anuncio "TJ01 unitário 02" -Titulo "..." -Descricao "..." -Tamanhos "34 a 39"`. Funciona em qualquer anúncio do site; títulos da mesma família precisam ser diferentes.
+5. Publicar no marketplace continua só com pedido do Menork (abaixo). Nunca apague nada.
 
 **Publicar anúncios no marketplace (B2X): só o que o Menork mandar**
 O Menork prepara os anúncios no site (por exemplo, duplica um anúncio em 10 e troca as capas) e manda para você publicar numa loja. Esses pedidos aparecem em `menork.ps1 pedidos` com `"tipo": "publicar"`, o nome do anúncio e a loja. Você só consegue publicar o que estiver lá: o resto é recusado.
 
 Para cada pedido de publicar:
 1. `menork.ps1 pedido -Id N -Status pego -Bot "SEU NOME"`
-2. Veja `agora.faltas` do pedido. Se faltar título, descrição, preço ou tamanhos, arrume:
+2. Veja `agora.faltas` do pedido. Se faltar título, descrição, preço ou tamanhos, arrume (o `dados` funciona com ou sem pedido):
 ```
 menork.ps1 dados -Anuncio "TA101 copia 3" -Titulo "Tênis Feminino Chunky Plataforma Leve" -Descricao "..." -Preco 89,90 -Tamanhos "34 a 39"
 ```
