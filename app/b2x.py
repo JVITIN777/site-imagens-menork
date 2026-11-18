@@ -5,6 +5,7 @@ Regras da API seguidas aqui: toda escrita primeiro com simular/so_validar, depoi
 com confirmar e o pedido_id devolvido; fotos sobem pelo POST /v1/fotos (link valido por 7 dias).
 """
 import base64
+import hashlib
 import io
 import json
 import re
@@ -475,6 +476,76 @@ def _registrar(aid, ok, resposta, id_externo, desfazer=None):
                    str(id_externo or "")))
 
 
+# ------------------------------------------------------------ historico de anuncios criados (para conferir o status depois)
+def criacao_nova(aid, loja, canal, por, titulo, status, ids=(), pedido_b2x="", mensagem="", pedido_bot=None):
+    with n.con() as c:
+        nome = c.execute("SELECT nome FROM anuncios WHERE id=?", (aid,)).fetchone() if aid else None
+        return c.execute("INSERT INTO criacoes(quando,atualizado,anuncio_id,anuncio_nome,titulo,loja,canal,por,pedido_b2x,pedido_bot,status,"
+                         "anuncio_ids,mensagem) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                         (n.agora(), n.agora(), aid, nome[0] if nome else "", str(titulo or "")[:200], str(loja), canal, por, str(pedido_b2x or ""),
+                          pedido_bot, status, ",".join(map(str, ids)), str(mensagem or "")[:1500])).lastrowid
+
+
+def criacao_mudar(pedido_b2x="", cid=None, **campos):
+    if not campos or not (pedido_b2x or cid):
+        return
+    campos["atualizado"] = n.agora()
+    with n.con() as c:
+        c.execute(f"UPDATE criacoes SET {', '.join(k + '=?' for k in campos)} WHERE " + ("id=?" if cid else "pedido_b2x=?"),
+                  [*campos.values(), cid or str(pedido_b2x)])
+
+
+@rota.get("/api/criacoes")
+def criacoes():
+    with n.con() as c:
+        linhas = [dict(r) for r in c.execute("SELECT * FROM criacoes ORDER BY id DESC LIMIT 300")]
+        # pedidos ao Grok que ainda nao viraram criacao
+        com = {r["pedido_bot"] for r in linhas if r["pedido_bot"]}
+        grok = []
+        for p in c.execute("SELECT p.*, a.nome AS anuncio_nome, a.titulo FROM pedidos p LEFT JOIN anuncios a ON a.id=p.anuncio_id "
+                           "WHERE p.tipo='publicar' ORDER BY p.id DESC LIMIT 200"):
+            if p["id"] in com:
+                continue
+            dados = json.loads(p["dados"] or "{}")
+            resp = str(p["resposta"] or "")
+            criado_txt = p["status"] == "feito" and resp.lower().startswith("criado")
+            grok.append({"id": f"g{p['id']}", "quando": p["criado_em"], "atualizado": p["atualizado"], "anuncio_id": p["anuncio_id"],
+                         "anuncio_nome": p["anuncio_nome"] or "", "titulo": p["titulo"] or "", "loja": dados.get("loja", ""),
+                         "canal": dados.get("canal", ""), "por": "Grok" + (f" ({p['bot']})" if p["bot"] else ""),
+                         "status": "criado" if criado_txt else {"aberto": "esperando_grok", "pego": "grok_fazendo", "feito": "grok_terminou"}.get(p["status"], p["status"]),
+                         "mensagem": resp, "pedido_bot": p["id"], "anuncio_ids": ",".join(re.findall(r"\b\d{5,}\b", resp)[:5]) if criado_txt else "", "pedido_b2x": "", "situacao_loja": "", "url": ""})
+    return {"criacoes": sorted(linhas + grok, key=lambda r: r["quando"] or "", reverse=True)}
+
+
+@rota.post("/api/criacoes/{cid}/conferir")
+def criacao_conferir(cid: int):
+    """Pergunta ao B2X como esta: se ainda esta na fila, o andamento; se ja foi criado, a situacao do anuncio na loja."""
+    with n.con() as c:
+        r = c.execute("SELECT * FROM criacoes WHERE id=?", (cid,)).fetchone()
+    if not r:
+        raise HTTPException(404, "Não achei esse registro.")
+    ids = [x for x in (r["anuncio_ids"] or "").split(",") if x]
+    if r["pedido_b2x"] and (not ids or r["status"] in ("na_fila", "criando")):
+        s = criar_status(r["pedido_b2x"], r["loja"])
+        novos = [x.strip() for x in str(s["anuncio_id"] or "").split(",") if x.strip()]
+        if s["final"] or s["parar"]:
+            ok = bool(novos) and s["estado"] not in ("recusado", "apagado", "parado")
+            criacao_mudar(cid=cid, status="criado" if ok else "erro", anuncio_ids=",".join(novos) or r["anuncio_ids"],
+                          mensagem=(s["motivo"] or "; ".join(s["erros"][:3]) or s["etapa"] or s["estado"])[:1500])
+            ids = novos or ids
+        else:
+            criacao_mudar(cid=cid, status="na_fila", mensagem=f"{s['etapa'] or s['estado']}"[:300])
+    if ids:
+        try:
+            a = anuncio(r["loja"], ids[0], r["canal"])
+            criacao_mudar(cid=cid, situacao_loja=str(a.get("status") or "")[:80], url=str(a.get("url") or "")[:400],
+                          **({"titulo": a["titulo"][:200]} if a.get("titulo") else {}))
+        except HTTPException as e:
+            criacao_mudar(cid=cid, situacao_loja=f"não achei na loja: {e.detail}"[:200])
+    with n.con() as c:
+        return dict(c.execute("SELECT * FROM criacoes WHERE id=?", (cid,)).fetchone())
+
+
 # ------------------------------------------------------------ criar anuncio novo
 @rota.post("/api/b2x/categorias")
 async def categorias(request: Request):
@@ -501,18 +572,34 @@ def ficha(loja: str, categoria: str, marca: str = ""):
         q["marca"] = marca.strip()[:40]
     status, r = chamar("GET", "/v1/anuncios/criar/ficha?" + urllib.parse.urlencode(q))
     _ok(status, r, "Ler a ficha da categoria")
-    obrig = []
-    for o in r.get("obrigatorios") or []:
-        opcoes = [{"id": str(x[0]), "nome": str(x[1])} if isinstance(x, list) else {"id": str(x.get("id")), "nome": str(x.get("nome"))}
-                  for x in (o.get("opcoes") or [])[:400]]
-        obrig.append({"id": str(o.get("id")), "nome": str(o.get("nome") or o.get("id")), "opcoes": opcoes,
-                      "texto": bool(o.get("aceita_texto")) or not opcoes})
+    def lista_attr(itens):
+        saida = []
+        for o in itens or []:
+            if isinstance(o, list) and len(o) >= 2:  # formato compacto [id, nome, (opcoes)]
+                o = {"id": o[0], "nome": o[1], "opcoes": o[2] if len(o) > 2 and isinstance(o[2], list) else []}
+            if not isinstance(o, dict) or o.get("id") is None:
+                continue
+            opcoes = [{"id": str(x[0]), "nome": str(x[1])} if isinstance(x, list) else {"id": str(x.get("id")), "nome": str(x.get("nome"))}
+                      for x in (o.get("opcoes") or o.get("valores") or [])[:400] if isinstance(x, (list, dict))]
+            saida.append({"id": str(o.get("id")), "nome": str(o.get("nome") or o.get("id")), "opcoes": opcoes,
+                          "texto": bool(o.get("aceita_texto")) or not opcoes, "multi": bool(o.get("multiplo") or o.get("multi")),
+                          "unidades": [str(u) for u in (o.get("unidades") or [])][:10]})
+        return saida
+    obrig = lista_attr(r.get("obrigatorios"))
+    ids_obrig = {o["id"] for o in obrig}
+    # os que nao sao obrigatorios mas deixam o anuncio completo (a Shopee mostra "Complete: 1/9")
+    opc = [o for k in ("opcionais", "recomendados", "atributos_opcionais", "outros_atributos", "atributos")
+           for o in lista_attr(r.get(k) if isinstance(r.get(k), list) else []) if o["id"] not in ids_obrig]
+    vistos, opcionais = set(), []
+    for o in opc:
+        if o["id"] not in vistos:
+            vistos.add(o["id"]); opcionais.append(o)
     marca_ = r.get("marca") or {}
     lista = [{"id": str(x[0]), "nome": str(x[1])} if isinstance(x, list) else {"id": str(x.get("id")), "nome": str(x.get("nome"))}
              for x in (marca_.get("lista") or [])[:300]] if isinstance(marca_, dict) else []
     tipos = [{"id": str(x[0] if isinstance(x, list) else x.get("id")), "nome": str(x[1] if isinstance(x, list) else x.get("nome"))}
              for x in (r.get("tipos_anuncio") or [])] if isinstance(r.get("tipos_anuncio"), list) else []
-    return {"canal": r.get("canal") or "", "obrigatorios": obrig, "marcas": lista,
+    return {"canal": r.get("canal") or "", "obrigatorios": obrig, "opcionais": opcionais[:40], "campos_b2x": sorted(r.keys())[:60], "marcas": lista,
             "sem_marca": bool(marca_.get("sem_marca_aceita")) if isinstance(marca_, dict) else False,
             "tabela_exige": bool((r.get("tabela_medidas") or {}).get("exige")), "tipos_anuncio": tipos, "dica": r.get("dica") or ""}
 
@@ -595,6 +682,9 @@ def criar_do_site(d, por="você"):
         corpo["atributos"] = atributos
     if galeria:
         corpo["fotos"] = [links[r["id"]] for r in galeria]
+    video = (a["video"] if "video" in a.keys() else "") or ""
+    if video and not ml and d.get("video", True) is not False:
+        corpo["video_url"] = subir_video(video)
     if ml:
         corpo["ml"] = {"tipo_anuncio": str(d.get("tipo_anuncio") or "gold_special"), "titulo": a["titulo"].strip()[:60]}
     else:
@@ -613,7 +703,8 @@ def criar_do_site(d, por="você"):
         problemas = [texto_erro(r) or f"O {config()['nome']} respondeu {status}."]
     saida = {"validado": bool(r.get("validado")) and not problemas, "problemas": problemas,
              "avisos": [_frase(x) for x in (r.get("avisos") or [])][:12], "pedido_id": r.get("pedido_id") or d.get("pedido_id") or "",
-             "variacoes": len(variacoes), "fotos": len(links)}
+             "variacoes": len(variacoes), "fotos": len(links), "video": bool(corpo.get("video_url")),
+             "video_conferido": r.get("video_conferido")}
     if promo_ml and validar:
         saida["avisos"].insert(0, f"Mercado Livre: sobe com o preço cheio R$ {preco:.2f} e, depois de criado, entra a promoção de R$ {promo_ml:.2f}.")
     if promo_shopee:
@@ -633,6 +724,9 @@ def criar_do_site(d, por="você"):
             acompanhar(loja, saida["pedido_id"], promo_ml, d.get("_pedido_bot"), aid)
         _registrar(aid, ok, f"criar no {CANAIS.get(canal, canal)}: {'criado ' + ', '.join(map(str, ids[:5])) if ok else (problemas[:1] or ['falhou'])[0]}",
                    ids[0] if ids else "", r.get("desfazer_com"))
+        criacao_nova(aid, loja, canal, por, a["titulo"], "criado" if ok else "na_fila" if saida.get("na_fila") else "erro", ids, saida["pedido_id"],
+                     "; ".join((problemas or saida["avisos"])[:3]) + (" " + saida["promocao"]["msg"] if saida.get("promocao") else ""),
+                     d.get("_pedido_bot"))
     return saida
 
 
@@ -871,6 +965,9 @@ async def criar_loja(request: Request):
             saida["na_fila"] = True
             acompanhar(loja, saida["pedido_id"], promo)
         n.registrar(f"B2X: criar na loja {loja}: {'criado ' + ', '.join(ids) if ids else (problemas[:1] or ['enviado, acompanhando'])[0]}")
+        criacao_nova(None, loja, str(d.get("canal") or ""), "você (tela Lojas)", str(d.get("titulo") or ""),
+                     "criado" if saida["criado"] else "na_fila" if saida.get("na_fila") else "erro", ids, saida["pedido_id"],
+                     "; ".join((problemas or saida["avisos"])[:3]) + (" " + saida["promocao"]["msg"] if saida.get("promocao") else ""))
     return saida
 
 
@@ -987,6 +1084,7 @@ def acompanhar(loja, pedido_id, promo=None, pedido_bot=None, aid=None):
                             c.execute("UPDATE pedidos SET status='feito', resposta=?, atualizado=? WHERE id=?", (resposta[:1500], n.agora(), pedido_bot))
                     if aid:
                         _registrar(aid, ok, "criar (fila): " + resposta, ids[0] if ids else "")
+                    criacao_mudar(pedido_id, status="criado" if ok else "erro", anuncio_ids=",".join(ids), mensagem=resposta[:1500])
                     n.registrar(f"B2X: pedido {pedido_id}: {resposta}")
                     return
                 time.sleep(max(5, min(60, s["de_novo_em"])))
@@ -1104,3 +1202,67 @@ async def memoria_gravar(request: Request):
         m["ficha"] = dict(list(m["ficha"].items())[-300:])
     n.gravar_ajuste("ficha_memoria", json.dumps(m, ensure_ascii=False))
     return {"ok": True}
+
+
+# ------------------------------------------------------------ video do anuncio (Shopee e TikTok aceitam pelo B2X; o ML descarta)
+VIDEO_MAX_MB = 100
+
+
+def pasta_videos():
+    p = n.pasta_dados() / "videos"
+    p.mkdir(parents=True, exist_ok=True)
+    return p
+
+
+def _multipart(caminho, campo, nome, dados, tipo="video/mp4", timeout=300):
+    url, chave, nome_sis = _base()
+    limite = "----menork" + secrets.token_hex(12)
+    corpo = (f"--{limite}\r\nContent-Disposition: form-data; name=\"{campo}\"; filename=\"{nome}\"\r\n"
+             f"Content-Type: {tipo}\r\n\r\n").encode() + dados + f"\r\n--{limite}--\r\n".encode()
+    req = urllib.request.Request(url + caminho, data=corpo, method="POST", headers={
+        "Authorization": f"Bearer {chave}", "User-Agent": "site-imagens-menork", "Accept": "application/json",
+        "Content-Type": f"multipart/form-data; boundary={limite}"})
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            status, texto = r.status, r.read().decode("utf-8", "replace")
+    except urllib.error.HTTPError as e:
+        status, texto = e.code, e.read().decode("utf-8", "replace")
+    except Exception as e:
+        raise HTTPException(502, f"Não consegui mandar o vídeo para o {nome_sis}: {e}")
+    try:
+        return status, json.loads(texto or "{}")
+    except ValueError:
+        return status, {"erro": texto[:200]}
+
+
+def subir_video(arquivo):
+    """Hospeda o video no B2X (link https de 7 dias para video_url). Guarda o link e reaproveita enquanto vale."""
+    p = pasta_videos() / arquivo
+    if not p.exists():
+        raise HTTPException(400, "O arquivo do vídeo deste anúncio sumiu da pasta de dados. Coloque o vídeo de novo.")
+    dados = p.read_bytes()
+    chave = "video_b2x:" + hashlib.sha256(dados).hexdigest()[:32]
+    try:
+        guardado = json.loads(n.ajuste(chave, "") or "{}")
+    except ValueError:
+        guardado = {}
+    if guardado.get("url") and guardado.get("vale_ate", 0) > time.time() + 3600:
+        return guardado["url"]
+    mb = len(dados) / 1048576
+    if mb <= 24:
+        status, r = _multipart("/v1/videos", "arquivo", p.name, dados)
+    else:  # grande: pede um link de envio, manda o arquivo e registra
+        status, r = chamar("POST", "/v1/videos/link-envio", {"tamanho_mb": round(mb, 1)})
+        _ok(status, r, "Preparar o envio do vídeo")
+        req = urllib.request.Request(r["upload_url"], data=dados, method="PUT", headers={"Content-Type": "video/mp4"})
+        try:
+            urllib.request.urlopen(req, timeout=600).read()
+        except Exception as e:
+            raise HTTPException(502, f"Não consegui enviar o vídeo grande: {e}")
+        status, r = chamar("POST", "/v1/videos", {"caminho": r.get("caminho")}, timeout=300)
+    _ok(status, r, "Enviar o vídeo")
+    url = r.get("url") or ""
+    if not url:
+        raise HTTPException(502, "O B2X não devolveu o link do vídeo.")
+    n.gravar_ajuste(chave, json.dumps({"url": url, "vale_ate": time.time() + 6 * 86400}))
+    return url

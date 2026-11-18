@@ -252,6 +252,13 @@ async function b2Confirmar() {
 }
 
 // ---------- criar anuncio novo
+// marca da Shopee: nunca cai numa marca qualquer da lista; usa a da última vez, "Sem marca" ou obriga a escolher
+function opcoesMarca(f, atual) {
+  const semMarca = f.marcas.find(x => /sem marca|no ?brand|nobrand|generic|generico|sin marca/.test(semAc(x.nome)));
+  const sel = atual != null && atual !== '' ? String(atual) : f.sem_marca ? '0' : semMarca ? semMarca.id : '';
+  return (f.sem_marca ? `<option value="0" ${sel === '0' ? 'selected' : ''}>Sem marca</option>` : '') + (sel === '' ? '<option value="" selected>escolha a marca</option>' : '') +
+    f.marcas.map(x => `<option value="${esc(x.id)}" ${sel === String(x.id) ? 'selected' : ''}>${esc(x.nome)}</option>`).join('');
+}
 // ---- preencher a ficha sozinho: primeiro o que você usou da última vez nesta categoria, depois o que dá para tirar do anúncio
 function chaveProduto(t) { return semAc(t).replace(/[^a-z0-9 ]+/g, ' ').split(/\s+/).filter(w => w.length > 2 && !/^\d+$/.test(w)).slice(0, 2).join(' '); }
 function autoFicha(f, m, mem) {
@@ -278,6 +285,22 @@ function autoFicha(f, m, mem) {
       const t = /modelo|referencia|\bref\b/.test(nome) ? (a.nome || '').split(/\s+/)[0] : /marca/.test(nome) ? 'Sem marca' : /material|composic/.test(nome) ? ((texto.match(/\b(eva|borracha|sintetico|couro|tecido|pvc|camurca|nobuck|lona|malha|knit)\b/) || [])[1] || '') : '';
       if (t) { val.attr[o.id] = t.charAt(0).toUpperCase() + t.slice(1); marcados.add(o.id); }
     }
+  }
+  for (const o of f.opcionais || []) {
+    const lembrado = (fm.attr || {})[o.id];
+    if (lembrado != null && lembrado !== '' && (!o.opcoes.length || o.opcoes.some(x => String(x.id) === String(lembrado)))) { val.attr[o.id] = lembrado; marcados.add(o.id); continue; }
+    const nome = semAc(o.nome), ops = o.opcoes.map(x => ({ id: x.id, n: semAc(x.nome) }));
+    const pega = re => { const x = ops.find(y => re.test(y.n)); return x ? x.id : null; };
+    let v = null;
+    if (/pais|origem/.test(nome)) v = ops.length ? pega(/^brasil|brazil/) : 'Brasil';
+    else if (/personaliz/.test(nome) || /ajuste amplo|largo|extra largo/.test(nome)) v = ops.length ? pega(/^nao$|^no$/) : null;
+    else if (/quantidade/.test(nome) && /embal|pacote|pecas|itens/.test(nome)) v = ops.length ? pega(/^1\b|^1 /) : '1';
+    else if (/salto/.test(nome)) v = ops.length ? (/plataforma|anabela/.test(texto) ? pega(/medio|3|4|5/) : pega(/sem salto|rasteir|baixo|plano|flat|0/)) : null;
+    else if (/cinto|fecho|fechamento|tira/.test(nome) && tipo === 'tenis') v = ops.length ? pega(/cadarc|amarr|lace/) : null;
+    else if (/genero|sexo|publico/.test(nome)) { const g = ops.find(x => genero.some(gg => x.n === gg || x.n.startsWith(gg))); v = g ? g.id : null; }
+    if (v == null && ops.length) { const x = ops.filter(y => y.n.length > 2 && new RegExp('\\b' + y.n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b').test(texto)).sort((p, q) => q.n.length - p.n.length)[0]; v = x ? x.id : null; }
+    if (v == null && !ops.length && /modelo|referencia/.test(nome) && a.nome) v = (a.nome || '').split(/\s+/)[0];
+    if (v != null && v !== '') { val.attr[o.id] = v; marcados.add(o.id); }
   }
   const origem = (mem.ficha ? 'Usei o que você preencheu da última vez nesta categoria. ' : 'Tirei do título e da descrição do anúncio. ') +
     (env.peso_g ? 'Peso e caixa: os da última vez.' : `Peso e caixa: padrão de ${{ chinelo: 'chinelo', sandalia: 'sandália', tenis: 'tênis', bota: 'bota' }[tipo]} (mude se a sua caixa for outra).`) + ' Depois de validar, eu lembro para a próxima.';
@@ -312,7 +335,8 @@ async function b2Ficha(cat, caminho) {
       ${auto ? `<div class="nota ${faltam ? 'ruim' : ''}"><b>${faltam ? `Preenchi o que deu. Falta${faltam > 1 ? 'm' : ''} ${faltam} campo(s) para você escolher.` : 'Preenchi tudo sozinho. Confira e valide.'}</b><span>${auto.origem}</span></div>` : ''}
       <form id="b2-ficha" class="b2-ficha">
         ${f.obrigatorios.length ? `<h3>A categoria pede</h3><div class="b2-grade">${f.obrigatorios.map(campo).join('')}</div>` : ''}
-        ${B2.canal === 'shopee' ? `<h3>Marca</h3><div class="b2-grade"><label>Marca<select name="marca">${f.sem_marca ? '<option value="0">Sem marca</option>' : ''}${f.marcas.map(x => `<option value="${esc(x.id)}" ${val.marca === x.id ? 'selected' : ''}>${esc(x.nome)}</option>`).join('')}</select></label></div>` : ''}
+        ${(f.opcionais || []).length ? `<h3>Mais detalhes <small class="pequeno">não são obrigatórios, mas deixam o anúncio completo (a loja mostra "Complete: x de y")</small></h3><div class="b2-grade">${f.opcionais.map(campo).join('')}</div>` : ''}
+        ${B2.canal === 'shopee' ? `<h3>Marca</h3><div class="b2-grade"><label>Marca<select name="marca">${opcoesMarca(f, val.marca)}</select></label></div>` : ''}
         ${B2.canal === 'mercadolivre' && f.tipos_anuncio.length ? `<h3>Tipo de anúncio</h3><div class="b2-grade"><label>Tipo<select name="tipo_anuncio">${f.tipos_anuncio.map(x => `<option value="${esc(x.id)}" ${val.tipo_anuncio === x.id ? 'selected' : ''}>${esc(x.nome)}</option>`).join('')}</select></label></div>` : ''}
         <h3>Embalagem e estoque</h3><div class="b2-grade">
           <label>Peso (g)<input name="peso_g" inputmode="decimal" value="${esc(val.peso_g)}"></label><label>Comprimento (cm)<input name="comprimento_cm" inputmode="decimal" value="${esc(val.comprimento_cm)}"></label>
@@ -841,7 +865,8 @@ async function crFicha(cat, cam) {
     : `<label>${esc(o.nome)}<input data-cr-attr="${esc(o.id)}" data-texto="1" value="${esc(CR.attr[o.id] || '')}"></label>`;
   crTela(1, `<h2>Ficha <small>${esc(CR.caminho)}</small></h2><form id="cr-ficha" class="b2-ficha">
     ${f.obrigatorios.length ? `<h3>A categoria pede</h3><div class="b2-grade">${f.obrigatorios.map(campo).join('')}</div>` : '<p class="pequeno">Esta categoria não pede nada obrigatório.</p>'}
-    ${CR.canal === 'shopee' ? `<h3>Marca</h3><div class="b2-grade"><label>Marca<select name="marca">${f.sem_marca ? '<option value="0">Sem marca</option>' : ''}${f.marcas.map(x => `<option value="${esc(x.id)}" ${CR.marca === x.id ? 'selected' : ''}>${esc(x.nome)}</option>`).join('')}</select></label></div>`
+    ${(f.opcionais || []).length ? `<h3>Mais detalhes <small class="pequeno">não são obrigatórios, mas deixam o anúncio completo</small></h3><div class="b2-grade">${f.opcionais.map(campo).join('')}</div>` : ''}
+    ${CR.canal === 'shopee' ? `<h3>Marca</h3><div class="b2-grade"><label>Marca<select name="marca">${opcoesMarca(f, CR.marca)}</select></label></div>`
       : CR.canal === 'mercadolivre' ? (f.tipos_anuncio.length ? `<h3>Tipo de anúncio</h3><div class="b2-grade"><label>Tipo<select name="tipo_anuncio">${f.tipos_anuncio.map(x => `<option value="${esc(x.id)}" ${CR.tipo_anuncio === x.id ? 'selected' : ''}>${esc(x.nome)}</option>`).join('')}</select></label></div>` : '')
       : `<h3>Marca</h3><div class="b2-grade"><label>Marca<input name="marca" value="${esc(CR.marca)}"></label></div>`}
     ${f.dica ? `<p class="pequeno">${esc(f.dica)}</p>` : ''}
@@ -1328,4 +1353,43 @@ document.addEventListener('click', e => {
   const b = e.target.closest('.fundo-escolha [data-fundo]'); if (!b) return;
   try { localStorage.setItem('fundo_v2', b.dataset.fundo); } catch (_) {}
   location.reload();
+});
+
+// ---- Anúncios criados: tudo que foi mandado para as lojas (por você ou pelo Grok), com o status, para conferir
+const CR_H = { lista: null, filtro: 'todos', conferindo: new Set() };
+const CR_ST = { criado: ['ok', 'Criado'], na_fila: ['espera', 'Na fila do marketplace'], criando: ['espera', 'Criando'], erro: ['ruim', 'Não subiu'],
+  cancelado: ['ruim', 'Cancelado'], esperando_grok: ['espera', 'Esperando o Grok'], grok_fazendo: ['espera', 'Grok fazendo'], grok_terminou: ['aviso', 'Grok terminou (sem criação registrada)'] };
+async function crhCarregar() { try { CR_H.lista = (await b2get('/api/criacoes')).criacoes; } catch (err) { CR_H.lista = []; window.menork.aviso(err.message); } if (ROTA.startsWith('/criados')) RENDER(); }
+async function crhConferir(id) {
+  CR_H.conferindo.add(id); RENDER();
+  try { const r = await b2post(`/api/criacoes/${id}/conferir`, {}); const i = CR_H.lista.findIndex(x => x.id === id); if (i >= 0) CR_H.lista[i] = r; }
+  catch (err) { window.menork.aviso(err.message); }
+  CR_H.conferindo.delete(id); RENDER();
+}
+Object.assign(TELAS, {
+  criados() {
+    if (!CR_H.lista) { crhCarregar(); return '<div class="cabeca"><h1>Anúncios criados</h1></div><p class="pequeno">Carregando…</p>'; }
+    const lojaNome = id => { const l = (typeof todasLojas === 'function' && LOJAS.clientes) ? todasLojas().find(x => x.id === id) : null; return l ? `${l.cliente} · ${l.nome}` : id; };
+    if (!LOJAS.clientes && typeof carregarLojas === 'function' && !LOJAS.carregando) carregarLojas().then(() => ROTA.startsWith('/criados') && RENDER());
+    const grupo = r => ({ criado: 'ok', erro: 'ruim', cancelado: 'ruim' }[r.status] || 'espera');
+    const conta = { todos: CR_H.lista.length, ok: 0, espera: 0, ruim: 0 }; CR_H.lista.forEach(r => conta[grupo(r)]++);
+    const l = CR_H.lista.filter(r => CR_H.filtro === 'todos' || grupo(r) === CR_H.filtro);
+    const mk = c => ({ shopee: 'Shopee', mercadolivre: 'Mercado Livre' }[c] || c || '');
+    return `<div class="cabeca"><h1>Anúncios criados <small>tudo que foi mandado para as lojas, por você ou pelo Grok</small></h1><div class="acoes"><button class="b claro" id="crh-atualizar">Atualizar</button></div></div>
+      <div class="crh-filtros">${[['todos', 'Todos'], ['ok', 'Criados'], ['espera', 'Esperando'], ['ruim', 'Não subiram']].map(([k, n]) => `<button type="button" data-crh-filtro="${k}" class="${CR_H.filtro === k ? 'ativo' : ''}">${n} <b>${conta[k]}</b></button>`).join('')}</div>
+      ${l.length ? `<div class="bloco crh"><table class="tabela crh-tabela"><tr><th>Quando</th><th>Anúncio</th><th>Loja</th><th>Quem</th><th>Status</th><th></th></tr>
+      ${l.map(r => { const [cls, txt] = CR_ST[r.status] || ['aviso', r.status || '?']; const ids = (r.anuncio_ids || '').split(',').filter(Boolean);
+        return `<tr><td class="pequeno">${esc((r.quando || '').replace('T', ' ').slice(0, 16))}</td>
+          <td><b>${esc(r.anuncio_nome || r.titulo || '—')}</b>${r.titulo && r.anuncio_nome ? `<small class="crh-sub">${esc(r.titulo.slice(0, 70))}</small>` : ''}${ids.length ? `<small class="crh-sub">Código: ${ids.map(esc).join(', ')}</small>` : ''}</td>
+          <td>${esc(lojaNome(r.loja))}<small class="crh-sub">${esc(mk(r.canal))}</small></td><td class="pequeno">${esc(r.por || '')}</td>
+          <td><span class="crh-st crh-${cls}">${txt}</span>${r.situacao_loja ? `<small class="crh-sub">Na loja: ${esc(r.situacao_loja)}</small>` : ''}${r.mensagem ? `<small class="crh-sub crh-msg" title="${esc(r.mensagem)}">${esc(r.mensagem.slice(0, 140))}</small>` : ''}</td>
+          <td><div class="crh-acoes">${typeof r.id === 'number' ? `<button class="b claro mini" data-crh-conferir="${r.id}" ${CR_H.conferindo.has(r.id) ? 'disabled' : ''}>${CR_H.conferindo.has(r.id) ? 'Conferindo…' : 'Conferir agora'}</button>` : ''}${r.url ? `<a class="b claro mini" href="${esc(r.url)}" target="_blank" rel="noopener">Abrir na loja</a>` : ''}${r.anuncio_id ? `<a class="b claro mini" href="#" data-rota="/anuncios/${r.anuncio_id}">Ver no site</a>` : ''}</div></td></tr>`; }).join('')}</table></div>`
+      : `<div class="vazio"><h2>${CR_H.lista.length ? 'Nada neste filtro' : 'Nenhum anúncio criado ainda'}</h2><p>Os anúncios que você ou o Grok mandarem para as lojas aparecem aqui, com o status.</p></div>`}
+      <p class="pequeno">"Conferir agora" pergunta ao B2X: se está na fila, o andamento; se já foi criado, a situação do anúncio na loja (ativo, em análise, pausado…). Os que você criou pelo site antes desta versão não aparecem; os pedidos ao Grok aparecem todos.</p>`;
+  }
+});
+document.addEventListener('click', e => {
+  const f = e.target.closest('[data-crh-filtro]'); if (f) { CR_H.filtro = f.dataset.crhFiltro; return RENDER(); }
+  const c = e.target.closest('[data-crh-conferir]'); if (c) return crhConferir(+c.dataset.crhConferir);
+  if (e.target.closest('#crh-atualizar')) { CR_H.lista = null; RENDER(); }
 });

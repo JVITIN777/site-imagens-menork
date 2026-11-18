@@ -173,6 +173,11 @@ def iniciar_banco():
               id INTEGER PRIMARY KEY, anuncio_id INTEGER REFERENCES anuncios(id) ON DELETE CASCADE,
               quando TEXT, por TEXT DEFAULT '', ok INTEGER DEFAULT 0, resposta TEXT DEFAULT '', id_externo TEXT DEFAULT '');
             CREATE TABLE IF NOT EXISTS medidas(produto TEXT, pos INTEGER, numero TEXT, cm TEXT);
+            CREATE TABLE IF NOT EXISTS criacoes(
+              id INTEGER PRIMARY KEY, quando TEXT, atualizado TEXT, anuncio_id INTEGER, anuncio_nome TEXT DEFAULT '',
+              titulo TEXT DEFAULT '', loja TEXT DEFAULT '', canal TEXT DEFAULT '', por TEXT DEFAULT '', pedido_b2x TEXT DEFAULT '',
+              pedido_bot INTEGER, status TEXT DEFAULT '', anuncio_ids TEXT DEFAULT '', mensagem TEXT DEFAULT '',
+              situacao_loja TEXT DEFAULT '', url TEXT DEFAULT '');
             CREATE TABLE IF NOT EXISTS bots(nome TEXT PRIMARY KEY COLLATE NOCASE, status TEXT, detalhe TEXT, atualizado TEXT);
             CREATE TABLE IF NOT EXISTS contas(nome TEXT PRIMARY KEY COLLATE NOCASE, limite TEXT DEFAULT '', atualizado TEXT);
             CREATE TABLE IF NOT EXISTS ajustes(chave TEXT PRIMARY KEY, valor TEXT);
@@ -183,7 +188,7 @@ def iniciar_banco():
                  "imagem_anuncio": [("papel", "TEXT DEFAULT ''"), ("posicao", "INTEGER DEFAULT 0")]}
         novas["anuncios"] += [("demanda_id", "INTEGER"), ("meta_ia", "INTEGER"), ("meta_capa", "INTEGER"),
                               ("familia", "INTEGER"), ("id_externo", "TEXT DEFAULT ''"),
-                              ("modo", "TEXT DEFAULT 'shopee'"), ("tamanhos", "TEXT DEFAULT ''")]
+                              ("modo", "TEXT DEFAULT 'shopee'"), ("tamanhos", "TEXT DEFAULT ''"), ("video", "TEXT DEFAULT ''")]
         novas["pedidos"] = [("tipo", "TEXT DEFAULT 'faltas'"), ("dados", "TEXT DEFAULT ''"), ("resposta", "TEXT DEFAULT ''")]
         novas["imagens"] = [("motivo", "TEXT DEFAULT ''"), ("origem_decisao", "TEXT DEFAULT ''"), ("alertas", "TEXT DEFAULT ''"),
                             ("ref", "INTEGER DEFAULT 0"), ("conta", "TEXT DEFAULT ''"), ("dhash", "TEXT DEFAULT ''"),

@@ -101,7 +101,7 @@
     // guarda onde voce deixou as rolagens: redesenhar nao pode jogar a coluna de volta para o topo
     const rolCol = editor.querySelector('.slots-col')?.scrollTop || 0, rolAbas = editor.querySelector('.abas-cor')?.scrollTop || 0, rolJanela = window.scrollY;
     editor.innerHTML = `<div class="editor-um">
-      <div class="bloco fotos-principal">${fotosCol}</div>
+      <div class="bloco fotos-principal"><div class="fotos-e-video"><div class="fp-fotos">${fotosCol}</div>${caixaVideo(a)}</div></div>
       <div class="resto">${cores}${blocoTamanhos()}
       ${banco}</div></div>`;
     const topo = document.getElementById('dados-topo');
@@ -167,6 +167,33 @@
   });
   // arrastar: entre os espacos, de uma imagem para um espaco, ou de uma imagem para uma cor
   let arr = null;
+  // ---- video do anuncio: guarda no PC e vai junto quando criar na Shopee
+  function caixaVideo(a) {
+    const nota = ml() ? '<small class="video-nota">O Mercado Livre não aceita vídeo pela API: ele vai só na Shopee.</small>' : '<small class="video-nota">MP4 de 10 a 60 s. Vai junto quando criar o anúncio na Shopee.</small>';
+    if (a.video) return `<div class="video-caixa"><h3>Vídeo</h3><video src="/api/anuncios/${a.id}/video?v=${encodeURIComponent(a.video)}" controls muted playsinline preload="metadata"></video>
+      <div class="video-acoes"><label class="b claro mini">Trocar<input type="file" accept="video/mp4,video/quicktime,.mp4,.mov" data-video-arquivo hidden></label><button type="button" class="b claro mini" data-video-tirar>Tirar</button></div>${nota}</div>`;
+    return `<div class="video-caixa"><h3>Vídeo</h3><label class="video-zona" data-video-zona><input type="file" accept="video/mp4,video/quicktime,.mp4,.mov" data-video-arquivo hidden>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="13" height="14" rx="2"/><path d="m16 10 5-3v10l-5-3z"/></svg><b>Colocar vídeo</b><span>arraste aqui ou clique</span></label>${nota}</div>`;
+  }
+  async function mandarVideo(f) {
+    if (!f) return;
+    if (!/\.(mp4|mov|m4v)$/i.test(f.name)) return aviso('Mande o vídeo em MP4.');
+    const z = editor.querySelector('.video-caixa'); if (z) z.classList.add('enviando');
+    aviso(`Enviando o vídeo (${(f.size / 1048576).toFixed(1)} MB)…`);
+    const fd = new FormData(); fd.append('arquivo', f);
+    try { const r = await fetch(`/api/anuncios/${ID}/video`, { method: 'POST', body: fd }); const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j.detail || 'Não consegui guardar o vídeo.'); aviso('Vídeo colocado no anúncio.'); carregar(); }
+    catch (err) { aviso(err.message); z?.classList.remove('enviando'); }
+  }
+  editor.addEventListener('change', e => { if (e.target.matches('[data-video-arquivo]')) mandarVideo(e.target.files[0]); });
+  editor.addEventListener('click', e => {
+    const t = e.target.closest('[data-video-tirar]'); if (!t) return;
+    if (t.dataset.certeza !== '1') { t.dataset.certeza = '1'; t.textContent = 'Tirar mesmo?'; return; }
+    fetch(`/api/anuncios/${ID}/video`, { method: 'DELETE' }).then(() => { aviso('Vídeo tirado do anúncio (o arquivo continua no PC).'); carregar(); });
+  });
+  editor.addEventListener('dragover', e => { const z = e.target.closest('[data-video-zona]'); if (z && e.dataTransfer?.types?.includes('Files')) { e.preventDefault(); z.classList.add('alvo'); } });
+  editor.addEventListener('dragleave', e => { e.target.closest('[data-video-zona]')?.classList.remove('alvo'); });
+  editor.addEventListener('drop', e => { const z = e.target.closest('[data-video-zona]'); if (!z || !e.dataTransfer?.files?.length) return; e.preventDefault(); e.stopPropagation(); z.classList.remove('alvo'); mandarVideo(e.dataTransfer.files[0]); }, true);
   const limpar = () => editor.querySelectorAll('.arrastando,.alvo').forEach(x => x.classList.remove('arrastando', 'alvo'));
   editor.addEventListener('dragstart', e => {
     const s = e.target.closest('.slot.cheio, .peca[draggable="true"]'); if (!s) return;

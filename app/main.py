@@ -476,7 +476,7 @@ def montagem(c, aid):
             "AND i.id NOT IN (SELECT imagem_id FROM imagem_anuncio WHERE anuncio_id=?) "
             "ORDER BY i.tipo, i.cor, i.id LIMIT 60", (produto, aid)).fetchall()
     return {
-        "anuncio": dict({k: a[k] for k in ("id", "nome", "formato", "titulo", "preco", "preco_antigo", "descricao")},
+        "anuncio": dict({k: a[k] for k in ("id", "nome", "formato", "titulo", "preco", "preco_antigo", "descricao", "video")},
                         modo=_modo(a["modo"]), tamanhos=a["tamanhos"] or ""),
         "modo": _modo(a["modo"]),
         "tamanhos": lista_tamanhos(a["tamanhos"]),
@@ -984,6 +984,48 @@ async def bot_anuncio_dados(request: Request):
         return {"ok": True, "mudou": mudou, "faltas": [i["texto"] for i in checagem(c, a["id"])["faltas"]]}
 
 
+@app.post("/api/anuncios/{aid}/video")
+async def anuncio_video(aid: int, request: Request):
+    """Guarda o video do anuncio (MP4) na pasta de dados. Vai junto quando o anuncio for criado na Shopee."""
+    from . import b2x
+    form = await request.form()
+    f = form.get("arquivo")
+    if not f or not getattr(f, "filename", ""):
+        raise HTTPException(400, "Escolha o vídeo.")
+    ext = Path(f.filename).suffix.lower()
+    if ext not in (".mp4", ".mov", ".m4v"):
+        raise HTTPException(400, "Mande o vídeo em MP4.")
+    dados = await f.read()
+    if len(dados) > b2x.VIDEO_MAX_MB * 1048576:
+        raise HTTPException(400, f"Vídeo grande demais (máximo {b2x.VIDEO_MAX_MB} MB).")
+    with n.con() as c:
+        a = c.execute("SELECT id, nome FROM anuncios WHERE id=?", (aid,)).fetchone()
+        if not a:
+            raise HTTPException(404, "Anúncio não encontrado.")
+        nome = f"anuncio{aid}_{int(time.time())}{ext}"
+        (b2x.pasta_videos() / nome).write_bytes(dados)
+        c.execute("UPDATE anuncios SET video=? WHERE id=?", (nome, aid))
+    return {"ok": True, "video": nome, "mb": round(len(dados) / 1048576, 1)}
+
+
+@app.delete("/api/anuncios/{aid}/video")
+def anuncio_video_tirar(aid: int):
+    with n.con() as c:
+        c.execute("UPDATE anuncios SET video='' WHERE id=?", (aid,))  # o arquivo fica na pasta de dados
+    return {"ok": True}
+
+
+@app.get("/api/anuncios/{aid}/video")
+def anuncio_video_ver(aid: int):
+    from fastapi.responses import FileResponse
+    from . import b2x
+    with n.con() as c:
+        r = c.execute("SELECT video FROM anuncios WHERE id=?", (aid,)).fetchone()
+    if not r or not r["video"] or not (b2x.pasta_videos() / r["video"]).exists():
+        raise HTTPException(404, "Sem vídeo.")
+    return FileResponse(b2x.pasta_videos() / r["video"], media_type="video/mp4")
+
+
 @app.post("/bot/anuncio-copiar")
 async def bot_anuncio_copiar(request: Request):
     """Cria copias de um anuncio no site (como o botao Copiar da tela). So no site; nada vai para o marketplace."""
@@ -1073,7 +1115,7 @@ async def bot_publicar(request: Request):
         return {"etapa": "validacao", "validado": r["validado"], "problemas": r["problemas"], "avisos": r["avisos"],
                 "proximo": "Sem problemas: rode o mesmo comando sem -Validar para publicar." if r["validado"] else
                            "Arrume os problemas (dados, ficha ou -Json) e valide de novo. Foto faltando: avise o Menork."}
-    final = b2x.criar_do_site(dict(corpo, confirmar=True, pedido_id=r["pedido_id"], _pedido_bot=p["id"]))
+    final = b2x.criar_do_site(dict(corpo, confirmar=True, pedido_id=r["pedido_id"], _pedido_bot=p["id"]), por="Grok" + (f" ({p['bot']})" if p["bot"] else ""))
     if final.get("na_fila"):
         return {"etapa": "na_fila", "criado": False, "pedido_b2x": final.get("pedido_id"), "avisos": final.get("avisos") or [],
                 "proximo": "O B2X pôs na fila. O site acompanha sozinho e marca o pedido como feito quando terminar "
