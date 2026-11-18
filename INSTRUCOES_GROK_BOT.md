@@ -96,6 +96,13 @@ menork.ps1 demanda -Tarefa "NOME DA TAREFA" -Produto CI9 -Pasta "\\SERVIDOR\past
 `-Info` é o texto do campo INFO JOAO, copiado como está. `-Produto` é o código que aparece no nome das imagens. O site cria sozinho os anúncios (unitário e kits) e as metas. Não crie pastas.
 Siglas dos marketplaces: ML, SHP, SHEIN, TIKTOK, AMAZON, MAGALU, NETSHOES, TEMU, KWAI.
 
+**Fotos de fundo branco (as originais do produto)**
+Foto de fundo branco não é gerada por IA: mande com `-Tipo fb` (ou `kitN_fb`) e `-Anuncio`. Ela entra aprovada, sem fila, e vai direto para o anúncio. No Mercado Livre vai para as fotos da cor (`-Cor`); na Shopee, para as fotos do anúncio. Use `-Posicao N` para escolher o lugar.
+```
+menork.ps1 enviar -Arquivo "C:\Temp\fb\preto.jpg" -Produto TJ01 -Cor PRETO -Tipo fb -Anuncio "TJ01 unitário" -Bot "SEU NOME"
+```
+NUNCA mande foto gerada por IA como `fb`: foto de IA sempre passa pela aprovação do Menork.
+
 **Copiar as fotos de um anúncio que já existe no marketplace**
 Quando o Menork pedir para copiar um anúncio (fotos baixadas de um anúncio que já está no ar), mande cada foto com `-Copia`. Elas NÃO são fotos geradas: não vão para a fila de aprovação, entram aprovadas e direto no lugar delas no anúncio.
 ```

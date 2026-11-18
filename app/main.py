@@ -1547,6 +1547,22 @@ async def _receber(request, reprovada=False):
             c.execute("UPDATE imagens SET status='reprovada', motivo=?, origem_decisao=?, decidido_em=?, apagar_em=? WHERE id=?",
                       (" ".join(str(q.get("motivo") or "Sem motivo").split())[:200], (q.get("bot") or "bot").strip(), n.agora(), time.time(), iid))
         lugar = ""
+        tipo_rec = (q.get("tipo") or "").strip()
+        fundo_branco = not reprovada and not copia and (tipo_rec == "fb" or tipo_rec.endswith("_fb"))
+        if fundo_branco:  # foto original de fundo branco nao e gerada por IA: entra aprovada, sem fila
+            c.execute("UPDATE imagens SET status='aprovada', origem_decisao='fundo branco', motivo='', alertas='', decidido_em=?, "
+                      "apagar_em=NULL WHERE id=? AND status IN ('gerada','conferencia')", (n.agora(), iid))
+            if (q.get("anuncio") or "").strip():
+                try:
+                    posicao = max(0, int(q.get("posicao") or 0))
+                except ValueError:
+                    posicao = 0
+                aid_fb = n.obter_anuncio(c, q["anuncio"].strip())
+                cor_fb = (q.get("cor") or "").strip().upper()
+                modo_fb = _modo(c.execute("SELECT modo FROM anuncios WHERE id=?", (aid_fb,)).fetchone()[0])
+                existe = c.execute("SELECT 1 FROM anuncio_cores WHERE anuncio_id=? AND cor=?", (aid_fb, cor_fb)).fetchone()
+                # ML: vai para as fotos da cor; Shopee: vai para as fotos do anuncio (a cor fica so na imagem)
+                lugar = _posicionar(c, iid, aid_fb, cor_fb if modo_fb == "ml" and existe else "", posicao)
         if copia:
             try:
                 posicao = max(0, int(q.get("posicao") or 0))
@@ -1558,6 +1574,8 @@ async def _receber(request, reprovada=False):
                              else "Esta imagem já existia no site com estes mesmos dados; nada mudou.")
     if copia:
         aviso = f"Cópia colocada direto no anúncio ({lugar}), sem passar pela fila."
+    elif fundo_branco:
+        aviso = "Fundo branco: entrou aprovada, sem passar pela fila" + (f", e foi para o anúncio ({lugar})." if lugar else ".")
     return {"id": iid, "nova": novo, "atualizada": atualizada, "status": linha["status"], "produto": linha["produto"],
             "cor": linha["cor"], "tipo": linha["tipo"], "aviso": aviso, "lugar": lugar}
 
