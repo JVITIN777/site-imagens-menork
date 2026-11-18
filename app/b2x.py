@@ -1072,3 +1072,35 @@ async def promocao_incluir(request: Request):
     return {"ok": ok, "simulado": not confirmar, "pedido_id": r.get("pedido_id") or "", "problemas": problemas + falhas,
             "avisos": [_frase(x) for x in (r.get("avisos") or [])][:8], "itens": itens, "cores": cores,
             "criterios": r.get("criterios_shopee") if relampago else None}
+
+
+# ------------------------------------------------------------ memoria da ficha: o que o Menork preencheu fica para a proxima vez
+def _memoria():
+    try:
+        return json.loads(n.ajuste("ficha_memoria", "{}") or "{}")
+    except ValueError:
+        return {}
+
+
+@rota.get("/api/b2x/memoria")
+def memoria_ler(canal: str, categoria: str = "", chave: str = ""):
+    m = _memoria()
+    return {"ficha": m.get("ficha", {}).get(f"{canal}:{categoria}") if categoria else None,
+            "envio": m.get("envio", {}).get(canal), "categoria": m.get("cat", {}).get(f"{canal}:{chave}") if chave else None}
+
+
+@rota.post("/api/b2x/memoria")
+async def memoria_gravar(request: Request):
+    d = await request.json()
+    canal, categoria = str(d.get("canal") or ""), str(d.get("categoria") or "")
+    if not canal or not categoria:
+        raise HTTPException(400, "Falta o canal ou a categoria.")
+    m = _memoria()
+    m.setdefault("ficha", {})[f"{canal}:{categoria}"] = {"attr": d.get("attr") or {}, "marca": d.get("marca"), "tipo_anuncio": d.get("tipo_anuncio")}
+    m.setdefault("envio", {})[canal] = {k: d.get(k) for k in ("peso_g", "comprimento_cm", "largura_cm", "altura_cm", "estoque")}
+    if d.get("chave"):
+        m.setdefault("cat", {})[f"{canal}:{d['chave']}"] = {"id": categoria, "caminho": str(d.get("caminho") or "")}
+    if len(m["ficha"]) > 300:  # nao deixa crescer sem fim
+        m["ficha"] = dict(list(m["ficha"].items())[-300:])
+    n.gravar_ajuste("ficha_memoria", json.dumps(m, ensure_ascii=False))
+    return {"ok": True}

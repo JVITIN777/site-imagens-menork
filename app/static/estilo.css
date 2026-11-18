@@ -588,3 +588,6 @@ body.porta{background:#050505!important}
 .lt-res{display:flex;flex-direction:column;gap:6px;max-height:60vh;overflow:auto}
 .lt-cor{display:inline-flex;gap:4px;align-items:center;margin:2px 8px 2px 0}
 @media (max-width:900px){.lt-grade{grid-template-columns:1fr}}
+.b2-ficha label.auto select,.b2-ficha label.auto input{border-color:color-mix(in srgb,var(--verde) 55%,var(--borda))}
+.auto-tag{font-style:normal;font-size:10px;color:var(--verde);margin-left:4px}
+.b2-anuncio.sugerida{border-color:var(--luz)}
