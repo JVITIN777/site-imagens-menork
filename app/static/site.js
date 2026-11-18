@@ -537,7 +537,7 @@ function autoFicha(f, m, mem) {
   const tipoTxt = semAc((B2.caminho || '') + ' ' + texto), tipo = /chinel|havaian|slide/.test(tipoTxt) ? 'chinelo' : /sandal|rasteir|tamanc|mule|papete/.test(tipoTxt) ? 'sandalia' : /bota|coturno/.test(tipoTxt) ? 'bota' : 'tenis';
   const caixa = { chinelo: [300, 28, 18, 6], sandalia: [400, 30, 20, 8], tenis: [800, 33, 22, 12], bota: [1200, 35, 25, 14] }[tipo];
   const env = mem.envio_produto || {};
-  const val = { peso_g: env.peso_g || caixa[0], comprimento_cm: env.comprimento_cm || caixa[1], largura_cm: env.largura_cm || caixa[2], altura_cm: env.altura_cm || caixa[3],
+  const val = { peso_g: env.peso_g || '', comprimento_cm: env.comprimento_cm || caixa[1], largura_cm: env.largura_cm || caixa[2], altura_cm: env.altura_cm || caixa[3],
     estoque: env.estoque || (mem.envio || {}).estoque || 10, sku: ref.replace(/[^A-Z0-9-]/g, '').slice(0, 12), tipo_anuncio: fc.tipo_anuncio || 'gold_special',
     marca: fp.marca ?? fc.marca, attr: {} };
   const genero = /infantil|menin[oa]|crianca|kids|bebe/.test(texto) ? ['infantil', 'menina', 'menino', 'criancas', 'unissex'] : /masculin|homem|\bmasc\b/.test(texto) ? ['masculino', 'homem', 'homens'] : /unissex/.test(texto) ? ['unissex'] : ['feminino', 'mulher', 'mulheres'];
@@ -569,7 +569,7 @@ function autoFicha(f, m, mem) {
   }
   const deste = Object.keys(fp.attr || {}).length;
   const origem = (deste ? `Usei o que você preencheu para o ${ref} da última vez.` : `Primeira vez do ${ref || 'produto'} nesta categoria: preenchi o que está no título e na descrição, e país/personalizado/quantidade pelo padrão. O que é deste produto e não está escrito fica para você escolher.`) +
-    (env.peso_g ? ` Peso e caixa: os do ${ref}.` : ` Peso e caixa: padrão de ${{ chinelo: 'chinelo', sandalia: 'sandália', tenis: 'tênis', bota: 'bota' }[tipo]} (mude se a caixa deste produto for outra).`) + ` Depois de validar, todo anúncio do ${ref || 'produto'} vem assim.`;
+    (env.peso_g ? ` Peso e caixa: os que você usou no ${ref}.` : ` O peso é com você. Caixa: padrão de ${{ chinelo: 'chinelo', sandalia: 'sandália', tenis: 'tênis', bota: 'bota' }[tipo]} (mude se a deste produto for outra).`) + ` Depois de validar, todo anúncio do ${ref || 'produto'} vem assim.`;
   return { val, marcados, escolher, origem };
 }
 async function b2Categorias(busca) {
@@ -606,7 +606,7 @@ async function b2Ficha(cat, caminho) {
         ${B2.canal === 'shopee' ? `<h3>Marca</h3><div class="b2-grade"><label>Marca<select name="marca">${opcoesMarca(f, val.marca)}</select></label></div>` : ''}
         ${B2.canal === 'mercadolivre' && f.tipos_anuncio.length ? `<h3>Tipo de anúncio</h3><div class="b2-grade"><label>Tipo<select name="tipo_anuncio">${f.tipos_anuncio.map(x => `<option value="${esc(x.id)}" ${val.tipo_anuncio === x.id ? 'selected' : ''}>${esc(x.nome)}</option>`).join('')}</select></label></div>` : ''}
         <h3>Embalagem e estoque</h3><div class="b2-grade">
-          <label>Peso (g)<input name="peso_g" inputmode="decimal" value="${esc(val.peso_g)}"></label><label>Comprimento (cm)<input name="comprimento_cm" inputmode="decimal" value="${esc(val.comprimento_cm)}"></label>
+          <label class="${val.peso_g ? "" : "pedir"}">Peso (g)${val.peso_g ? "" : " <em class=\"auto-tag escolher\">você preenche</em>"}<input name="peso_g" inputmode="decimal" value="${esc(val.peso_g)}" placeholder="peso com a caixa, ex.: 650" required></label><label>Comprimento (cm)<input name="comprimento_cm" inputmode="decimal" value="${esc(val.comprimento_cm)}"></label>
           <label>Largura (cm)<input name="largura_cm" inputmode="decimal" value="${esc(val.largura_cm)}"></label><label>Altura (cm)<input name="altura_cm" inputmode="decimal" value="${esc(val.altura_cm)}"></label>
           <label>Estoque de cada variação<input name="estoque" inputmode="numeric" value="${esc(val.estoque)}"></label><label>Começo do SKU (opcional)<input name="sku" value="${esc(val.sku)}" placeholder="Ex.: TA01"></label></div>
         ${B2.canal === 'shopee' ? `<label class="linha"><input type="checkbox" name="tabela" ${temTabela ? 'checked' : 'disabled'}> Mandar a tabela de medidas do anúncio ${temTabela ? '' : '(este anúncio não tem tabela aprovada)'}${f.tabela_exige ? ' · esta categoria exige' : ''}</label>` : (f.tabela_exige ? '<p class="pequeno">Esta categoria do Mercado Livre exige tabela de medidas: se a validação reclamar, ela precisa ser criada no B2X.</p>' : '')}
@@ -1090,7 +1090,7 @@ function crTela(passo, html) {
 function crInicio(lojaId) {
   const loja = todasLojas().find(l => l.id === lojaId);
   Object.assign(CR, { loja, canal: loja.canal, titulo: '', descricao: '', categoria: '', caminho: '', ficha: null, attr: {}, marca: '', tipo_anuncio: 'gold_special',
-    cores: [], fotos: { galeria: [], tabela: [] }, tamanhos: '', grade: {}, sku_pai: '', embalagem: { peso_g: 600, comprimento_cm: 30, largura_cm: 20, altura_cm: 12 },
+    cores: [], fotos: { galeria: [], tabela: [] }, tamanhos: '', grade: {}, sku_pai: '', embalagem: { peso_g: '', comprimento_cm: 30, largura_cm: 20, altura_cm: 12 },
     envio: '', frete_gratis: false, medidas: {}, pedido: '', resultado: null });
   crCategoria();
 }
