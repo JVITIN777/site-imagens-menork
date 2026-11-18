@@ -2,7 +2,11 @@
 // Resolucao da tela (ate 1,5x em telas de alta densidade); se o PC nao der conta, baixa sozinha.
 // 30 quadros por segundo, e para quando a aba nao esta visivel.
 (() => {
+  // qual fundo: 'coringa' (padrao, sem gastar placa de video), 'agua' (o antigo, animado) ou 'liso'
+  let fundo = 'coringa'; try { fundo = localStorage.getItem('fundo') || 'coringa'; } catch (_) {}
+  document.documentElement.dataset.fundo = fundo;
   const tela = document.getElementById('agua'); if (!tela) return;
+  if (fundo !== 'agua') { tela.style.display = 'none'; return; }
   const gl = tela.getContext('webgl', { antialias: false, alpha: false, powerPreference: 'low-power' });
   if (!gl) { tela.classList.add('sem-webgl'); return; }
   const quieto = matchMedia('(prefers-reduced-motion: reduce)').matches;

@@ -564,6 +564,7 @@ Object.assign(TELAS, {
   painel() {
     const pont = { ok: 'boa', trabalhando: 'andando', parado: 'ruim' }, rot = { ok: 'Livre', trabalhando: 'Trabalhando', parado: 'Parado' };
     return `<div class="cabeca"><h1>Painel <small>o que falta, o que os bots estão fazendo e como estão as contas</small></h1></div>
+      <div class="bloco"><h2>Fundo da tela <small>fica salvo neste computador</small></h2><div class="fundo-escolha">${[['coringa', 'Mesa do Coringa', 'grafite com losangos, leve'], ['agua', 'Água escura', 'o antigo, animado'], ['liso', 'Liso', 'preto, sem nada']].map(([k, n, d]) => `<button type="button" data-fundo="${k}" class="${(document.documentElement.dataset.fundo || 'coringa') === k ? 'ativo' : ''}"><i class="f-${k}"></i><b>${n}</b><small class="pequeno">${d}</small></button>`).join('')}</div></div>
     <div class="bloco"><h2>Demandas por anúncio</h2><div class="demandas">${DB.anuncios.map(a => { const f = faltas(a.id); return `<div><a href="#" data-rota="/anuncios/${a.id}"><b>${esc(a.nome)}</b></a>${f.itens.length ? `<ul>${f.itens.map(t => `<li>${esc(t)}</li>`).join('')}</ul>` : '<p class="completo">Completo</p>'}</div>`; }).join('')}</div></div>
     <div class="dois-blocos"><div class="bloco"><h2>Bots <small>cada bot avisa o que está fazendo</small></h2>${BOTS.length ? `<table class="tabela">${BOTS.map(([n, s, d]) => `<tr><td><span class="ponto ${pont[s] || ''}"></span>${esc(n)}</td><td>${rot[s] || esc(s)}</td><td class="pequeno">${esc(d)}</td></tr>`).join('')}</table>` : '<p class="pequeno">Nenhum bot avisou o status ainda.</p>'}</div>
     <div class="bloco"><h2>Contas do gerador <small>hoje</small></h2>${CONTAS.length ? `<table class="tabela"><tr><th>Conta</th><th>Geradas</th><th>Reprovadas</th><th>Limite</th></tr>${CONTAS.map(([n, g, r, v]) => `<tr><td>${esc(n)}</td><td>${g}</td><td>${r} <span class="pequeno">(${g ? Math.round(r / g * 100) : 0}%)</span></td><td class="${v === 'Disponível' ? '' : 'aviso-txt'}">${esc(v)}</td></tr>`).join('')}</table>` : '<p class="pequeno">Nenhuma conta informada pelos bots ainda.</p>'}</div></div>
@@ -1323,3 +1324,8 @@ document.addEventListener('change', e => {
   const c = e.target.closest('[data-lt-cor]'); if (c) { const r = LT.res[+c.dataset.ltCor]; if (r) r.mapa[c.dataset.cor] = c.value; }
 });
 document.addEventListener('submit', e => { if (e.target.id !== 'lt-busca') return; e.preventDefault(); LT.busca = e.target.busca.value.trim(); LT.lista = null; ltJanela(); });
+document.addEventListener('click', e => {
+  const b = e.target.closest('.fundo-escolha [data-fundo]'); if (!b) return;
+  try { localStorage.setItem('fundo', b.dataset.fundo); } catch (_) {}
+  location.reload();
+});
