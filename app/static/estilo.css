@@ -698,3 +698,4 @@ html[data-fundo="luz"] :is(.cartao,.bloco,.arvore){background:rgba(16,16,18,.78)
 .video-nota{color:var(--fraco);font-size:11px;line-height:1.35}
 .video-caixa.enviando{opacity:.5;pointer-events:none}
 @media (max-width:1100px){.fotos-e-video{flex-direction:column}.video-caixa{flex-basis:auto;width:210px;border-left:0;padding-left:0}}
+.auto-tag.escolher{color:#e0b44c}

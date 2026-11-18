@@ -261,50 +261,49 @@ function opcoesMarca(f, atual) {
 }
 // ---- preencher a ficha sozinho: primeiro o que você usou da última vez nesta categoria, depois o que dá para tirar do anúncio
 function chaveProduto(t) { return semAc(t).replace(/[^a-z0-9 ]+/g, ' ').split(/\s+/).filter(w => w.length > 2 && !/^\d+$/.test(w)).slice(0, 2).join(' '); }
+function refProduto() { const a = DB.anuncios.find(x => x.id === B2.aid); return ((a && a.nome) || '').trim().split(/\s+/)[0].toUpperCase(); }
+// cada produto tem a sua ficha: 1º o que você preencheu para ESTE produto; 2º o que está escrito no título e na descrição;
+// 3º só para campos iguais em todos (país, personalizado, quantidade, marca) o padrão. O resto fica para você escolher.
 function autoFicha(f, m, mem) {
-  const a = m.anuncio || {}, texto = semAc([a.titulo, a.descricao, a.nome, m.variacoes.map(v => v.cor).join(' ')].join(' ')), marcados = new Set();
+  const a = m.anuncio || {}, texto = semAc([a.titulo, a.descricao, a.nome, m.variacoes.map(v => v.cor).join(' ')].join(' ')), marcados = new Set(), escolher = new Set();
+  const ref = refProduto(), fp = mem.ficha_produto || {}, fc = mem.ficha || {};
   const tipoTxt = semAc((B2.caminho || '') + ' ' + texto), tipo = /chinel|havaian|slide/.test(tipoTxt) ? 'chinelo' : /sandal|rasteir|tamanc|mule|papete/.test(tipoTxt) ? 'sandalia' : /bota|coturno/.test(tipoTxt) ? 'bota' : 'tenis';
   const caixa = { chinelo: [300, 28, 18, 6], sandalia: [400, 30, 20, 8], tenis: [800, 33, 22, 12], bota: [1200, 35, 25, 14] }[tipo];
-  const env = mem.envio || {}, fm = mem.ficha || {};
+  const env = mem.envio_produto || {};
   const val = { peso_g: env.peso_g || caixa[0], comprimento_cm: env.comprimento_cm || caixa[1], largura_cm: env.largura_cm || caixa[2], altura_cm: env.altura_cm || caixa[3],
-    estoque: env.estoque || 10, sku: (a.nome || '').split(/\s+/)[0].toUpperCase().replace(/[^A-Z0-9-]/g, '').slice(0, 12), tipo_anuncio: fm.tipo_anuncio || 'gold_special', marca: fm.marca, attr: {} };
+    estoque: env.estoque || (mem.envio || {}).estoque || 10, sku: ref.replace(/[^A-Z0-9-]/g, '').slice(0, 12), tipo_anuncio: fc.tipo_anuncio || 'gold_special',
+    marca: fp.marca ?? fc.marca, attr: {} };
   const genero = /infantil|menin[oa]|crianca|kids|bebe/.test(texto) ? ['infantil', 'menina', 'menino', 'criancas', 'unissex'] : /masculin|homem|\bmasc\b/.test(texto) ? ['masculino', 'homem', 'homens'] : /unissex/.test(texto) ? ['unissex'] : ['feminino', 'mulher', 'mulheres'];
-  const coringa = ['outro', 'outros', 'outra', 'nao se aplica', 'nao informado', 'sem marca', 'generico', 'nao'];
-  for (const o of f.obrigatorios) {
-    const lembrado = (fm.attr || {})[o.id];
-    if (lembrado != null && lembrado !== '' && (!o.opcoes.length || o.opcoes.some(x => String(x.id) === String(lembrado)))) { val.attr[o.id] = lembrado; marcados.add(o.id); continue; }
-    const nome = semAc(o.nome);
-    if (o.opcoes.length) {
-      const ops = o.opcoes.map(x => ({ id: x.id, n: semAc(x.nome) }));
-      let achou = /genero|sexo|publico/.test(nome) ? ops.find(x => genero.some(g => x.n === g || x.n.startsWith(g))) : null;
-      if (!achou) achou = ops.filter(x => x.n.length > 2 && new RegExp('\\b' + x.n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b').test(texto)).sort((p, q) => q.n.length - p.n.length)[0];
-      if (!achou && /idade|faixa/.test(nome)) achou = ops.find(x => (genero[0] === 'infantil' ? /crianc|infantil|kid/ : /adult/).test(x.n));
-      if (!achou) achou = ops.find(x => coringa.includes(x.n));
-      if (achou) { val.attr[o.id] = achou.id; marcados.add(o.id); }
-    } else {
-      const t = /modelo|referencia|\bref\b/.test(nome) ? (a.nome || '').split(/\s+/)[0] : /marca/.test(nome) ? 'Sem marca' : /material|composic/.test(nome) ? ((texto.match(/\b(eva|borracha|sintetico|couro|tecido|pvc|camurca|nobuck|lona|malha|knit)\b/) || [])[1] || '') : '';
-      if (t) { val.attr[o.id] = t.charAt(0).toUpperCase() + t.slice(1); marcados.add(o.id); }
-    }
-  }
-  for (const o of f.opcionais || []) {
-    const lembrado = (fm.attr || {})[o.id];
-    if (lembrado != null && lembrado !== '' && (!o.opcoes.length || o.opcoes.some(x => String(x.id) === String(lembrado)))) { val.attr[o.id] = lembrado; marcados.add(o.id); continue; }
-    const nome = semAc(o.nome), ops = o.opcoes.map(x => ({ id: x.id, n: semAc(x.nome) }));
+  const valido = (o, v) => v != null && v !== '' && (!o.opcoes.length || o.opcoes.some(x => String(x.id) === String(v)));
+  const geral = nome => /pais|origem|personaliz|quantidade|garantia|condicao/.test(nome);
+  const porTexto = (o, nome, ops) => {
     const pega = re => { const x = ops.find(y => re.test(y.n)); return x ? x.id : null; };
-    let v = null;
-    if (/pais|origem/.test(nome)) v = ops.length ? pega(/^brasil|brazil/) : 'Brasil';
-    else if (/personaliz/.test(nome) || /ajuste amplo|largo|extra largo/.test(nome)) v = ops.length ? pega(/^nao$|^no$/) : null;
-    else if (/quantidade/.test(nome) && /embal|pacote|pecas|itens/.test(nome)) v = ops.length ? pega(/^1\b|^1 /) : '1';
-    else if (/salto/.test(nome)) v = ops.length ? (/plataforma|anabela/.test(texto) ? pega(/medio|3|4|5/) : pega(/sem salto|rasteir|baixo|plano|flat|0/)) : null;
-    else if (/cinto|fecho|fechamento|tira/.test(nome) && tipo === 'tenis') v = ops.length ? pega(/cadarc|amarr|lace|laco|cordao/) : null;
-    else if (/genero|sexo|publico/.test(nome)) { const g = ops.find(x => genero.some(gg => x.n === gg || x.n.startsWith(gg))); v = g ? g.id : null; }
-    if (v == null && ops.length) { const x = ops.filter(y => y.n.length > 2 && new RegExp('\\b' + y.n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b').test(texto)).sort((p, q) => q.n.length - p.n.length)[0]; v = x ? x.id : null; }
-    if (v == null && !ops.length && /modelo|referencia/.test(nome) && a.nome) v = (a.nome || '').split(/\s+/)[0];
-    if (v != null && v !== '') { val.attr[o.id] = v; marcados.add(o.id); }
+    if (/genero|sexo|publico/.test(nome)) { const g = ops.find(x => genero.some(gg => x.n === gg || x.n.startsWith(gg))); return g ? g.id : null; }
+    if (/salto/.test(nome)) return /salto alto|\bsalto\b.*\b(7|8|9|10)\s?cm/.test(texto) ? pega(/^alto/) : /plataforma|anabela|chunky|salto medio/.test(texto) ? pega(/^medio/) : /rasteir|sem salto|chinelo|slide/.test(texto) ? pega(/sem salto/) : /salto baixo/.test(texto) ? pega(/^baixo/) : null;
+    if (/cinto|fecho|fechamento/.test(nome)) return /sem cadarc|slip.?on|calce facil|elastic/.test(texto) ? pega(/sem cadarc/) : /cadarc|amarr/.test(texto) ? pega(/laco|cordao|cadarc/) : /velcro/.test(texto) ? pega(/gancho|velcro/) : /ziper/.test(texto) ? pega(/ziper/) : /fivela/.test(texto) ? pega(/fivela/) : null;
+    if (ops.length) { const x = ops.filter(y => y.n.length > 3 && !/^(sim|nao|outros?)$/.test(y.n) && new RegExp('\\b' + y.n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b').test(texto)).sort((p, q) => q.n.length - p.n.length)[0]; return x ? x.id : null; }
+    if (/modelo|referencia|\bref\b/.test(nome)) return ref || null;
+    if (/material|composic/.test(nome)) { const t = (texto.match(/\b(eva|borracha|sintetico|couro|tecido|pvc|camurca|nobuck|lona|malha|knit)\b/) || [])[1]; return t ? t.charAt(0).toUpperCase() + t.slice(1) : null; }
+    return null;
+  };
+  const padrao = (o, nome, ops) => {
+    const pega = re => { const x = ops.find(y => re.test(y.n)); return x ? x.id : null; };
+    if (/pais|origem/.test(nome)) return ops.length ? pega(/^brasil/) : 'Brasil';
+    if (/personaliz/.test(nome)) return ops.length ? pega(/^nao$/) : null;
+    if (/quantidade/.test(nome)) return ops.length ? pega(/^1\b/) : '1';
+    return null;
+  };
+  for (const o of [...f.obrigatorios, ...(f.opcionais || [])]) {
+    const nome = semAc(o.nome), ops = o.opcoes.map(x => ({ id: x.id, n: semAc(x.nome) }));
+    let v = (fp.attr || {})[o.id];
+    if (!valido(o, v)) v = porTexto(o, nome, ops);
+    if (!valido(o, v) && geral(nome)) v = valido(o, (fc.attr || {})[o.id]) ? fc.attr[o.id] : padrao(o, nome, ops);
+    if (valido(o, v)) { val.attr[o.id] = v; marcados.add(o.id); } else escolher.add(o.id);
   }
-  const origem = (mem.ficha ? 'Usei o que você preencheu da última vez nesta categoria. ' : 'Tirei do título e da descrição do anúncio. ') +
-    (env.peso_g ? 'Peso e caixa: os da última vez.' : `Peso e caixa: padrão de ${{ chinelo: 'chinelo', sandalia: 'sandália', tenis: 'tênis', bota: 'bota' }[tipo]} (mude se a sua caixa for outra).`) + ' Depois de validar, eu lembro para a próxima.';
-  return { val, marcados, origem };
+  const deste = Object.keys(fp.attr || {}).length;
+  const origem = (deste ? `Usei o que você preencheu para o ${ref} da última vez.` : `Primeira vez do ${ref || 'produto'} nesta categoria: preenchi o que está no título e na descrição, e país/personalizado/quantidade pelo padrão. O que é deste produto e não está escrito fica para você escolher.`) +
+    (env.peso_g ? ` Peso e caixa: os do ${ref}.` : ` Peso e caixa: padrão de ${{ chinelo: 'chinelo', sandalia: 'sandália', tenis: 'tênis', bota: 'bota' }[tipo]} (mude se a caixa deste produto for outra).`) + ` Depois de validar, todo anúncio do ${ref || 'produto'} vem assim.`;
+  return { val, marcados, escolher, origem };
 }
 async function b2Categorias(busca) {
   const a = DB.anuncios.find(x => x.id === B2.aid), det = await b2get('/api/anuncios/' + B2.aid).catch(() => null);
@@ -323,16 +322,17 @@ async function b2Categorias(busca) {
 async function b2Ficha(cat, caminho) {
   B2.categoria = cat; B2.caminho = caminho; b2Carregando('Lendo o que essa categoria pede…');
   try { const f = await b2get(`/api/b2x/ficha?loja=${encodeURIComponent(B2.loja)}&categoria=${encodeURIComponent(cat)}`); B2.ficha = f;
-    const [m, mem] = await Promise.all([b2get('/api/anuncios/' + B2.aid), b2get(`/api/b2x/memoria?canal=${B2.canal}&categoria=${encodeURIComponent(cat)}`).catch(() => ({}))]);
+    const [m, mem] = await Promise.all([b2get('/api/anuncios/' + B2.aid), b2get(`/api/b2x/memoria?canal=${B2.canal}&categoria=${encodeURIComponent(cat)}&produto=${encodeURIComponent(refProduto())}`).catch(() => ({}))]);
     const temTabela = [...m.galeria, ...m.todas].some(i => i.tipo === 'tabela');
     const auto = B2.form ? null : autoFicha(f, m, mem), val = B2.form || auto.val, marcados = auto ? auto.marcados : new Set();
-    const tag = id => marcados.has(id) ? ' <em class="auto-tag">preenchido sozinho</em>' : '';
+    const escolher = auto ? auto.escolher : new Set();
+    const tag = id => marcados.has(id) ? ' <em class="auto-tag">preenchido sozinho</em>' : escolher.has(id) ? ' <em class="auto-tag escolher">escolha deste produto</em>' : '';
     const campo = o => o.opcoes.length ? `<label class="${marcados.has(o.id) ? 'auto' : ''}">${esc(o.nome)}${tag(o.id)}<select data-b2-attr="${esc(o.id)}"><option value="">escolha</option>${o.opcoes.map(x => `<option value="${esc(x.id)}" ${String((val.attr || {})[o.id]) === String(x.id) ? 'selected' : ''}>${esc(x.nome)}</option>`).join('')}</select></label>`
       : `<label class="${marcados.has(o.id) ? 'auto' : ''}">${esc(o.nome)}${tag(o.id)}<input data-b2-attr="${esc(o.id)}" data-texto="1" value="${esc((val.attr || {})[o.id] || '')}"></label>`;
-    const faltam = f.obrigatorios.filter(o => !(val.attr || {})[o.id]).length;
+    const faltam = f.obrigatorios.filter(o => !(val.attr || {})[o.id]).length, faltamOpc = (f.opcionais || []).filter(o => !(val.attr || {})[o.id]).length;
     b2Tela(`<h2>Ficha do anúncio <small>${esc(caminho)}</small></h2>
       <p class="pequeno">${esc(B2.lojaNome)} · ${m.variacoes.length} cor(es) × ${m.tamanhos.length} tamanho(s) = ${m.variacoes.length * m.tamanhos.length} variações · preço R$ ${esc(m.anuncio.preco)}</p>
-      ${auto ? `<div class="nota ${faltam ? 'ruim' : ''}"><b>${faltam ? `Preenchi o que deu. Falta${faltam > 1 ? 'm' : ''} ${faltam} campo(s) para você escolher.` : 'Preenchi tudo sozinho. Confira e valide.'}</b><span>${auto.origem}</span></div>` : ''}
+      ${auto ? `<div class="nota ${faltam ? 'ruim' : ''}"><b>${faltam ? `Preenchi o que deu. Falta${faltam > 1 ? 'm' : ''} ${faltam} campo(s) obrigatório(s) para você escolher.` : faltamOpc ? `Os obrigatórios estão prontos. ${faltamOpc} detalhe(s) deste produto ficaram para você escolher (deixam o anúncio completo).` : 'Preenchi tudo sozinho. Confira e valide.'}</b><span>${auto.origem}</span></div>` : ''}
       <form id="b2-ficha" class="b2-ficha">
         ${f.obrigatorios.length ? `<h3>A categoria pede</h3><div class="b2-grade">${f.obrigatorios.map(campo).join('')}</div>` : ''}
         ${(f.opcionais || []).length ? `<h3>Mais detalhes <small class="pequeno">não são obrigatórios, mas deixam o anúncio completo (a loja mostra "Complete: x de y")</small></h3><div class="b2-grade">${f.opcionais.map(campo).join('')}</div>` : ''}
@@ -358,7 +358,7 @@ function b2LerFicha(f) {
 async function b2Validar(corpo) {
   B2.corpo = corpo; b2Carregando('Subindo as fotos e validando com o marketplace. Pode levar um minuto…');
   try { const r = await b2post('/api/b2x/criar', corpo); B2.pedido = r.pedido_id;
-    if (r.validado && B2.form) b2post('/api/b2x/memoria', { canal: B2.canal, categoria: B2.categoria, caminho: B2.caminho, chave: chaveProduto(B2.titulo), ...B2.form }).catch(() => {});
+    if (r.validado && B2.form) b2post('/api/b2x/memoria', { canal: B2.canal, categoria: B2.categoria, caminho: B2.caminho, chave: chaveProduto(B2.titulo), produto: refProduto(), ...B2.form }).catch(() => {});
     b2Tela(`<h2>${r.validado ? 'Validado: pode criar' : 'O marketplace pediu correções'} <small>nada foi publicado ainda</small></h2>
       <p class="pequeno">${esc(B2.lojaNome)} · ${esc(B2.caminho)} · ${r.variacoes} variações · ${r.fotos} foto(s) enviadas</p>
       ${r.problemas.length ? `<div class="nota ruim"><b>Corrigir</b>${r.problemas.map(p => `<span>${esc(p)}</span>`).join('')}</div>` : ''}${b2Lista('Avisos', r.avisos)}

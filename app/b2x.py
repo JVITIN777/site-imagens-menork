@@ -1181,10 +1181,14 @@ def _memoria():
 
 
 @rota.get("/api/b2x/memoria")
-def memoria_ler(canal: str, categoria: str = "", chave: str = ""):
-    m = _memoria()
+def memoria_ler(canal: str, categoria: str = "", chave: str = "", produto: str = ""):
+    """ficha_produto/envio_produto = o que voce preencheu para ESTE produto (cada produto tem o seu);
+    ficha/envio = o da ultima vez na categoria (so serve para campos que sao iguais para todos, como pais e marca)."""
+    m, produto = _memoria(), produto.strip().upper()
     return {"ficha": m.get("ficha", {}).get(f"{canal}:{categoria}") if categoria else None,
-            "envio": m.get("envio", {}).get(canal), "categoria": m.get("cat", {}).get(f"{canal}:{chave}") if chave else None}
+            "ficha_produto": m.get("ficha_prod", {}).get(f"{canal}:{categoria}:{produto}") if categoria and produto else None,
+            "envio": m.get("envio", {}).get(canal), "envio_produto": m.get("envio_prod", {}).get(produto) if produto else None,
+            "categoria": m.get("cat", {}).get(f"{canal}:{chave}") if chave else None}
 
 
 @rota.post("/api/b2x/memoria")
@@ -1196,6 +1200,12 @@ async def memoria_gravar(request: Request):
     m = _memoria()
     m.setdefault("ficha", {})[f"{canal}:{categoria}"] = {"attr": d.get("attr") or {}, "marca": d.get("marca"), "tipo_anuncio": d.get("tipo_anuncio")}
     m.setdefault("envio", {})[canal] = {k: d.get(k) for k in ("peso_g", "comprimento_cm", "largura_cm", "altura_cm", "estoque")}
+    produto = str(d.get("produto") or "").strip().upper()
+    if produto:
+        m.setdefault("ficha_prod", {})[f"{canal}:{categoria}:{produto}"] = {"attr": d.get("attr") or {}, "marca": d.get("marca")}
+        m.setdefault("envio_prod", {})[produto] = {k: d.get(k) for k in ("peso_g", "comprimento_cm", "largura_cm", "altura_cm", "estoque")}
+        if len(m["ficha_prod"]) > 800:
+            m["ficha_prod"] = dict(list(m["ficha_prod"].items())[-800:])
     if d.get("chave"):
         m.setdefault("cat", {})[f"{canal}:{d['chave']}"] = {"id": categoria, "caminho": str(d.get("caminho") or "")}
     if len(m["ficha"]) > 300:  # nao deixa crescer sem fim
