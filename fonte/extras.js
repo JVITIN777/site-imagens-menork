@@ -296,7 +296,7 @@ function autoFicha(f, m, mem) {
     else if (/personaliz/.test(nome) || /ajuste amplo|largo|extra largo/.test(nome)) v = ops.length ? pega(/^nao$|^no$/) : null;
     else if (/quantidade/.test(nome) && /embal|pacote|pecas|itens/.test(nome)) v = ops.length ? pega(/^1\b|^1 /) : '1';
     else if (/salto/.test(nome)) v = ops.length ? (/plataforma|anabela/.test(texto) ? pega(/medio|3|4|5/) : pega(/sem salto|rasteir|baixo|plano|flat|0/)) : null;
-    else if (/cinto|fecho|fechamento|tira/.test(nome) && tipo === 'tenis') v = ops.length ? pega(/cadarc|amarr|lace/) : null;
+    else if (/cinto|fecho|fechamento|tira/.test(nome) && tipo === 'tenis') v = ops.length ? pega(/cadarc|amarr|lace|laco|cordao/) : null;
     else if (/genero|sexo|publico/.test(nome)) { const g = ops.find(x => genero.some(gg => x.n === gg || x.n.startsWith(gg))); v = g ? g.id : null; }
     if (v == null && ops.length) { const x = ops.filter(y => y.n.length > 2 && new RegExp('\\b' + y.n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b').test(texto)).sort((p, q) => q.n.length - p.n.length)[0]; v = x ? x.id : null; }
     if (v == null && !ops.length && /modelo|referencia/.test(nome) && a.nome) v = (a.nome || '').split(/\s+/)[0];
