@@ -147,10 +147,12 @@ menork.ps1 ficha -Anuncio "TA101 copia 3" -Categoria 100559
 ```
 4. Valide (nada é publicado):
 ```
-menork.ps1 publicar -Anuncio "TA101 copia 3" -Categoria 100559 -Json '{"atributos":[{"id":"100134","opcao":"1"}],"marca":{"id":"0"},"peso_g":600,"comprimento_cm":30,"largura_cm":20,"altura_cm":12,"estoque":10,"sku":"TA101C3","tabela":true}' -Validar
+menork.ps1 publicar -Anuncio "TA101 copia 3" -Categoria 100559 -Json '{"atributos":[{"id":"100134","opcao":"1"}],"marca":{"id":"0"},"peso_g":650,"comprimento_cm":30,"largura_cm":20,"altura_cm":12,"estoque":10,"sku":"TA101C3","tabela":true}' -Validar
 ```
    - `atributos`: use os ids da ficha. Com opções, mande `"opcao"`; sem opções, mande `"texto"`.
    - `marca` só na Shopee (`{"id":"0"}` = sem marca). `tipo_anuncio` só no Mercado Livre (`gold_special` ou `gold_pro`).
+   - **Cada produto tem a sua ficha.** Preencha só o que está escrito no título, na descrição ou no pedido (salto, cadarço, material, gênero…). País de origem Brasil, Produto personalizado Não e Quantidade 1 podem ir sempre.
+   - **Na dúvida, NÃO chute.** O **peso** o Menork preenche: se o pedido não disser o peso, não invente. Qualquer campo de que você não tenha certeza também: NÃO publique, responda o pedido com a dúvida (`menork.ps1 pedido -Id N -Status feito -Resposta "Dúvida: qual o peso do TJ01? Altura do salto: baixo ou médio?"`) e avise o Menork. Ele preenche na tela dele.
 5. Sem problemas: rode o MESMO comando sem `-Validar` para publicar. Com problemas: arrume e valide de novo, no máximo 3 tentativas.
    - Na Shopee o anúncio nasce oculto e no Mercado Livre pausado; o Menork ativa depois.
    - Se a resposta disser `incerto`, NÃO publique de novo: avise o Menork.
