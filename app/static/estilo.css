@@ -714,50 +714,78 @@ html[data-fundo="luz"] :is(.cartao,.bloco,.arvore){background:rgba(16,16,18,.78)
 @font-face{font-family:"Inter";src:url("/static/fontes/Inter-latin.woff2") format("woff2");font-weight:100 900;font-display:swap;unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
 @font-face{font-family:"Inter";src:url("/static/fontes/Inter-latin-ext.woff2") format("woff2");font-weight:100 900;font-display:swap;unicode-range:U+0100-02AF,U+0304,U+0308,U+0329,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF}
 html[data-tema="azul"]{
-  --chao:#08090b; --painel:#0d0e11; --relevo:#16181d; --borda:#1c1f25; --borda-forte:#2a2f38;
-  --texto:#f4f5f7; --fraco:#8b919c; --apagado:#5d636d;
-  --luz:#1f7ae0; --luz-tinta:#ffffff; --azul:#4a9bff; --brilho:31,122,224;
+  /* as cores do stopped.gg */
+  --chao:#09090b; --painel:#111012; --relevo:#18171a; --borda:#22222b; --borda-forte:#2e2e3a;
+  --texto:#f5f5f7; --fraco:#8a8a92; --apagado:#505050;
+  --luz:#0a66c2; --luz-tinta:#ffffff; --azul:#2b8cee; --brilho:43,140,238; --primaria:10,102,194;
+  --gradiente:linear-gradient(135deg,#0a66c2,#2b8cee);
   --titulo:"Inter",system-ui,sans-serif; --corpo:"Inter",system-ui,sans-serif;
-  background:#08090b}
+  background:#09090b}
 html[data-tema="azul"] body{letter-spacing:-.005em}
 html[data-tema="azul"] h1{font-weight:800;letter-spacing:-.025em}
 html[data-tema="azul"] :is(h2,h3){letter-spacing:-.015em}
-/* fundo: brilhos azuis desfocados nos cantos, mexendo bem devagar */
-html[data-tema="azul"]::before,html[data-tema="azul"] body::before{content:"";position:fixed;z-index:-1;pointer-events:none;border-radius:50%;filter:blur(90px);will-change:transform}
-html[data-tema="azul"]::before{width:640px;height:640px;top:-260px;right:-200px;background:rgba(var(--brilho),.22);animation:brilho-a 26s ease-in-out infinite alternate}
-html[data-tema="azul"] body::before{width:560px;height:560px;bottom:-260px;left:60px;background:rgba(40,110,255,.14);animation:brilho-b 32s ease-in-out infinite alternate}
-html[data-tema="azul"] body::after{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;background:radial-gradient(ellipse at 50% 0,rgba(255,255,255,.025),transparent 60%)}
+/* fundo: dois brilhos azuis desfocados (blur-3xl) nos cantos, mexendo devagar */
+html[data-tema="azul"]::before,html[data-tema="azul"] body::before{content:"";position:fixed;z-index:-1;pointer-events:none;border-radius:50%;filter:blur(64px);will-change:transform}
+html[data-tema="azul"]::before{width:620px;height:620px;top:-240px;right:-200px;background:rgba(var(--primaria),.22);animation:brilho-a 26s ease-in-out infinite alternate}
+html[data-tema="azul"] body::before{width:560px;height:560px;bottom:-240px;left:80px;background:rgba(var(--brilho),.16);animation:brilho-b 32s ease-in-out infinite alternate}
+html[data-tema="azul"] body::after{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;background:linear-gradient(135deg,rgba(var(--primaria),.06),transparent 45%,rgba(17,16,18,.2))}
 @keyframes brilho-a{to{transform:translate3d(-80px,60px,0) scale(1.1)}}
 @keyframes brilho-b{to{transform:translate3d(120px,-50px,0) scale(.92)}}
 @media (prefers-reduced-motion:reduce){html[data-tema="azul"]::before,html[data-tema="azul"] body::before{animation:none}}
 html[data-tema="azul"] #agua{display:none!important}
-/* lateral e cabeçalho */
-html[data-tema="azul"] .lateral{background:rgba(10,11,14,.78);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border-right:1px solid rgba(255,255,255,.05)}
-html[data-tema="azul"] .lateral nav a{transition:background .2s,color .2s}
-html[data-tema="azul"] .lateral nav a:hover{background:rgba(255,255,255,.04)}
-html[data-tema="azul"] .lateral nav a.ativo{background:rgba(var(--brilho),.13);color:#fff}
+/* barra lateral como o cabeçalho deles: secondary/50 + vidro (backdrop-blur-md) + borda */
+html[data-tema="azul"] .lateral{background:rgba(17,16,18,.5);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-right:1px solid var(--borda)}
+/* links: a letra fica azul, devagar (400ms) */
+html[data-tema="azul"] .lateral nav a{transition:color .4s ease-in-out,background .4s ease-in-out}
+html[data-tema="azul"] .lateral nav a svg{transition:color .4s ease-in-out,transform .3s ease-in-out}
+html[data-tema="azul"] .lateral nav a:hover{background:transparent;color:var(--azul)}
+html[data-tema="azul"] .lateral nav a:hover svg{color:var(--azul);transform:scale(1.1)}
+html[data-tema="azul"] .lateral nav a.ativo{background:rgba(var(--primaria),.16);color:#fff}
+html[data-tema="azul"] .lateral nav a.ativo::before{background:var(--gradiente)}
 html[data-tema="azul"] .lateral nav a.ativo svg{color:var(--azul)}
-html[data-tema="azul"] .bolha{background:var(--luz);color:#fff}
-/* cartões e blocos: sem borda, cantos 16px; acendem ao passar o mouse */
-html[data-tema="azul"] :is(.cartao,.bloco,.arvore){background:rgba(22,24,29,.55);border:1px solid rgba(255,255,255,.04);border-radius:16px;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);transition:background .3s cubic-bezier(.4,0,.2,1),border-color .3s,translate .3s,box-shadow .3s}
-html[data-tema="azul"] .cartao:hover{background:rgba(28,31,38,.78);border-color:rgba(var(--brilho),.35);translate:0 -3px;box-shadow:0 14px 34px -18px rgba(var(--brilho),.55)}
-html[data-tema="azul"] .cartao :is(b,strong,h3){transition:color .3s}
+html[data-tema="azul"] a:not(.b):not(.cartao):not(.gasto-linha){transition:color .4s ease-in-out}
+html[data-tema="azul"] main a:not(.b):not(.cartao):not(.gasto-linha):hover{color:var(--azul)}
+html[data-tema="azul"] .bolha{background:var(--gradiente);color:#fff}
+/* blocos (como os cartões de "O que nos torna diferentes"): secondary/50, cantos 16px;
+   no mouse: clareia (secondary/70), borda azul/30 e o título fica azul */
+html[data-tema="azul"] :is(.bloco,.arvore){background:rgba(17,16,18,.5);border:1px solid transparent;border-radius:16px;transition:background .3s cubic-bezier(.4,0,.2,1),border-color .3s cubic-bezier(.4,0,.2,1)}
+html[data-tema="azul"] .bloco:hover{background:rgba(17,16,18,.7);border-color:rgba(var(--primaria),.3)}
+html[data-tema="azul"] .bloco > h2{transition:color .3s cubic-bezier(.4,0,.2,1)}
+html[data-tema="azul"] .bloco:hover > h2{color:var(--azul)}
+/* cartões com foto (como os produtos deles): degradê azul→cinza, vidro, cantos 12px;
+   no mouse: cresce 5%, sombra, título azul e uma luz branca passa na diagonal pela foto */
+html[data-tema="azul"] .cartao{background:linear-gradient(135deg,rgba(var(--primaria),.1),rgba(17,16,18,.1));border:1px solid rgba(34,34,43,.5);border-radius:12px;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);overflow:hidden;transition:transform .3s ease-in-out,box-shadow .3s ease-in-out,border-color .3s ease-in-out,background .3s ease-in-out}
+html[data-tema="azul"] .cartao:hover{transform:scale(1.05);translate:none;box-shadow:0 10px 15px -3px rgba(0,0,0,.5),0 4px 6px -4px rgba(0,0,0,.5);border-color:rgba(var(--primaria),.35);background:linear-gradient(135deg,rgba(var(--primaria),.16),rgba(17,16,18,.2));z-index:2}
+html[data-tema="azul"] .cartao :is(b,strong,h3){transition:color .3s ease-in-out}
 html[data-tema="azul"] .cartao:hover :is(.nome,.produto,b:first-of-type,h3){color:var(--azul)}
-html[data-tema="azul"] .bloco:hover{border-color:rgba(255,255,255,.07)}
-/* botões: azul cheio e contorno azul, com brilho no passar do mouse */
-html[data-tema="azul"] .b{border-radius:10px;transition:background .2s,box-shadow .25s,border-color .2s,filter .2s,translate .12s}
-html[data-tema="azul"] .b:not(.claro):not(.verde):not(.vermelho):hover{filter:none;background:#2b87ee;box-shadow:0 8px 24px -8px rgba(var(--brilho),.8)}
-html[data-tema="azul"] .b.claro{background:transparent;border-color:rgba(var(--brilho),.45);color:var(--texto)}
-html[data-tema="azul"] .b.claro:hover{background:rgba(var(--brilho),.1);border-color:rgba(var(--brilho),.8)}
-html[data-tema="azul"] .b.verde:hover{box-shadow:0 8px 24px -10px rgba(67,196,135,.7)}
-html[data-tema="azul"] :is(input,select,textarea){background:rgba(8,9,11,.7);border-color:#20242b;border-radius:10px;transition:border-color .2s,box-shadow .2s}
-html[data-tema="azul"] :is(input,select,textarea):focus{border-color:var(--luz);box-shadow:0 0 0 3px rgba(var(--brilho),.18);outline:none}
+html[data-tema="azul"] .cartao .foto{position:relative;border-radius:10px}
+html[data-tema="azul"] .cartao .foto::after{content:"";position:absolute;top:50%;left:-120%;width:141%;height:6px;background:#fff;opacity:.85;filter:blur(8px);transform:translate(-50%,-50%) rotate(45deg);pointer-events:none}
+html[data-tema="azul"] .cartao:hover .foto::after{animation:brilho-passa .7s ease-in-out forwards}
+@keyframes brilho-passa{from{left:-60%}to{left:200%}}
+@media (prefers-reduced-motion:reduce){html[data-tema="azul"] .cartao:hover{transform:none}html[data-tema="azul"] .cartao:hover .foto::after{animation:none}}
+/* botões: azul cheio (gradiente) que fica meio transparente no mouse, como o "Registrar" deles; contorno azul nos secundários;
+   setinhas andam 4px para a direita */
+html[data-tema="azul"] .b{border-radius:12px;transition:background-color .3s ease-in-out,box-shadow .3s,border-color .3s,filter .3s,translate .12s}
+html[data-tema="azul"] .b:not(.claro):not(.verde):not(.vermelho){background:var(--luz)}
+html[data-tema="azul"] .b:not(.claro):not(.verde):not(.vermelho):hover{filter:none;background:rgba(var(--primaria),.5);box-shadow:0 0 24px -6px rgba(var(--brilho),.7)}
+html[data-tema="azul"] .b.claro{background:transparent;border-color:rgba(var(--primaria),.6);color:var(--texto)}
+html[data-tema="azul"] .b.claro:hover{background:rgba(var(--primaria),.2);border-color:var(--azul)}
+html[data-tema="azul"] .b.verde:hover{box-shadow:0 0 24px -8px rgba(67,196,135,.7)}
+html[data-tema="azul"] .b svg{transition:transform .3s ease-in-out}
+html[data-tema="azul"] .b:hover svg{transform:translateX(4px)}
+/* pílulas e abas ativas no gradiente azul */
+html[data-tema="azul"] :is(.abas-banco,.crh-filtros) button.ativo{background:var(--gradiente);color:#fff}
+html[data-tema="azul"] .fundo-escolha button.ativo,html[data-tema="azul"] .sl-escolhida{border-color:var(--azul)}
+/* campos */
+html[data-tema="azul"] :is(input,select,textarea){background:rgba(9,9,11,.7);border-color:var(--borda);border-radius:10px;transition:border-color .3s,box-shadow .3s}
+html[data-tema="azul"] :is(input,select,textarea):focus{border-color:var(--luz);box-shadow:0 0 0 3px rgba(var(--primaria),.25);outline:none}
 html[data-tema="azul"] :focus-visible{outline-color:var(--azul)}
 html[data-tema="azul"] .nome-cromado{filter:drop-shadow(0 0 14px rgba(var(--brilho),.35))}
-/* números e destaques em azul */
-html[data-tema="azul"] :is(.numero,.grande-numero,.kpi b){color:var(--azul)}
-html[data-tema="azul"] ::selection{background:rgba(var(--brilho),.45)}
-html[data-tema="azul"] ::-webkit-scrollbar-thumb{background:#22262e;border-color:#08090b}
-
+/* barra de rolagem fininha azul (3px) e seleção de texto azul */
+html[data-tema="azul"] ::-webkit-scrollbar{width:3px;height:3px}
+html[data-tema="azul"] ::-webkit-scrollbar-track{background:transparent}
+html[data-tema="azul"] ::-webkit-scrollbar-thumb{background:var(--luz);border:0;border-radius:16px}
+html[data-tema="azul"] *{scrollbar-width:thin;scrollbar-color:var(--luz) transparent}
+html[data-tema="azul"] ::selection{background:rgba(var(--brilho),.45);color:#fff}
 .tema-escolha .f-escuro{background:linear-gradient(180deg,#161617,#0d0d0e)}
 .tema-escolha .f-azul{background:radial-gradient(70px 50px at 90% 0,rgba(31,122,224,.6),transparent),radial-gradient(60px 40px at 10% 100%,rgba(40,110,255,.35),transparent),#08090b}
