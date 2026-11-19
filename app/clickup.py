@@ -35,8 +35,8 @@ async def chave_salvar(request: Request):
     """Guarda a chave pessoal do ClickUp so no banco local (nunca no repositorio nem no /api/estado) e testa."""
     d = await request.json()
     t = str(d.get("chave") or "").strip()
-    if not t.startswith("pk_"):
-        raise HTTPException(400, "A chave pessoal do ClickUp começa com pk_ (ClickUp › Configurações › Apps › API Token).")
+    if len(t) < 20 or " " in t:
+        raise HTTPException(400, "Isso não parece um token do ClickUp. Copie o token inteiro que o ClickUp mostrou (em geral começa com pk_).")
     antiga = n.ajuste("clickup_chave", "")
     n.gravar_ajuste("clickup_chave", t)
     _cache.clear()
