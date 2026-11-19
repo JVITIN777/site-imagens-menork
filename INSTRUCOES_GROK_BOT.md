@@ -157,7 +157,7 @@ menork.ps1 publicar -Anuncio "TA101 copia 3" -Categoria 100559 -Json '{"atributo
    - Na Shopee o anúncio nasce oculto e no Mercado Livre pausado; o Menork ativa depois.
    - Se a resposta disser `incerto`, NÃO publique de novo: avise o Menork.
    - Se a resposta disser `na_fila`, o B2X está criando: o site acompanha sozinho, aplica a promoção e marca o pedido como feito. NÃO publique de novo; siga para o próximo pedido.
-   - Shopee com promoção: se tiver **preço cheio** maior que o **preço**, o anúncio sobe com o cheio. A Shopee NÃO ganha promoção sozinha: o Menork coloca o anúncio numa promoção da loja pelo site (Lojas dos clientes > Abrir e modificar > Colocar numa promoção). Avise isso no resumo.
+   - Shopee com promoção: se tiver **preço cheio** maior que o **preço**, o anúncio sobe com o cheio. Depois de criado, o site coloca sozinho na promoção de desconto da loja que tem o nome do modelo (ex.: TJ01 vai na "PROMO TJ01 02"; kit vai na de kit). Se não achar uma só, fica em Anúncios criados > Falta promoção para o Menork escolher. Você não mexe em promoção; só avise no resumo.
    - Mercado Livre com promoção: se o anúncio tiver **preço cheio** (preco_antigo) maior que o **preço**, ele sobe com o cheio e o site aplica sozinho a promoção (desconto direto) com o preço menor. Para mudar, use `dados -Preco 59,90 -PrecoAntigo 89,90`.
 6. Termine: `menork.ps1 pedido -Id N -Status feito -Resposta "criado 999888"` (ou o motivo de não ter subido).
 

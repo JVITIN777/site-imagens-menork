@@ -477,13 +477,34 @@ def _registrar(aid, ok, resposta, id_externo, desfazer=None):
 
 
 # ------------------------------------------------------------ historico de anuncios criados (para conferir o status depois)
-def criacao_nova(aid, loja, canal, por, titulo, status, ids=(), pedido_b2x="", mensagem="", pedido_bot=None):
+def criacao_nova(aid, loja, canal, por, titulo, status, ids=(), pedido_b2x="", mensagem="", pedido_bot=None, promo=None):
     with n.con() as c:
         nome = c.execute("SELECT nome FROM anuncios WHERE id=?", (aid,)).fetchone() if aid else None
         return c.execute("INSERT INTO criacoes(quando,atualizado,anuncio_id,anuncio_nome,titulo,loja,canal,por,pedido_b2x,pedido_bot,status,"
-                         "anuncio_ids,mensagem) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                         "anuncio_ids,mensagem,promo) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                          (n.agora(), n.agora(), aid, nome[0] if nome else "", str(titulo or "")[:200], str(loja), canal, por, str(pedido_b2x or ""),
-                          pedido_bot, status, ",".join(map(str, ids)), str(mensagem or "")[:1500])).lastrowid
+                          pedido_bot, status, ",".join(map(str, ids)), str(mensagem or "")[:1500], f"{promo:.2f}" if promo else "")).lastrowid
+
+
+def _promo_do_anuncio(c, aid):
+    """Preco promocional que o Menork pos no anuncio do site (preco menor que o cheio); None se nao tem."""
+    if not aid:
+        return None
+    a = c.execute("SELECT preco, preco_antigo FROM anuncios WHERE id=?", (aid,)).fetchone()
+    if not a:
+        return None
+    preco, cheio = _preco(a["preco"]), _preco(a["preco_antigo"])
+    return preco if preco and cheio and cheio > preco else None
+
+
+def _falta_promo(c, r):
+    """Shopee criado com preco cheio e ainda fora da promocao: devolve o preco promocional que falta colocar."""
+    if r.get("canal") != "shopee" or r.get("promo_feita") or not r.get("anuncio_ids") or r.get("status") != "criado":
+        return ""
+    if r.get("promo"):
+        return r["promo"]
+    v = _promo_do_anuncio(c, r.get("anuncio_id"))
+    return f"{v:.2f}" if v else ""
 
 
 def criacao_mudar(pedido_b2x="", cid=None, **campos):
@@ -529,6 +550,8 @@ def criacoes():
                          "canal": dados.get("canal", ""), "por": "Grok" + (f" ({p['bot']})" if p["bot"] else ""),
                          "status": "criado" if criado_txt else {"aberto": "esperando_grok", "pego": "grok_fazendo", "feito": "grok_terminou"}.get(p["status"], p["status"]),
                          "mensagem": resp, "pedido_bot": p["id"], "anuncio_ids": ",".join(re.findall(r"\b\d{5,}\b", resp)[:5]) if criado_txt else "", "pedido_b2x": "", "situacao_loja": "", "url": ""})
+        for r in linhas + grok:
+            r["falta_promo"] = _falta_promo(c, r)
     return {"criacoes": sorted(linhas + grok, key=lambda r: r["quando"] or "", reverse=True)}
 
 
@@ -736,12 +759,16 @@ def criar_do_site(d, por="você"):
             saida["promocao"] = aplicar_desconto_ml(loja, [str(x) for x in ids][:100], promo_ml)
         if not ids and 200 <= status < 300 and saida["pedido_id"] and not problemas:  # foi para a fila do B2X
             saida["na_fila"] = True
-            acompanhar(loja, saida["pedido_id"], promo_ml, d.get("_pedido_bot"), aid)
+            acompanhar(loja, saida["pedido_id"], promo_ml, d.get("_pedido_bot"), aid, promo_shopee)
         _registrar(aid, ok, f"criar no {CANAIS.get(canal, canal)}: {'criado ' + ', '.join(map(str, ids[:5])) if ok else (problemas[:1] or ['falhou'])[0]}",
                    ids[0] if ids else "", r.get("desfazer_com"))
         criacao_nova(aid, loja, canal, por, a["titulo"], "criado" if ok else "na_fila" if saida.get("na_fila") else "erro", ids, saida["pedido_id"],
                      "; ".join((problemas or saida["avisos"])[:3]) + (" " + saida["promocao"]["msg"] if saida.get("promocao") else ""),
-                     d.get("_pedido_bot"))
+                     d.get("_pedido_bot"), promo_shopee)
+        if ok and promo_shopee and ids:
+            saida["promocao"] = incluir_na_promo_do_modelo(loja, ids[0], aid, promo_shopee)
+            if saida["promocao"]["ok"]:
+                saida.pop("promocao_shopee", None)
     return saida
 
 
@@ -1069,7 +1096,7 @@ async def rota_desconto_ml(request: Request):
 _acompanhando = set()
 
 
-def acompanhar(loja, pedido_id, promo=None, pedido_bot=None, aid=None):
+def acompanhar(loja, pedido_id, promo=None, pedido_bot=None, aid=None, promo_shopee=None):
     """Consulta o /criar/status ate o fim (no maximo 40 min). No fim: aplica a promocao do ML (se houver),
     marca o pedido do bot como feito e registra no historico do anuncio."""
     import threading
@@ -1092,6 +1119,9 @@ def acompanhar(loja, pedido_id, promo=None, pedido_bot=None, aid=None):
                     promo_txt = ""
                     if ok and promo:
                         promo_txt = " " + aplicar_desconto_ml(loja, ids, promo)["msg"]
+                    if ok and promo_shopee:
+                        criacao_mudar(pedido_id, status="criado", anuncio_ids=",".join(ids))
+                        promo_txt = " " + incluir_na_promo_do_modelo(loja, ids[0], aid, promo_shopee)["msg"]
                     resposta = (f"criado {', '.join(ids)} ({s['estado']})" if ok else
                                 f"não subiu ({s['estado']}): {s['motivo'] or '; '.join(s['erros'][:2])}") + promo_txt
                     with n.con() as c:
@@ -1115,7 +1145,7 @@ TIPO_PROMO = {"desconto": "Desconto", "relampago": "Relâmpago", "oferta_relampa
 
 
 @rota.get("/api/b2x/promocoes-loja")
-def promocoes_loja(loja: str):
+def promocoes_loja(loja: str, aid: int = 0):
     status, d = chamar("GET", "/v1/promocoes?" + urllib.parse.urlencode({"loja": loja}), timeout=120)
     _ok(status, d, "Ler as promoções da loja")
     lista = []
@@ -1135,7 +1165,60 @@ def promocoes_loja(loja: str):
                       "motivo": _frase(obs) if obs else "", "vagas_livres": vagas.get("livres") if isinstance(vagas, dict) else None,
                       "renova": bool(p.get("renovacao_automatica"))})
     lista.sort(key=lambda x: (not x["pode_incluir"], x["tipo"] != "desconto", x["inicio"]))
-    return {"promocoes": lista, "avisos": [_frase(x) for x in (d.get("avisos") or [])][:5]}
+    sug = promo_do_modelo(lista, *_ref_kit(aid)) if aid else None
+    return {"promocoes": lista, "avisos": [_frase(x) for x in (d.get("avisos") or [])][:5], "sugerida": sug["id"] if sug else ""}
+
+
+def _ref_kit(aid):
+    with n.con() as c:
+        a = c.execute("SELECT nome, titulo FROM anuncios WHERE id=?", (aid,)).fetchone() if aid else None
+    nome = (a["nome"] if a else "") or ""
+    ref = (nome.strip().split() or [""])[0].upper()
+    return ref, bool(re.search(r"\bkit\b", unicodedata.normalize("NFKD", nome + " " + ((a["titulo"] if a else "") or "")).lower()))
+
+
+def promo_do_modelo(promocoes, ref, kit=False):
+    """A promocao de desconto da loja que leva o nome do modelo (ex.: "PROMO TJ01 02" para o TJ01).
+    Kit vai na promocao de kit; unitario na que nao e de kit. So devolve se houver UMA melhor (sem empate)."""
+    if not ref or len(ref) < 3:
+        return None
+    achadas = []
+    for p in promocoes:
+        nome = unicodedata.normalize("NFKD", str(p.get("nome") or "")).upper()
+        if p.get("tipo") != "desconto" or not p.get("pode_incluir") or not re.search(rf"(?<![A-Z0-9]){re.escape(ref)}(?![A-Z0-9])", nome):
+            continue
+        achadas.append((("KIT" in nome.split()) == kit, p))
+    certas = [p for ok, p in achadas if ok] or ([] if kit else [p for ok, p in achadas])
+    return certas[0] if len(certas) == 1 else None
+
+
+def incluir_na_promo_do_modelo(loja, anuncio_, aid, preco):
+    """Depois de criar na Shopee: coloca sozinho na promocao do mesmo modelo (simula e, se a Shopee aceitar, confirma)."""
+    try:
+        ref, kit = _ref_kit(aid)
+        p = promo_do_modelo(promocoes_loja(loja)["promocoes"], ref, kit)
+        if not p:
+            return {"ok": False, "msg": f"Não achei uma promoção com o nome do modelo {ref}: escolha a promoção na tela."}
+        base = {"loja": loja, "id": p["id"], "tipo": "desconto", "mudancas": {"incluir": [{"produto_id": str(anuncio_), "variacoes": [{"id": None, "preco_promocional": preco}]}]}}
+        cores = _cores_do(_detalhe(loja, str(anuncio_))[0])
+        if cores:
+            base["mudancas"]["incluir"][0]["variacoes"] = [{"cor": c_, "preco_promocional": preco} for c_ in cores]
+        st, r = chamar("POST", "/v1/promocoes/editar", dict(base, simular=True), timeout=180)
+        prob = [_frase(x) for x in (r.get("problemas") or r.get("erros") or [])][:3]
+        if not 200 <= st < 300 or prob or r.get("validado") is False or not r.get("pedido_id"):
+            return {"ok": False, "msg": f"A Shopee não aceitou na {p['nome']}: {'; '.join(prob) or texto_erro(r) or st}"}
+        st, r = chamar("POST", "/v1/promocoes/editar", dict(base, pedido_id=r["pedido_id"]), timeout=180)
+        falhas = [_frase(x) for x in (r.get("falhas") or [])][:3]
+        ok = 200 <= st < 300 and r.get("success", True) is not False and not (falhas and not r.get("aplicadas"))
+        if ok:
+            with n.con() as c:
+                c.execute("UPDATE criacoes SET promo_feita=?, atualizado=? WHERE ','||anuncio_ids||',' LIKE ?",
+                          (f"{p['nome']} R$ {preco:.2f}", n.agora(), f"%,{anuncio_},%"))
+        n.registrar(f"B2X: anúncio {anuncio_} {'entrou sozinho' if ok else 'não entrou'} na promoção {p['nome']} da loja {loja}")
+        return {"ok": ok, "promocao": p["nome"], "msg": f"Entrou na promoção {p['nome']} por R$ {preco:.2f}".replace(".", ",") + "." if ok
+                else f"Não entrou na {p['nome']}: {'; '.join(falhas) or texto_erro(r) or st}"}
+    except HTTPException as e:
+        return {"ok": False, "msg": f"Não consegui colocar na promoção: {e.detail}"}
 
 
 @rota.post("/api/b2x/promocao-incluir")
@@ -1182,6 +1265,10 @@ async def promocao_incluir(request: Request):
     if confirmar:
         ok = ok and not (falhas and not r.get("aplicadas"))
         n.registrar(f"B2X: anúncio {anuncio_} {'entrou' if ok else 'não entrou'} na promoção {pid} ({tipo}) da loja {loja}")
+        if ok:
+            with n.con() as c:
+                c.execute("UPDATE criacoes SET promo_feita=?, atualizado=? WHERE ','||anuncio_ids||',' LIKE ?",
+                          (f"{pid} ({tipo}) R$ {preco:.2f}", n.agora(), f"%,{anuncio_},%"))
     return {"ok": ok, "simulado": not confirmar, "pedido_id": r.get("pedido_id") or "", "problemas": problemas + falhas,
             "avisos": [_frase(x) for x in (r.get("avisos") or [])][:8], "itens": itens, "cores": cores,
             "criterios": r.get("criterios_shopee") if relampago else None}

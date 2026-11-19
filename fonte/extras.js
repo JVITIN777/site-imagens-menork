@@ -417,7 +417,10 @@ async function b2Publicar() {
   if (B2.lote && B2.lote.size > 1) return b2PublicarLote();
   b2Carregando('Criando o anúncio no marketplace. Não feche esta janela…');
   try { const r = await b2post('/api/b2x/criar', { ...B2.corpo, confirmar: true, pedido_id: B2.pedido });
+    B2.promoShp = r.promocao_shopee || '';
     if (r.na_fila) return b2Fila(r.pedido_id);
+    // Shopee com preço promocional: já abre a escolha da promoção (você escolhe, simula e confirma)
+    if (r.criado && B2.canal === 'shopee' && r.promocao_shopee && r.anuncio_ids?.length) return psAbrir(B2.loja, r.anuncio_ids[0], r.promocao_shopee, B2.aid);
     b2Tela(r.criado ? `<h2>Anúncio criado</h2><div class="nota"><b>${esc(B2CANAL[B2.canal])}: ${r.anuncio_ids.map(esc).join(', ')}</b><span>Situação: ${esc(({ UNLIST: 'oculto', unlist: 'oculto', paused: 'pausado', PAUSED: 'pausado', active: 'ativo', NORMAL: 'ativo' })[r.status] || r.status || (B2.canal === 'shopee' ? 'oculto' : 'pausado'))}. Revise no marketplace e ative.</span>${r.divergencias.map(x => `<span>Ficou diferente: ${esc(x)}</span>`).join('')}</div>${r.promocao ? `<div class="nota ${r.promocao.ok ? '' : 'ruim'}"><span>${esc(r.promocao.msg)}</span></div>` : ''}${b2Lista('Avisos', r.avisos)}<div class="acoes">${B2.canal === 'shopee' && r.anuncio_ids.length ? `<button class="b verde" data-promo-shp="${esc(r.anuncio_ids[0])}" data-loja="${esc(B2.loja)}" data-preco="${esc(r.promocao_shopee || '')}">Colocar numa promoção</button>` : ''}<button class="b ${B2.canal === 'shopee' ? 'claro' : ''}" data-fechar>Fechar</button></div>`
       : `<h2>Não foi criado</h2>${r.incerto ? '<div class="nota ruim"><span>A resposta ficou incerta. Não crie de novo: confira a loja no marketplace antes. Repetir por aqui usa o mesmo pedido e não duplica.</span></div>' : ''}<div class="nota ruim">${r.problemas.map(p => `<span>${esc(p)}</span>`).join('') || '<span>O marketplace não devolveu o código do anúncio.</span>'}</div><div class="acoes"><button class="b" data-b2="publicar">Tentar de novo (não duplica)</button><button class="b claro" data-b2="ficha">Voltar</button></div>`);
     window.AO_DESENHAR?.(B2.aid);
@@ -1204,10 +1207,13 @@ document.addEventListener('click', e => {
 // Shopee: mostra as promocoes que a loja ja tem; voce escolhe uma, ajusta o preco, simula e confirma
 const PS = {};
 const reais = v => v == null || v === '' || isNaN(Number(String(v).replace(',', '.'))) ? (v ?? '') : 'R$ ' + Number(String(v).replace(',', '.')).toFixed(2).replace('.', ',');
-async function psAbrir(loja, anuncio, preco) {
+async function psAbrir(loja, anuncio, preco, aid) {
   Object.assign(PS, { loja, anuncio, preco: preco ? String(preco).replace('.', ',') : (PS.anuncio === anuncio ? PS.preco : ''), escolhida: null, lista: null, voltarMk: !!(MK.atual && MK.atual.id === anuncio) });
   b2Carregando('Lendo as promoções da loja na Shopee…');
-  try { const r = await b2get('/api/b2x/promocoes-loja?loja=' + encodeURIComponent(loja)); PS.lista = r.promocoes; PS.avisos = r.avisos; psMostrar(); }
+  try { const r = await b2get('/api/b2x/promocoes-loja?loja=' + encodeURIComponent(loja) + (aid ? '&aid=' + aid : '')); PS.lista = r.promocoes; PS.avisos = r.avisos; PS.escolhida = r.sugerida || null; PS.sugerida = r.sugerida || '';
+    // a promoção do mesmo modelo já vem escolhida no topo
+    if (r.sugerida) PS.lista = [...PS.lista.filter(p => p.id === r.sugerida), ...PS.lista.filter(p => p.id !== r.sugerida)];
+    psMostrar(); }
   catch (err) { b2Erro(err); }
 }
 function psMostrar(msg = '') {
@@ -1215,7 +1221,7 @@ function psMostrar(msg = '') {
   if (!PS.escolhida && abertas.length) PS.escolhida = abertas[0].id;
   const esc_ = PS.lista.find(p => p.id === PS.escolhida), relampago = esc_?.tipo === 'relampago';
   const card = p => `<label class="ps-promo ${p.pode_incluir ? '' : 'fechada'} ${p.id === PS.escolhida ? 'escolhida' : ''}"><input type="radio" name="ps" value="${esc(p.id)}" ${p.id === PS.escolhida ? 'checked' : ''} ${p.pode_incluir ? '' : 'disabled'}>
-    <span><div><b>${esc(p.nome || p.tipo_nome)}</b>${p.nome ? ` <em class="ps-tipo">${esc(p.tipo_nome)}</em>` : ''}${p.renova ? ' <em class="ps-tipo">renova sozinha</em>' : ''}</div>
+    <span><div><b>${esc(p.nome || p.tipo_nome)}</b>${p.nome ? ` <em class="ps-tipo">${esc(p.tipo_nome)}</em>` : ''}${p.renova ? ' <em class="ps-tipo">renova sozinha</em>' : ''}${p.id === PS.sugerida ? ' <em class="ps-tipo ps-mesmo">mesmo modelo</em>' : ''}</div>
     <small>${esc(p.inicio)} até ${esc(p.fim)}${p.produtos != null ? ` · ${esc(p.produtos)} produto(s)` : ''}${p.vagas_livres != null ? ` · ${esc(p.vagas_livres)} vaga(s)` : ''}${p.status ? ' · ' + esc(p.status.replace(/_/g, ' ')) : ''}</small>
     ${p.pode_incluir ? '' : `<small class="ps-motivo">Não aceita anúncio novo agora${p.motivo ? ': ' + esc(p.motivo) : ''}</small>`}</span></label>`;
   b2Tela(`<h2>Colocar numa promoção <small>anúncio ${esc(PS.anuncio)} · Shopee</small></h2>
@@ -1236,6 +1242,7 @@ async function psEnviar(confirmar) {
     const r = await b2post('/api/b2x/promocao-incluir', { loja: PS.loja, id: p.id, tipo: p.tipo, anuncio: PS.anuncio, preco: PS.preco, estoque_promocional: PS.estoque, confirmar, pedido_id: confirmar ? PS.pedido : '' });
     if (!confirmar) PS.pedido = r.pedido_id;
     const tabela = r.itens.length ? `<table class="tabela"><tr><th>Variação</th><th>Preço cheio</th><th>Na promoção</th><th>Desconto</th></tr>${r.itens.map(i => `<tr><td>${esc(i.variacao)}</td><td>${esc(reais(i.preco_atual))}</td><td><b>${esc(reais(i.preco_promocional))}</b></td><td>${i.desconto != null ? esc(i.desconto) + '%' : ''}</td></tr>`).join('')}</table>` : '';
+    if (confirmar && r.ok && CR_H.lista) { CR_H.lista = null; if (ROTA.startsWith('/criados')) RENDER(); }
     if (confirmar) return b2Tela(`<h2>${r.ok ? 'Anúncio na promoção' : 'Não entrou na promoção'}</h2>
       <div class="nota ${r.ok ? '' : 'ruim'}"><span>${r.ok ? `Anúncio ${esc(PS.anuncio)} em <b>${esc(p.nome || p.tipo_nome)}</b> por ${esc(reais(PS.preco))}. A Shopee pode levar 1 minuto para mostrar.` : ''}</span>${r.problemas.map(x => `<span>${esc(x)}</span>`).join('')}</div>${tabela}
       <div class="acoes">${PS.voltarMk ? '<button class="b" id="mk-reabrir">Ver o anúncio de novo</button>' : ''}<button class="b claro" data-fechar>Fechar</button></div>`);
@@ -1245,7 +1252,7 @@ async function psEnviar(confirmar) {
   } catch (err) { b2Erro(err); }
 }
 document.addEventListener('click', e => {
-  const a = e.target.closest('[data-promo-shp]'); if (a) return psAbrir(a.dataset.loja, a.dataset.promoShp, a.dataset.preco);
+  const a = e.target.closest('[data-promo-shp]'); if (a) return psAbrir(a.dataset.loja, a.dataset.promoShp, a.dataset.preco, a.dataset.aid || B2.aid || '');
   if (e.target.closest('#ps-simular')) return psEnviar(false);
   if (e.target.closest('#ps-confirmar')) return psEnviar(true);
   if (e.target.closest('#ps-voltar')) return psMostrar();
@@ -1258,7 +1265,7 @@ async function b2Fila(pedido) {
   try { const s = await b2get(`/api/b2x/criar/status?pedido_id=${encodeURIComponent(pedido)}&loja=${encodeURIComponent(B2.loja)}`);
     if (s.final || s.parar) {
       const ok = s.anuncio_id && !['recusado', 'apagado', 'parado'].includes(s.estado);
-      return b2Tela(ok ? `<h2>Anúncio criado</h2><div class="nota"><b>${esc(B2CANAL[B2.canal])}: ${esc(s.anuncio_id)}</b><span>Situação: ${esc(s.estado)}. ${B2.canal === 'mercadolivre' ? 'Se o anúncio tem preço cheio maior, a promoção entra sozinha em instantes.' : ''}</span></div><div class="acoes"><button class="b" data-fechar>Fechar</button></div>`
+      return b2Tela(ok ? `<h2>Anúncio criado</h2><div class="nota"><b>${esc(B2CANAL[B2.canal])}: ${esc(s.anuncio_id)}</b><span>Situação: ${esc(s.estado)}. ${B2.canal === 'mercadolivre' ? 'Se o anúncio tem preço cheio maior, a promoção entra sozinha em instantes.' : B2.promoShp ? `Subiu com o preço cheio; o site coloca sozinho na promoção do mesmo modelo por ${esc(reais(B2.promoShp))}. Se não achar, fica em Anúncios criados › Falta promoção.` : ''}</span></div><div class="acoes">${B2.canal === 'shopee' && B2.promoShp ? `<button class="b verde" data-promo-shp="${esc(String(s.anuncio_id).split(',')[0])}" data-loja="${esc(B2.loja)}" data-preco="${esc(B2.promoShp)}">Colocar na promoção agora</button>` : ''}<button class="b ${B2.canal === 'shopee' && B2.promoShp ? 'claro' : ''}" data-fechar>Fechar</button></div>`
         : `<h2>Não foi criado <small>${esc(s.estado)}</small></h2><div class="nota ruim">${s.motivo ? `<span>${esc(s.motivo)}</span>` : ''}${s.erros.map(x => `<span>${esc(x)}</span>`).join('')}</div><div class="acoes"><button class="b claro" data-b2="ficha">Voltar</button></div>`);
     }
     b2Tela(`<h2>Publicando <small>${esc(s.estado)}</small></h2><div class="cr-andamento"><span class="abertura-barra"><i></i></span><p>${esc(s.etapa || 'Na fila do B2X…')}</p></div>
@@ -1421,18 +1428,18 @@ Object.assign(TELAS, {
     const lojaNome = id => { const l = (typeof todasLojas === 'function' && LOJAS.clientes) ? todasLojas().find(x => x.id === id) : null; return l ? `${l.cliente} · ${l.nome}` : id; };
     if (!LOJAS.clientes && typeof carregarLojas === 'function' && !LOJAS.carregando) carregarLojas().then(() => ROTA.startsWith('/criados') && RENDER());
     const grupo = r => ({ criado: 'ok', erro: 'ruim', cancelado: 'ruim' }[r.status] || 'espera');
-    const conta = { todos: CR_H.lista.length, ok: 0, espera: 0, ruim: 0 }; CR_H.lista.forEach(r => conta[grupo(r)]++);
-    const l = CR_H.lista.filter(r => CR_H.filtro === 'todos' || grupo(r) === CR_H.filtro);
+    const conta = { todos: CR_H.lista.length, ok: 0, espera: 0, ruim: 0, promo: 0 }; CR_H.lista.forEach(r => { conta[grupo(r)]++; if (r.falta_promo) conta.promo++; });
+    const l = CR_H.lista.filter(r => CR_H.filtro === 'todos' || (CR_H.filtro === 'promo' ? r.falta_promo : grupo(r) === CR_H.filtro));
     const mk = c => ({ shopee: 'Shopee', mercadolivre: 'Mercado Livre' }[c] || c || '');
     return `<div class="cabeca"><h1>Anúncios criados <small>tudo que foi mandado para as lojas, por você ou pelo Grok</small></h1><div class="acoes"><button class="b claro" id="crh-atualizar">Atualizar</button></div></div>
-      <div class="crh-filtros">${[['todos', 'Todos'], ['ok', 'Criados'], ['espera', 'Esperando'], ['ruim', 'Não subiram']].map(([k, n]) => `<button type="button" data-crh-filtro="${k}" class="${CR_H.filtro === k ? 'ativo' : ''}">${n} <b>${conta[k]}</b></button>`).join('')}</div>
+      <div class="crh-filtros">${[['todos', 'Todos'], ['ok', 'Criados'], ['espera', 'Esperando'], ['ruim', 'Não subiram'], ['promo', 'Falta promoção']].map(([k, n]) => `<button type="button" data-crh-filtro="${k}" class="${CR_H.filtro === k ? 'ativo' : ''}">${n} <b>${conta[k]}</b></button>`).join('')}</div>
       ${l.length ? `<div class="bloco crh"><table class="tabela crh-tabela"><tr><th>Quando</th><th>Anúncio</th><th>Loja</th><th>Quem</th><th>Status</th><th></th></tr>
       ${l.map(r => { const [cls, txt] = CR_ST[r.status] || ['aviso', r.status || '?']; const ids = (r.anuncio_ids || '').split(',').filter(Boolean);
         return `<tr><td class="pequeno">${esc((r.quando || '').replace('T', ' ').slice(0, 16))}</td>
           <td><b>${esc(r.anuncio_nome || r.titulo || '—')}</b>${r.titulo && r.anuncio_nome ? `<small class="crh-sub">${esc(r.titulo.slice(0, 70))}</small>` : ''}${ids.length ? `<small class="crh-sub">Código: ${ids.map(esc).join(', ')}</small>` : ''}</td>
           <td>${esc(lojaNome(r.loja))}<small class="crh-sub">${esc(mk(r.canal))}</small></td><td class="pequeno">${esc(r.por || '')}</td>
-          <td><span class="crh-st crh-${cls}">${txt}</span>${r.situacao_loja ? `<small class="crh-sub">Na loja: ${esc(r.situacao_loja)}</small>` : ''}${r.mensagem ? `<small class="crh-sub crh-msg" title="${esc(r.mensagem)}">${esc(r.mensagem.slice(0, 140))}</small>` : ''}</td>
-          <td><div class="crh-acoes">${typeof r.id === 'number' ? `<button class="b claro mini" data-crh-conferir="${r.id}" ${CR_H.conferindo.has(r.id) ? 'disabled' : ''}>${CR_H.conferindo.has(r.id) ? 'Conferindo…' : 'Conferir agora'}</button>` : ''}${r.url ? `<a class="b claro mini" href="${esc(r.url)}" target="_blank" rel="noopener">Abrir na loja</a>` : ''}${r.anuncio_id ? `<a class="b claro mini" href="#" data-rota="/anuncios/${r.anuncio_id}">Ver no site</a>` : ''}</div></td></tr>`; }).join('')}</table></div>`
+          <td><span class="crh-st crh-${cls}">${txt}</span>${r.situacao_loja ? `<small class="crh-sub">Na loja: ${esc(r.situacao_loja)}</small>` : ''}${r.falta_promo ? `<small class="crh-sub crh-falta">Falta a promoção: subiu com o preço cheio. Promo: ${esc(reais(r.falta_promo))}</small>` : r.promo_feita ? `<small class="crh-sub">Na promoção: ${esc(r.promo_feita)}</small>` : ''}${r.mensagem ? `<small class="crh-sub crh-msg" title="${esc(r.mensagem)}">${esc(r.mensagem.slice(0, 140))}</small>` : ''}</td>
+          <td><div class="crh-acoes">${r.falta_promo && ids.length ? `<button class="b verde mini" data-promo-shp="${esc(ids[0])}" data-loja="${esc(r.loja)}" data-preco="${esc(r.falta_promo)}" data-aid="${esc(r.anuncio_id || '')}">Colocar na promoção</button>` : ''}${typeof r.id === 'number' ? `<button class="b claro mini" data-crh-conferir="${r.id}" ${CR_H.conferindo.has(r.id) ? 'disabled' : ''}>${CR_H.conferindo.has(r.id) ? 'Conferindo…' : 'Conferir agora'}</button>` : ''}${r.url ? `<a class="b claro mini" href="${esc(r.url)}" target="_blank" rel="noopener">Abrir na loja</a>` : ''}${r.anuncio_id ? `<a class="b claro mini" href="#" data-rota="/anuncios/${r.anuncio_id}">Ver no site</a>` : ''}</div></td></tr>`; }).join('')}</table></div>`
       : `<div class="vazio"><h2>${CR_H.lista.length ? 'Nada neste filtro' : 'Nenhum anúncio criado ainda'}</h2><p>Os anúncios que você ou o Grok mandarem para as lojas aparecem aqui, com o status.</p></div>`}
       <p class="pequeno">"Conferir agora" pergunta ao B2X: se está na fila, o andamento; se já foi criado, a situação do anúncio na loja (ativo, em análise, pausado…). Os que você criou pelo site antes desta versão não aparecem; os pedidos ao Grok aparecem todos.</p>`;
   }

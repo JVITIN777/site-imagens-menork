@@ -893,3 +893,5 @@ html[data-tema="azul"] ::selection{background:rgba(var(--brilho),.45);color:#fff
 .ck-tab th:not(.ck-nome),.ck-tab td:not(.ck-nome){width:150px;max-width:150px}
 .ck-tab .ck-nome{width:380px}
 .ck-tab{min-width:0}.ck-rolagem{width:fit-content;max-width:100%}
+.crh-falta{color:var(--amarelo,#f5b400);font-weight:600}
+.ps-mesmo{background:var(--verde,#2ecd6f)!important;color:#fff!important}
