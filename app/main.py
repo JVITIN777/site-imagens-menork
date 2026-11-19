@@ -59,6 +59,8 @@ def _ligar():
     (n.pasta_dados() / "chave_bots.txt").write_text(n.chave_bots(), encoding="ascii")  # lida pelo menork.ps1
     n.ligar_leitor()
     atu.ligar_vigia()
+    import threading
+    threading.Thread(target=n.arrumar_sem_tipo, daemon=True).start()  # as que ficaram Sem tipo ganham tipo
 
 
 @app.middleware("http")

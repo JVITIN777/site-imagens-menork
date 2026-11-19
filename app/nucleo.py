@@ -277,6 +277,73 @@ _RUIDO = {"1111", "ia", "fb", "info", "informativo", "tabela", "medidas", "de", 
           "fundo", "branco", "fundobranco", "final", "novo", "nova"}
 
 
+def tipo_pela_imagem(caminho):
+    """Quando o nome nao diz o tipo (ex.: foto copiada de um anuncio, 01.jpg), olha a propria imagem:
+    foto de cena = ia; fundo todo branco = fb; fundo claro com linhas de tabela = tabela; fundo claro com texto = informativo."""
+    try:
+        with Image.open(caminho) as im:
+            im = im.convert("RGB")
+            p = im.resize((96, 96)).load()
+            g = im.convert("L").resize((256, 256)).load()
+    except Exception:
+        return ""
+    N, branco, claro, borda_b, borda_n, bordas = 96, 0, 0, 0, 0, 0
+    lum = lambda c: 0.3 * c[0] + 0.59 * c[1] + 0.11 * c[2]
+    for y in range(N):
+        for x in range(N):
+            c = p[x, y]
+            b = min(c) > 238
+            branco += b
+            claro += lum(c) > 205
+            if x < 5 or y < 5 or x > N - 6 or y > N - 6:
+                borda_n += 1
+                borda_b += b
+            if x < N - 1 and abs(lum(c) - lum(p[x + 1, y])) > 40:
+                bordas += 1
+    T = N * N
+    w, l, bw, ed = branco / T, claro / T, borda_b / borda_n, bordas / T
+    linhas = 0
+    for y in range(1, 256):
+        corrida = melhor = 0
+        for x in range(256):
+            if abs(g[x, y] - g[x, y - 1]) > 18:
+                corrida += 1
+                melhor = max(melhor, corrida)
+            else:
+                corrida = 0
+        linhas += melhor > 102
+    if w < 0.10:
+        return "ia"
+    if bw >= 0.9 and ed < 0.06:
+        return "fb"
+    if l >= 0.84 and linhas >= 2 and ed < 0.06:
+        return "tabela"
+    if ed >= 0.06 or (w >= 0.2 and bw < 0.6):
+        return "informativo"
+    return ""
+
+
+def arrumar_sem_tipo():
+    """Imagens que ficaram Sem tipo: tenta de novo pelo nome (padroes novos do Grok) e, se nao der, pela imagem."""
+    with con() as c:
+        linhas = c.execute("SELECT id, nome_original, arquivo FROM imagens WHERE COALESCE(tipo,'')=''").fetchall()
+    feitos = 0
+    for l in linhas:
+        info = classificar(l["nome_original"] or "")
+        tipo = info["tipo"] if info["tipo"] in TIPO_NOME else ""
+        if not tipo:
+            tipo = tipo_pela_imagem(pasta_repo() / l["arquivo"])
+        if tipo:
+            with con() as c:
+                c.execute("UPDATE imagens SET tipo=? WHERE id=? AND COALESCE(tipo,'')=''", (tipo, l["id"]))
+                if info.get("produto"):
+                    c.execute("UPDATE imagens SET produto=? WHERE id=? AND COALESCE(produto,'')=''", (info["produto"], l["id"]))
+            feitos += 1
+    if feitos:
+        registrar(f"{feitos} imagem(ns) sem tipo ganharam tipo (pelo nome ou pela própria imagem)")
+    return feitos
+
+
 def classificar(nome, pastas=()):
     """Tenta descobrir produto, cor, tipo e anuncio pelo nome do arquivo e pelas subpastas."""
     r = {"produto": "", "cor": "", "tipo": "", "anuncio": ""}
@@ -298,6 +365,20 @@ def classificar(nome, pastas=()):
             r["cor"] = _cor(partes[-1])
         elif partes:
             r["anuncio"] = partes[0].upper()
+        return r
+
+    # nomes do Grok: ta01capa_pd_02, tj01ia2_ca_01, tj01infcs_CA_01_1111, tj01tab_pr_01 (produto + tipo + cor)
+    m = re.match(r"^([a-z]{1,5}\d{1,4}[a-z]?)(ia\d*|cena|inf[a-z]*|info|informativo|tab[a-z]*|tabela|medidas|capa|fb)(?:[_\-\s]+(.*))?$", base)
+    if m and not (m.group(2) == "capa" and re.match(r"^capa[_\-]", base)):
+        t = m.group(2)
+        tipo = ("ia" if t.startswith("ia") else "cena" if t == "cena" else "informativo" if t.startswith("inf") else
+                "tabela" if t.startswith("tab") or t == "medidas" else "fb" if t == "fb" else "capa")
+        if tipo == "capa" and kit:
+            tipo = f"capa_kit{kit.group(1)}"
+        elif tipo == "fb" and kit:
+            tipo = f"kit{kit.group(1)}_fb"
+        partes = [x for x in re.split(r"[_\-\s]+", m.group(3) or "") if x and x != "1111" and not re.fullmatch(r"r?\d+|t\d+|kit\d|v\d+", x)]
+        r.update(produto=m.group(1).upper(), tipo=tipo, cor=_cor(partes[0]) if partes else "")
         return r
 
     m = re.match(r"^([a-z0-9]+?)ia[_\-]([^_]+)[_\-]\d+(?:[_\-]r\d+)?(?:[_\-]1111)?$", base)
@@ -400,6 +481,9 @@ def importar(caminho, nome=None, pastas=(), origem="", mover=False, anuncio_nome
     info["produto"] = info["produto"].upper()
     if info["tipo"] not in TIPO_NOME:
         info["tipo"] = ""
+    tipo_do_nome = info["tipo"]  # a aprovacao automatica so vale pelo nome, nunca pelo palpite da imagem
+    if not info["tipo"]:  # o nome nao diz: olha a imagem
+        info["tipo"] = tipo_pela_imagem(destino)
     try:
         digital = dhash(destino)
     except Exception:
@@ -414,7 +498,7 @@ def importar(caminho, nome=None, pastas=(), origem="", mover=False, anuncio_nome
             "INSERT INTO imagens(sha256,arquivo,nome_original,origem,produto,cor,tipo,status,"
             "largura,altura,bytes,criado_em,conta,alertas,dhash) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (sha, rel.as_posix(), nome, origem, info["produto"], info["cor"], info["tipo"],
-             status_inicial(info["produto"], info["tipo"]), largura, altura,
+             status_inicial(info["produto"], tipo_do_nome), largura, altura,
              destino.stat().st_size, agora(), conta, json.dumps(alertas, ensure_ascii=False) if alertas is not None else "",
              digital))
         imagem_id = cur.lastrowid
