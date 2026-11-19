@@ -114,19 +114,99 @@ def _tarefa_curta(t):
             "subtarefas": len(t.get("subtasks") or [])}
 
 
+def _campos_def(lid):
+    """Campos personalizados da lista: id -> {nome, tipo, opcoes{id/orderindex: (nome, cor)}}."""
+    defs = {}
+    for f in _chamar("GET", f"/list/{urllib.parse.quote(lid)}/field").get("fields") or []:
+        ops = {}
+        for o in (f.get("type_config") or {}).get("options") or []:
+            v = (o.get("name") or o.get("label") or "", o.get("color") or "#555")
+            ops[str(o.get("id"))] = v
+            if o.get("orderindex") is not None:
+                ops["#" + str(o.get("orderindex"))] = v
+        defs[f["id"]] = {"nome": f.get("name", ""), "tipo": f.get("type", ""), "opcoes": ops}
+    return defs
+
+
+NOMES_COLUNA = {"priority": "Prioridade", "status": "Status", "assignee": "Responsável", "dueDate": "Prazo",
+                "dateUpdated": "Atualizado", "dateCreated": "Criado", "tag": "Etiquetas", "startDate": "Início"}
+
+
+def _colunas_da_visao(lid, defs):
+    """As colunas visíveis da visão Lista do próprio ClickUp (a mesma ordem que o Menork usa lá)."""
+    try:
+        views = _chamar("GET", f"/list/{urllib.parse.quote(lid)}/view").get("views") or []
+    except HTTPException:
+        views = []
+    v = next((x for x in views if x.get("type") == "list" and str(x.get("name", "")).lower() == "lista"), None) \
+        or next((x for x in views if x.get("type") == "list"), None)
+    campos = ((v or {}).get("columns") or {}).get("fields") or []
+    cols = []
+    for c in campos:
+        if c.get("hidden"):
+            continue
+        f = str(c.get("field") or "")
+        if f in ("name",):
+            continue
+        if f.startswith("cf_"):
+            d = defs.get(f[3:])
+            if d:
+                cols.append({"chave": f, "nome": c.get("name") or d["nome"], "tipo": d["tipo"]})
+        elif f in NOMES_COLUNA:
+            cols.append({"chave": f, "nome": c.get("name") or NOMES_COLUNA[f], "tipo": f})
+    if not cols:
+        cols = [{"chave": k, "nome": NOMES_COLUNA[k], "tipo": k} for k in ("assignee", "dueDate", "priority")]
+    return cols, bool(((v or {}).get("settings") or {}).get("show_closed") or ((v or {}).get("filters") or {}).get("show_closed"))
+
+
+def _valor_campo(f, d):
+    """Valor de um campo personalizado pronto para a tela: lista de {texto, cor}."""
+    val = f.get("value")
+    if val in (None, "", []):
+        return []
+    tipo = f.get("type") or (d or {}).get("tipo")
+    ops = (d or {}).get("opcoes") or {}
+    if tipo == "drop_down":
+        o = ops.get(str(val)) or ops.get("#" + str(val))
+        return [{"texto": o[0], "cor": o[1]}] if o else [{"texto": str(val), "cor": ""}]
+    if tipo == "labels":
+        return [{"texto": ops[str(x)][0], "cor": ops[str(x)][1]} if str(x) in ops else {"texto": str(x), "cor": ""} for x in val]
+    if tipo == "date":
+        try:
+            return [{"texto": time.strftime("%d/%m/%Y", time.localtime(int(val) / 1000)), "cor": ""}]
+        except (TypeError, ValueError):
+            return []
+    if tipo == "checkbox":
+        return [{"texto": "✓" if str(val).lower() in ("true", "1") else "", "cor": ""}]
+    if tipo in ("users", "people"):
+        return [{"texto": x.get("username", ""), "cor": ""} for x in val if isinstance(x, dict)]
+    if isinstance(val, (dict, list)):
+        return [{"texto": json.dumps(val, ensure_ascii=False)[:80], "cor": ""}]
+    return [{"texto": str(val), "cor": ""}]
+
+
 @rota.get("/api/clickup/lista/{lid}")
 def lista(lid: str, fechadas: int = 1):
     info = _chamar("GET", f"/list/{urllib.parse.quote(lid)}")
+    try:
+        defs = _guardado(f"campos:{lid}", 300, lambda: _campos_def(lid))
+    except HTTPException:
+        defs = {}
+    colunas, fech_visao = _guardado(f"colunas:{lid}", 300, lambda: _colunas_da_visao(lid, defs))
     tarefas, pagina = [], 0
     while pagina < 6:
         r = _chamar("GET", f"/list/{urllib.parse.quote(lid)}/task?page={pagina}&subtasks=true&include_closed={'true' if fechadas else 'false'}")
-        tarefas += [_tarefa_curta(t) for t in r.get("tasks") or []]
+        for t in r.get("tasks") or []:
+            x = _tarefa_curta(t)
+            x["campos"] = {"cf_" + f["id"]: _valor_campo(f, defs.get(f["id"])) for f in t.get("custom_fields") or [] if f.get("value") not in (None, "", [])}
+            x["criada"] = t.get("date_created")
+            tarefas.append(x)
         if r.get("last_page", True) or not r.get("tasks"):
             break
         pagina += 1
     status = [{"nome": s.get("status", ""), "cor": s.get("color") or "#87909e", "tipo": s.get("type", "")}
               for s in sorted(info.get("statuses") or [], key=lambda s: s.get("orderindex", 0))]
-    return {"id": lid, "nome": info.get("name", ""), "status": status, "tarefas": tarefas,
+    return {"id": lid, "nome": info.get("name", ""), "status": status, "tarefas": tarefas, "colunas": colunas, "fechadas_visao": fech_visao,
             "pasta": (info.get("folder") or {}).get("name", ""), "espaco": (info.get("space") or {}).get("name", "")}
 
 
@@ -137,8 +217,10 @@ def tarefa(tid: str):
     saida = _tarefa_curta(t)
     saida.update(descricao=t.get("markdown_description") or t.get("text_content") or t.get("description") or "",
                  lista=(t.get("list") or {}).get("id", ""), criada=t.get("date_created"),
-                 campos=[{"nome": f.get("name", ""), "valor": f.get("value")} for f in t.get("custom_fields") or []
-                         if f.get("value") not in (None, "", [])][:20],
+                 campos=[{"nome": f.get("name", ""), "valores": _valor_campo(f, None if f.get("type") not in ("drop_down", "labels") else
+                         {"tipo": f.get("type"), "opcoes": {**{str(o.get("id")): (o.get("name") or o.get("label") or "", o.get("color") or "#555") for o in (f.get("type_config") or {}).get("options") or []},
+                                                           **{"#" + str(o.get("orderindex")): (o.get("name") or o.get("label") or "", o.get("color") or "#555") for o in (f.get("type_config") or {}).get("options") or []}}})}
+                        for f in t.get("custom_fields") or [] if f.get("value") not in (None, "", [])][:30],
                  comentarios=[{"texto": x.get("comment_text", ""), "quem": (x.get("user") or {}).get("username", ""),
                                "quando": x.get("date")} for x in c[:50]])
     return saida

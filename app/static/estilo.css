@@ -863,3 +863,33 @@ html[data-tema="azul"] ::selection{background:rgba(var(--brilho),.45);color:#fff
 .ck-comentar textarea,.ck-nova input{font:inherit}
 .ck-pasta > summary::before{content:"▸";font-size:10px;transition:transform .15s}.ck-pasta[open] > summary::before{transform:rotate(90deg)}
 .ck-chave-form{display:flex;gap:8px;max-width:640px}.ck-chave-form input{flex:1;min-width:0}
+/* ClickUp: visão Lista igual à do app (grupos por status, colunas com pílulas coloridas) */
+.ck-lista{display:flex;flex-direction:column;gap:18px}
+.ck-grupo > header{display:flex;align-items:center;gap:8px;margin-bottom:6px;position:sticky;left:0}
+.ck-grupo > header small{color:var(--fraco);font-size:12px}
+.ck-seta{border:0;background:transparent;color:var(--fraco);cursor:pointer;font-size:13px;width:20px;transition:transform .15s}
+.ck-seta.fechado{transform:rotate(-90deg)}
+.ck-rolagem{overflow-x:auto;border:1px solid var(--borda);border-radius:10px;background:var(--painel)}
+.ck-tab{border-collapse:collapse;width:max-content;min-width:100%;font-size:13px}
+.ck-tab th{font-weight:500;color:var(--fraco);font-size:12px;text-align:left;padding:8px 10px;border-bottom:1px solid var(--borda);white-space:nowrap;background:var(--painel);position:sticky;top:0}
+.ck-tab td{padding:7px 10px;border-bottom:1px solid var(--borda);white-space:nowrap;max-width:240px;overflow:hidden;text-overflow:ellipsis;vertical-align:middle}
+.ck-tab tr:last-child td{border-bottom:0}
+.ck-tab tbody tr{cursor:pointer;transition:background .12s}
+.ck-tab tbody tr:hover td{background:var(--relevo)}
+.ck-tab .ck-nome{min-width:320px;max-width:460px;position:sticky;left:0;background:var(--painel);z-index:1}
+.ck-tab tbody tr:hover .ck-nome{background:var(--relevo)}
+.ck-nome-in{display:flex;align-items:center;gap:8px;min-width:0}
+.ck-nome-in b{white-space:nowrap;font-weight:500;overflow:hidden;text-overflow:ellipsis}
+.ck-bola{width:9px;height:9px;border-radius:3px;flex:none}
+.ck-sub{color:var(--fraco);font-size:11px}
+.ck-pill{display:inline-block;padding:2px 8px;border-radius:5px;font-size:11.5px;font-weight:600;color:#fff;background:var(--c,#555);margin-right:4px;text-shadow:0 0 2px rgba(0,0,0,.35)}
+.ck-txt{display:inline-block;max-width:220px;overflow:hidden;text-overflow:ellipsis;color:var(--texto)}
+.ck-vazio{color:var(--apagado)}
+.ck-prio{display:inline-flex;gap:5px;align-items:center}
+.ck-atrasada{color:var(--vermelho)}
+.ck-nova-lista{flex-direction:row;align-items:center;margin-top:6px}.ck-nova-lista input{max-width:420px}
+.ck-grupo .ck-add{margin-top:4px}
+.ck-tab{table-layout:fixed;width:auto}
+.ck-tab th:not(.ck-nome),.ck-tab td:not(.ck-nome){width:150px;max-width:150px}
+.ck-tab .ck-nome{width:380px}
+.ck-tab{min-width:0}.ck-rolagem{width:fit-content;max-width:100%}
