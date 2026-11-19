@@ -2020,3 +2020,5 @@ from . import b2x as _b2x  # noqa: E402  (rotas /api/b2x/*: precisam do app ja m
 app.include_router(_b2x.rota)
 from . import gastos as _gastos  # noqa: E402
 app.include_router(_gastos.rota)
+from . import clickup as _clickup  # noqa: E402
+app.include_router(_clickup.rota)

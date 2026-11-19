@@ -1447,3 +1447,114 @@ document.addEventListener('click', e => {
   try { localStorage.setItem('tema', b.dataset.tema); } catch (_) {}
   location.reload();
 });
+
+// ---- ClickUp dentro do site: árvore de listas, quadro por status, detalhe da tarefa. Toda mudança pede confirmação; nada é apagado.
+const CK = { arvore: null, erro: '', lista: (() => { try { return localStorage.getItem('ck_lista') || ''; } catch (_) { return ''; } })(), dados: null, carregando: false,
+  modo: 'quadro', busca: '', aberta: null, tarefa: null, fechadas: false, novaEm: null, arrastando: null, confirmar: null };
+const ckData = ms => ms ? new Date(+ms).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) : '';
+const ckPri = { urgent: ['Urgente', '#f50000'], high: ['Alta', '#ffcc00'], normal: ['Normal', '#6fddff'], low: ['Baixa', '#d8d8d8'] };
+async function ckArvore(atualizar) {
+  try { CK.arvore = await b2get('/api/clickup/arvore' + (atualizar ? '?atualizar=1' : '')); CK.erro = ''; } catch (err) { CK.erro = err.message; CK.arvore = { workspaces: [] }; }
+  if (!CK.lista) { const l = CK.arvore.workspaces.flatMap(w => w.espacos.flatMap(e => [...e.listas, ...e.pastas.flatMap(f => f.listas)]))[0]; if (l) CK.lista = l.id; }
+  if (ROTA.startsWith('/clickup')) { RENDER(); if (CK.lista && !CK.dados) ckLista(CK.lista); }
+}
+async function ckLista(id) {
+  CK.lista = id; CK.carregando = true; try { localStorage.setItem('ck_lista', id); } catch (_) {}
+  if (ROTA.startsWith('/clickup')) RENDER();
+  try { CK.dados = await b2get(`/api/clickup/lista/${encodeURIComponent(id)}?fechadas=${CK.fechadas ? 1 : 0}`); CK.erro = ''; } catch (err) { CK.dados = null; CK.erro = err.message; }
+  CK.carregando = false; if (ROTA.startsWith('/clickup')) RENDER();
+}
+async function ckAbrir(id) {
+  CK.aberta = id; CK.tarefa = null; RENDER();
+  try { CK.tarefa = await b2get('/api/clickup/tarefa/' + encodeURIComponent(id)); } catch (err) { CK.tarefa = { erro: err.message }; }
+  if (CK.aberta === id) RENDER();
+}
+function ckAvatar(a) { return a.foto ? `<img class="ck-av" src="${esc(a.foto)}" alt="" title="${esc(a.nome)}">` : `<span class="ck-av" style="background:${esc(a.cor)}" title="${esc(a.nome)}">${esc(a.iniciais || (a.nome || '?').slice(0, 2).toUpperCase())}</span>`; }
+function ckCartao(t) {
+  const pr = ckPri[t.prioridade], atrasada = t.prazo && +t.prazo < Date.now() && !/complete|fechad|conclu|done/i.test(t.status);
+  return `<div class="ck-cartao" draggable="true" data-ck-tarefa="${esc(t.id)}"><b>${esc(t.nome)}</b>
+    ${t.etiquetas.length ? `<div class="ck-tags">${t.etiquetas.slice(0, 3).map(g => `<span style="background:${esc(g.cor)}">${esc(g.nome)}</span>`).join('')}</div>` : ''}
+    <div class="ck-rodape">${t.responsaveis.slice(0, 3).map(ckAvatar).join('')}<span class="ck-meta">${t.subtarefas ? `☰ ${t.subtarefas}` : ''}${t.prazo ? `<em class="${atrasada ? 'atrasada' : ''}">⏱ ${ckData(t.prazo)}</em>` : ''}${pr ? `<i style="color:${pr[1]}" title="Prioridade ${pr[0]}">⚑</i>` : ''}</span></div></div>`;
+}
+Object.assign(TELAS, {
+  clickup() {
+    if (!CK.arvore) { ckArvore(); return '<div class="cabeca"><h1>ClickUp</h1></div><p class="pequeno">Lendo o seu workspace no ClickUp…</p>'; }
+    if (CK.lista && !CK.dados && !CK.carregando && !CK.erro) setTimeout(() => ckLista(CK.lista));
+    const arvore = CK.arvore.workspaces.map(w => `<div class="ck-ws">${CK.arvore.workspaces.length > 1 ? `<h4>${esc(w.nome)}</h4>` : ''}${w.espacos.map(e => `<details class="ck-espaco" open><summary><i style="background:${esc(e.cor || '#7b68ee')}"></i>${esc(e.nome)}</summary>
+      ${e.listas.map(l => `<a href="#" class="ck-li ${l.id === CK.lista ? 'ativa' : ''}" data-ck-lista="${esc(l.id)}">${esc(l.nome)}${l.tarefas != null ? `<small>${l.tarefas}</small>` : ''}</a>`).join('')}
+      ${e.pastas.map(f => `<details class="ck-pasta" ${f.listas.some(l => l.id === CK.lista) ? 'open' : ''}><summary>${esc(f.nome)}</summary>${f.listas.map(l => `<a href="#" class="ck-li ${l.id === CK.lista ? 'ativa' : ''}" data-ck-lista="${esc(l.id)}">${esc(l.nome)}${l.tarefas != null ? `<small>${l.tarefas}</small>` : ''}</a>`).join('')}</details>`).join('')}</details>`).join('')}</div>`).join('');
+    const d = CK.dados, q = semAc(CK.busca);
+    const tarefas = d ? d.tarefas.filter(t => !q || semAc(t.nome + ' ' + t.etiquetas.map(g => g.nome).join(' ') + ' ' + t.responsaveis.map(a => a.nome).join(' ')).includes(q)) : [];
+    let corpo = '';
+    if (CK.erro) corpo = `<div class="nota ruim"><b>Não deu para ler o ClickUp</b><span>${esc(CK.erro)}</span></div>`;
+    else if (!d) corpo = '<p class="pequeno">Carregando a lista…</p>';
+    else if (CK.modo === 'quadro') {
+      const cols = [...d.status]; tarefas.forEach(t => { if (!cols.some(c => c.nome === t.status)) cols.push({ nome: t.status, cor: t.cor }); });
+      corpo = `<div class="ck-quadro">${cols.filter(c => CK.fechadas || c.tipo !== 'closed' || tarefas.some(t => t.status === c.nome)).map(c => { const ts = tarefas.filter(t => t.status === c.nome);
+        return `<section class="ck-col" data-ck-col="${esc(c.nome)}"><header style="--c:${esc(c.cor)}"><span class="ck-st">${esc(c.nome)}</span><small>${ts.length}</small></header>
+          <div class="ck-cartoes">${ts.map(ckCartao).join('')}</div>
+          ${CK.novaEm === c.nome ? `<form class="ck-nova" data-ck-nova="${esc(c.nome)}"><input name="nome" placeholder="Nome da tarefa" autocomplete="off" autofocus><div class="acoes"><button class="b mini">Criar</button><button type="button" class="b claro mini" data-ck-cancelar-nova>Cancelar</button></div></form>`
+            : `<button type="button" class="ck-add" data-ck-add="${esc(c.nome)}">+ Nova tarefa</button>`}</section>`; }).join('')}</div>`;
+    } else {
+      corpo = `<div class="bloco"><table class="tabela ck-tabela"><tr><th>Tarefa</th><th>Status</th><th>Responsável</th><th>Prazo</th><th>Prioridade</th></tr>${tarefas.map(t => `<tr data-ck-tarefa="${esc(t.id)}"><td><b>${esc(t.nome)}</b></td><td><span class="ck-st" style="--c:${esc(t.cor)}">${esc(t.status)}</span></td><td>${t.responsaveis.map(ckAvatar).join('')}</td><td>${ckData(t.prazo)}</td><td>${ckPri[t.prioridade] ? `<i style="color:${ckPri[t.prioridade][1]}">⚑</i> ${ckPri[t.prioridade][0]}` : ''}</td></tr>`).join('') || '<tr><td colspan="5" class="pequeno">Nada encontrado.</td></tr>'}</table></div>`;
+    }
+    const t = CK.tarefa;
+    const painel = CK.aberta ? `<aside class="ck-painel">${!t ? '<p class="pequeno">Abrindo a tarefa…</p>' : t.erro ? `<div class="nota ruim"><span>${esc(t.erro)}</span></div>` : `
+      <div class="ck-painel-cab"><button type="button" class="b claro mini" data-ck-fechar>✕ Fechar</button>${t.url ? `<a class="b claro mini" href="${esc(t.url)}" target="_blank" rel="noopener">Abrir no ClickUp</a>` : ''}</div>
+      <h2>${esc(t.nome)}</h2>
+      <div class="ck-linha"><label>Status <select data-ck-status="${esc(t.id)}">${(d ? d.status : [{ nome: t.status }]).map(s => `<option ${s.nome === t.status ? 'selected' : ''}>${esc(s.nome)}</option>`).join('')}</select></label>
+        ${t.responsaveis.length ? `<span class="ck-resp">${t.responsaveis.map(a => `${ckAvatar(a)} ${esc(a.nome)}`).join(' · ')}</span>` : ''}${t.prazo ? `<span class="pequeno">Prazo ${ckData(t.prazo)}</span>` : ''}</div>
+      ${t.etiquetas.length ? `<div class="ck-tags">${t.etiquetas.map(g => `<span style="background:${esc(g.cor)}">${esc(g.nome)}</span>`).join('')}</div>` : ''}
+      ${t.descricao ? `<div class="ck-desc">${esc(t.descricao).replace(/\n/g, '<br>')}</div>` : '<p class="pequeno">Sem descrição.</p>'}
+      ${t.campos.length ? `<dl class="ck-campos">${t.campos.map(c => `<dt>${esc(c.nome)}</dt><dd>${esc(typeof c.valor === 'object' ? JSON.stringify(c.valor) : c.valor)}</dd>`).join('')}</dl>` : ''}
+      <h3>Comentários <small class="pequeno">${t.comentarios.length}</small></h3>
+      <form class="ck-comentar" data-ck-comentar="${esc(t.id)}"><textarea name="texto" rows="2" placeholder="Escreva um comentário"></textarea><button class="b mini">Comentar</button></form>
+      <div class="ck-coments">${t.comentarios.map(c => `<div><b>${esc(c.quem)}</b> <small class="pequeno">${c.quando ? new Date(+c.quando).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : ''}</small><p>${esc(c.texto)}</p></div>`).join('')}</div>`}</aside>` : '';
+    const conf = CK.confirmar ? `<div class="ck-confirma"><div class="bloco"><h3>${esc(CK.confirmar.titulo)}</h3><p>${esc(CK.confirmar.texto)}</p><div class="acoes"><button class="b" data-ck-sim>Sim, mudar</button><button class="b claro" data-ck-nao>Cancelar</button></div></div></div>` : '';
+    return `<div class="cabeca"><h1>ClickUp <small>${d ? `${esc([d.espaco, d.pasta].filter(Boolean).join(' › '))} › <b>${esc(d.nome)}</b> · ${d.tarefas.length} tarefa(s)` : 'o seu workspace aqui dentro'}</small></h1>
+      <div class="acoes"><input class="ck-busca" placeholder="Buscar tarefa…" value="${esc(CK.busca)}" data-ck-busca><div class="ck-modo"><button type="button" data-ck-modo="quadro" class="${CK.modo === 'quadro' ? 'ativo' : ''}">Quadro</button><button type="button" data-ck-modo="lista" class="${CK.modo === 'lista' ? 'ativo' : ''}">Lista</button></div>
+      <label class="pequeno ck-fech"><input type="checkbox" data-ck-fechadas ${CK.fechadas ? 'checked' : ''}> fechadas</label><button class="b claro" data-ck-atualizar>${CK.carregando ? 'Lendo…' : 'Atualizar'}</button></div></div>
+      <div class="ck-grade"><nav class="ck-arvore">${arvore || '<p class="pequeno">Nenhuma lista.</p>'}</nav><div class="ck-centro">${corpo}</div></div>${painel}${conf}`;
+  }
+});
+function ckPerguntar(titulo, texto, fazer) { CK.confirmar = { titulo, texto, fazer }; RENDER(); }
+async function ckMudarStatus(id, status) {
+  const t = CK.dados?.tarefas.find(x => x.id === id); if (!t || t.status === status) return;
+  ckPerguntar('Mudar o status no ClickUp?', `"${t.nome}": ${t.status} → ${status}`, async () => {
+    try { const r = await b2post(`/api/clickup/tarefa/${encodeURIComponent(id)}/status`, { status }); Object.assign(t, r); if (CK.tarefa?.id === id) Object.assign(CK.tarefa, { status: r.status, cor: r.cor }); window.menork.aviso('Status mudado no ClickUp.'); }
+    catch (err) { window.menork.aviso(err.message); }
+    RENDER();
+  });
+}
+document.addEventListener('click', e => {
+  if (!ROTA.startsWith('/clickup')) return;
+  const l = e.target.closest('[data-ck-lista]'); if (l) { e.preventDefault(); CK.dados = null; CK.aberta = null; return ckLista(l.dataset.ckLista); }
+  const m = e.target.closest('[data-ck-modo]'); if (m) { CK.modo = m.dataset.ckModo; return RENDER(); }
+  if (e.target.closest('[data-ck-atualizar]')) { CK.arvore = null; CK.dados = null; return ckArvore(true); }
+  if (e.target.closest('[data-ck-fechar]')) { CK.aberta = null; CK.tarefa = null; return RENDER(); }
+  if (e.target.closest('[data-ck-sim]')) { const f = CK.confirmar?.fazer; CK.confirmar = null; RENDER(); return f && f(); }
+  if (e.target.closest('[data-ck-nao]')) { CK.confirmar = null; return RENDER(); }
+  const a = e.target.closest('[data-ck-add]'); if (a) { CK.novaEm = a.dataset.ckAdd; RENDER(); return document.querySelector('.ck-nova input')?.focus(); }
+  if (e.target.closest('[data-ck-cancelar-nova]')) { CK.novaEm = null; return RENDER(); }
+  const t = e.target.closest('[data-ck-tarefa]'); if (t && !e.target.closest('a')) return ckAbrir(t.dataset.ckTarefa);
+});
+document.addEventListener('input', e => { const b = e.target.closest('[data-ck-busca]'); if (!b) return; CK.busca = b.value; const pos = b.selectionStart; RENDER(); const n = document.querySelector('[data-ck-busca]'); if (n) { n.focus(); n.setSelectionRange(pos, pos); } });
+document.addEventListener('change', e => {
+  if (e.target.matches('[data-ck-fechadas]')) { CK.fechadas = e.target.checked; CK.dados = null; return ckLista(CK.lista); }
+  const s = e.target.closest('[data-ck-status]'); if (s) { const v = s.value; s.value = CK.tarefa?.status || v; return ckMudarStatus(s.dataset.ckStatus, v); }
+});
+document.addEventListener('submit', e => {
+  const f = e.target;
+  if (f.matches('[data-ck-nova]')) { e.preventDefault(); const nome = f.nome.value.trim(), status = f.dataset.ckNova; if (!nome) return;
+    return ckPerguntar('Criar a tarefa no ClickUp?', `"${nome}" na lista ${CK.dados?.nome || ''}, status ${status}`, async () => {
+      try { const r = await b2post(`/api/clickup/lista/${encodeURIComponent(CK.lista)}/tarefa`, { nome, status }); CK.dados.tarefas.unshift(r); CK.novaEm = null; window.menork.aviso('Tarefa criada no ClickUp.'); }
+      catch (err) { window.menork.aviso(err.message); }
+      RENDER(); }); }
+  if (f.matches('[data-ck-comentar]')) { e.preventDefault(); const texto = f.texto.value.trim(); if (!texto) return; const id = f.dataset.ckComentar;
+    f.querySelector('button').disabled = true;
+    b2post(`/api/clickup/tarefa/${encodeURIComponent(id)}/comentario`, { texto }).then(() => { window.menork.aviso('Comentário enviado.'); return ckAbrir(id); }).catch(err => { window.menork.aviso(err.message); f.querySelector('button').disabled = false; }); }
+});
+document.addEventListener('dragstart', e => { const c = e.target.closest?.('.ck-cartao'); if (!c) return; CK.arrastando = c.dataset.ckTarefa; c.classList.add('arrastando'); e.dataTransfer.effectAllowed = 'move'; });
+document.addEventListener('dragend', () => { document.querySelectorAll('.ck-cartao.arrastando,.ck-col.alvo').forEach(x => x.classList.remove('arrastando', 'alvo')); });
+document.addEventListener('dragover', e => { const col = e.target.closest?.('[data-ck-col]'); if (!col || !CK.arrastando) return; e.preventDefault(); document.querySelectorAll('.ck-col.alvo').forEach(x => x !== col && x.classList.remove('alvo')); col.classList.add('alvo'); });
+document.addEventListener('drop', e => { const col = e.target.closest?.('[data-ck-col]'); if (!col || !CK.arrastando) return; e.preventDefault(); const id = CK.arrastando; CK.arrastando = null; col.classList.remove('alvo'); ckMudarStatus(id, col.dataset.ckCol); });

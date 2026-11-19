@@ -811,3 +811,54 @@ html[data-tema="azul"] ::selection{background:rgba(var(--brilho),.45);color:#fff
   -webkit-mask-image:radial-gradient(ellipse 72% 80% at 50% 50%,#000 62%,transparent 100%);mask-image:radial-gradient(ellipse 72% 80% at 50% 50%,#000 62%,transparent 100%)}
 .marca-site.com-faixa{flex:none}
 @media (max-width:1000px){.marca-site.com-faixa{width:auto}.marca-site .faixa{width:auto;height:44px;max-width:none}}
+/* ---------- aba ClickUp */
+.ck-grade{display:grid;grid-template-columns:230px minmax(0,1fr);gap:16px;align-items:start}
+.ck-arvore{position:sticky;top:12px;max-height:calc(100vh - 140px);overflow:auto;padding:10px;border:1px solid var(--borda);border-radius:14px;background:var(--painel);font-size:13px}
+.ck-arvore h4{margin:4px 6px 8px;font-size:12px;color:var(--fraco)}
+.ck-arvore summary{cursor:pointer;padding:6px 6px;border-radius:7px;display:flex;align-items:center;gap:8px;font-weight:600;list-style:none}
+.ck-arvore summary::-webkit-details-marker{display:none}
+.ck-arvore summary:hover{background:var(--relevo)}
+.ck-espaco > summary i{width:10px;height:10px;border-radius:3px;flex:none}
+.ck-pasta{margin-left:12px}.ck-pasta > summary{font-weight:500;color:var(--fraco)}
+.ck-li{display:flex;justify-content:space-between;gap:6px;padding:5px 8px 5px 24px;border-radius:7px;color:var(--fraco)}
+.ck-pasta .ck-li{padding-left:18px}
+.ck-li:hover{background:var(--relevo);color:var(--texto)}
+.ck-li.ativa{background:var(--relevo);color:var(--texto);font-weight:600;box-shadow:inset 2px 0 0 var(--luz)}
+.ck-li small{color:var(--apagado)}
+.ck-quadro{display:flex;gap:12px;overflow-x:auto;padding-bottom:12px;align-items:flex-start;min-height:60vh}
+.ck-col{flex:0 0 272px;background:var(--painel);border:1px solid var(--borda);border-radius:14px;padding:8px;display:flex;flex-direction:column;gap:8px;max-height:calc(100vh - 170px)}
+.ck-col.alvo{border-color:var(--luz);background:color-mix(in srgb,var(--luz) 6%,var(--painel))}
+.ck-col header{display:flex;align-items:center;gap:8px;padding:4px 4px 2px}
+.ck-st{display:inline-block;padding:2px 9px;border-radius:6px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.3px;background:var(--c,#87909e);color:#fff}
+.ck-col header small{color:var(--fraco)}
+.ck-cartoes{display:flex;flex-direction:column;gap:8px;overflow-y:auto;min-height:20px}
+.ck-cartao{background:var(--relevo);border:1px solid var(--borda);border-radius:10px;padding:10px;cursor:pointer;display:flex;flex-direction:column;gap:8px;transition:border-color .2s,transform .2s}
+.ck-cartao:hover{border-color:var(--borda-forte);transform:translateY(-1px)}
+.ck-cartao.arrastando{opacity:.4}
+.ck-cartao b{font-weight:600;font-size:13.5px;line-height:1.35}
+.ck-tags{display:flex;flex-wrap:wrap;gap:4px}.ck-tags span{font-size:10.5px;padding:1px 7px;border-radius:4px;color:#fff;font-weight:600}
+.ck-rodape{display:flex;align-items:center;gap:4px}.ck-meta{margin-left:auto;display:flex;gap:8px;align-items:center;color:var(--fraco);font-size:11.5px}
+.ck-meta em{font-style:normal}.ck-meta em.atrasada{color:var(--vermelho)}
+.ck-av{width:22px;height:22px;border-radius:50%;display:inline-grid;place-items:center;font-size:9.5px;font-weight:700;color:#fff;object-fit:cover;flex:none;vertical-align:middle}
+.ck-add{border:0;background:transparent;color:var(--fraco);text-align:left;padding:6px;border-radius:8px;cursor:pointer}
+.ck-add:hover{background:var(--relevo);color:var(--texto)}
+.ck-nova{display:flex;flex-direction:column;gap:6px}.ck-nova input{width:100%}
+.ck-modo{display:inline-flex;border:1px solid var(--borda);border-radius:9px;overflow:hidden}
+.ck-modo button{border:0;background:transparent;padding:7px 12px;cursor:pointer;color:var(--fraco)}
+.ck-modo button.ativo{background:var(--relevo);color:var(--texto);font-weight:600}
+.ck-busca{width:220px}.ck-fech{display:inline-flex;gap:5px;align-items:center}
+.ck-tabela tr[data-ck-tarefa]{cursor:pointer}.ck-tabela tr[data-ck-tarefa]:hover td{background:var(--relevo)}
+.ck-painel{position:fixed;top:0;right:0;bottom:0;width:min(520px,94vw);background:var(--painel);border-left:1px solid var(--borda);box-shadow:-20px 0 60px rgba(0,0,0,.5);padding:18px 22px;overflow:auto;z-index:40;animation:ck-entra .25s ease-out}
+@keyframes ck-entra{from{transform:translateX(30px);opacity:0}}
+.ck-painel h2{margin:12px 0}.ck-painel-cab{display:flex;gap:8px}
+.ck-linha{display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin-bottom:10px}
+.ck-resp{display:inline-flex;gap:6px;align-items:center;font-size:13px}
+.ck-desc{background:var(--chao);border:1px solid var(--borda);border-radius:10px;padding:12px;font-size:13.5px;line-height:1.5;margin:10px 0;max-height:40vh;overflow:auto}
+.ck-campos{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font-size:13px}.ck-campos dt{color:var(--fraco)}.ck-campos dd{margin:0}
+.ck-comentar{display:flex;flex-direction:column;gap:6px;margin:8px 0 12px}.ck-comentar textarea{width:100%}.ck-comentar button{align-self:flex-start}
+.ck-coments > div{border-top:1px solid var(--borda);padding:8px 0}.ck-coments p{margin:4px 0 0;font-size:13.5px;white-space:pre-wrap}
+.ck-confirma{position:fixed;inset:0;background:rgba(0,0,0,.55);display:grid;place-items:center;z-index:60}
+.ck-confirma .bloco{width:min(440px,92vw)}
+@media (max-width:1000px){.ck-grade{grid-template-columns:1fr}.ck-arvore{position:static;max-height:260px}}
+.ck-comentar textarea,.ck-nova input{font:inherit}
+.ck-pasta > summary::before{content:"▸";font-size:10px;transition:transform .15s}.ck-pasta[open] > summary::before{transform:rotate(90deg)}
