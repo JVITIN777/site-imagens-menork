@@ -1341,12 +1341,14 @@ document.addEventListener('submit', e => {
 });
 
 // ---- trocar SÓ as fotos de vários anúncios da loja de uma vez (cada anúncio do site → um anúncio da loja)
-const LT = { loja: '', pares: [], lista: null, busca: '', ativo: 0, res: null };
+const LT = { loja: '', pares: [], lista: null, busca: '', ativo: 0, res: null, seq: 0, manterCapa: null };
+const ltModelo = () => SEL_AN.size === 1;  // um anuncio do site (a estrutura) -> varios anuncios da loja
 function ltLoja() { return todasLojas().find(l => l.id === LT.loja); }
 async function ltJanela() {
   if (!LOJAS.clientes) { b2Carregando('Buscando as lojas no B2X…'); await carregarLojas(); if (!LOJAS.clientes) return b2Erro(new Error(LOJAS.erro || 'Não consegui ler as lojas.')); }
   const ids = [...SEL_AN];
-  if (LT.pares.map(p => p.aid).join() !== ids.join()) { LT.pares = ids.map(aid => ({ aid, alvo: null })); LT.res = null; }
+  if ([...new Set(LT.pares.map(p => p.aid))].join() !== ids.join()) { LT.pares = ids.map(aid => ({ k: ++LT.seq, aid, alvo: null })); LT.res = null; LT.manterCapa = null; }
+  if (LT.manterCapa === null) { const semCapa = ids.some(aid => !montagem(aid).capa); LT.manterCapa = semCapa; }  // estrutura sem capa: cada anuncio da loja fica com a capa dele
   const lojas = todasLojas().filter(l => ['shopee', 'mercadolivre'].includes(l.canal));
   if (!lojas.some(l => l.id === LT.loja)) { LT.loja = ''; LT.lista = null; }
   const nomeAd = aid => DB.anuncios.find(a => a.id === aid)?.nome || '#' + aid;
@@ -1354,7 +1356,8 @@ async function ltJanela() {
   const prontos = LT.pares.filter(p => p.alvo).length;
   b2Tela(`<h2>Trocar fotos na loja <small>${LT.pares.length} anúncio(s) · só as fotos</small></h2>
     <div class="campo-b2"><span>Loja</span>${seletorLoja('lt-loja', lojas, LT.loja)}</div>
-    ${!LT.loja ? '' : `<p class="pequeno">Clique num anúncio do site (à esquerda) e depois no anúncio da loja que vai receber as fotos dele.</p>
+    ${!LT.loja ? '' : `<p class="pequeno">${ltModelo() ? `Clique em <b>todos</b> os anúncios da loja que vão receber a estrutura de <b>${esc(nomeAd(ids[0]))}</b> (clique de novo para tirar).` : 'Clique num anúncio do site (à esquerda) e depois no anúncio da loja que vai receber as fotos dele.'}</p>
+    <label class="linha lt-manter"><input type="checkbox" id="lt-manter-capa" ${LT.manterCapa ? 'checked' : ''}> <span><b>Manter a capa (foto 1) que cada anúncio já tem na loja</b> e trocar só as fotos 2 a 9 e as capas das cores</span></label>
     <div class="lt-grade"><ol class="lt-pares">${LT.pares.map((p, i) => `<li class="${i === LT.ativo ? 'ativo' : ''}" data-lt-ativo="${i}"><b>${esc(nomeAd(p.aid))}</b><span>→ ${p.alvo ? `${p.alvo.foto ? `<img src="${esc(p.alvo.foto)}" alt="">` : ''}${esc(p.alvo.titulo.slice(0, 50))} <small>${esc(p.alvo.id)}</small> <button type="button" class="x" data-lt-tirar="${i}" title="Tirar">×</button>` : '<em>escolha na loja</em>'}</span></li>`).join('')}</ol>
     <div><form id="lt-busca" class="b2-linha"><input name="busca" value="${esc(LT.busca)}" placeholder="Buscar na loja pelo título ou código"><button class="b claro">Buscar</button></form>
       <div class="tf-lista lt-lista">${LT.lista === null ? '<p class="pequeno">Carregando os anúncios da loja…</p>' : LT.lista.length ? LT.lista.map(x => { const usado = LT.pares.findIndex(p => p.alvo?.id === x.id); return `<button type="button" class="tf-item ${usado >= 0 ? 'escolhido' : ''}" data-lt-alvo="${esc(x.id)}">${x.foto ? `<img src="${esc(x.foto)}" alt="" onerror="this.style.visibility='hidden'">` : '<span class="tf-semfoto"></span>'}<span><b>${esc(x.titulo)}</b><small>${esc(x.id)}${x.preco ? ' · R$ ' + esc(x.preco) : ''}${usado >= 0 ? ' · ← ' + esc(nomeAd(LT.pares[usado].aid)) : ''}</small></span></button>`; }).join('') : '<p class="pequeno">Nada encontrado.</p>'}</div></div></div>`}
@@ -1372,13 +1375,13 @@ async function ltSimular(manter) {
   LT.res = LT.res && manter ? LT.res : {};
   for (let i = 0; i < pares.length; i++) {
     const p = pares[i]; b2Carregando(`Simulando ${i + 1} de ${pares.length}: ${nomeAd(p.aid)}… (sobe as fotos, pode levar um minuto)`);
-    const r = LT.res[p.aid] = LT.res[p.aid] || {};
+    const r = LT.res[p.k] = LT.res[p.k] || {};
     try {
       if (!r.cores) { const d = await b2get(`/api/b2x/anuncio?loja=${encodeURIComponent(l.id)}&anuncio=${encodeURIComponent(p.alvo.id)}&canal=${l.canal}`); r.cores = d.cores; r.familia = d.familia;
         r.nossas = (await b2get('/api/anuncios/' + p.aid)).variacoes.map(v => v.cor);
         r.mapa = Object.fromEntries(r.cores.map(c => [c, r.nossas.find(x => semAc(x) === semAc(c)) || ''])); }
       const mapa = Object.fromEntries(Object.entries(r.mapa).filter(([, v]) => v));
-      const s = await b2post('/api/b2x/fotos/simular', { aid: p.aid, loja: l.id, anuncio: p.alvo.id, canal: l.canal, mapa, galeria: l.canal === 'shopee', ajustar_modo: true });
+      const s = await b2post('/api/b2x/fotos/simular', { aid: p.aid, loja: l.id, anuncio: p.alvo.id, canal: l.canal, mapa, galeria: l.canal === 'shopee', ajustar_modo: true, manter_capa_loja: !!LT.manterCapa });
       Object.assign(r, { token: s.token, envios: s.envios, ok: s.pode_confirmar, erro: '' });
     } catch (err) { Object.assign(r, { token: null, ok: false, erro: err.message }); }
   }
@@ -1386,18 +1389,18 @@ async function ltSimular(manter) {
 }
 function ltResultado(final) {
   const pares = LT.pares.filter(p => p.alvo), nomeAd = aid => DB.anuncios.find(a => a.id === aid)?.nome || '#' + aid;
-  const okN = pares.filter(p => LT.res[p.aid]?.ok).length;
+  const okN = pares.filter(p => LT.res[p.k]?.ok).length;
   b2Tela(`<h2>${final ? 'Resultado' : 'Simulação'} <small>${final ? '' : 'nada foi trocado ainda'}</small></h2>
-    <div class="lt-res">${pares.map(p => { const r = LT.res[p.aid] || {}, sem = (r.cores || []).filter(c => !r.mapa?.[c]);
+    <div class="lt-res">${pares.map(p => { const r = LT.res[p.k] || {}, sem = (r.cores || []).filter(c => !r.mapa?.[c]);
       return `<div class="nota ${(final ? r.feito : r.ok) ? '' : 'ruim'}"><b>${esc(nomeAd(p.aid))} → ${esc(p.alvo.titulo.slice(0, 50))} (${esc(p.alvo.id)}): ${final ? (r.feito ? 'fotos trocadas' : 'não trocado') : r.ok ? 'pronto' : 'não dá para trocar'}</b>
         ${r.erro ? `<span>${esc(r.erro)}</span>` : ''}${(final ? r.final || [] : r.envios || []).filter(e => !e.ok && e.erro).map(e => `<span>${esc(e.rotulo)}: ${esc(e.erro)}</span>`).join('')}
-        ${!final && sem.length ? `<span>Cores da loja sem par no site (ficam com as fotos antigas): ${sem.map(c => `<label class="lt-cor">${esc(c)} → <select data-lt-cor="${p.aid}" data-cor="${esc(c)}"><option value="">não mexer</option>${(r.nossas || []).map(x => `<option>${esc(x)}</option>`).join('')}</select></label>`).join(' ')}</span>` : ''}</div>`; }).join('')}</div>
+        ${!final && sem.length ? `<span>Cores da loja sem par no site (ficam com as fotos antigas): ${sem.map(c => `<label class="lt-cor">${esc(c)} → <select data-lt-cor="${p.k}" data-cor="${esc(c)}"><option value="">não mexer</option>${(r.nossas || []).map(x => `<option>${esc(x)}</option>`).join('')}</select></label>`).join(' ')}</span>` : ''}</div>`; }).join('')}</div>
     <div class="acoes">${final ? '<button class="b" data-fechar>Fechar</button>' : `${okN ? `<button class="b verde" id="lt-confirmar">Confirmar e trocar ${okN} agora</button>` : ''}<button class="b claro" id="lt-resimular">Simular de novo</button><button class="b claro" id="lt-voltar">Voltar</button>`}</div>`);
 }
 async function ltConfirmar() {
-  const pares = LT.pares.filter(p => p.alvo && LT.res[p.aid]?.ok);
+  const pares = LT.pares.filter(p => p.alvo && LT.res[p.k]?.ok);
   for (let i = 0; i < pares.length; i++) {
-    const r = LT.res[pares[i].aid]; b2Carregando(`Trocando ${i + 1} de ${pares.length}…`);
+    const r = LT.res[pares[i].k]; b2Carregando(`Trocando ${i + 1} de ${pares.length}…`);
     try { const f = await b2post('/api/b2x/fotos/confirmar', { token: r.token }); r.final = f.envios; r.feito = f.envios.some(e => e.ok); }
     catch (err) { r.feito = false; r.erro = err.message; }
   }
@@ -1405,6 +1408,7 @@ async function ltConfirmar() {
 }
 document.addEventListener('click', e => {
   if (e.target.closest('#trocar-lote')) return ltJanela();
+  const est = e.target.closest('#estrutura-loja'); if (est) { SEL_AN.clear(); SEL_AN.add(+est.dataset.id); LT.pares = []; return ltJanela(); }
   if (e.target.closest('#lt-simular')) return ltSimular(false);
   if (e.target.closest('#lt-resimular')) return ltSimular(true);
   if (e.target.closest('#lt-confirmar')) return ltConfirmar();
@@ -1413,13 +1417,20 @@ document.addEventListener('click', e => {
   const a = e.target.closest('[data-lt-ativo]'); if (a) { LT.ativo = +a.dataset.ltAtivo; return ltJanela(); }
   const al = e.target.closest('[data-lt-alvo]'); if (al) {
     const x = LT.lista.find(i => i.id === al.dataset.ltAlvo); if (!x) return;
+    if (ltModelo()) {  // a mesma estrutura vai para varios anuncios da loja: clicar liga e desliga
+      const ja = LT.pares.findIndex(p => p.alvo?.id === x.id);
+      if (ja >= 0) { if (LT.pares.length > 1) LT.pares.splice(ja, 1); else LT.pares[ja].alvo = null; }
+      else { const livre = LT.pares.find(p => !p.alvo); if (livre) livre.alvo = x; else LT.pares.push({ k: ++LT.seq, aid: LT.pares[0].aid, alvo: x }); }
+      LT.res = null; return ltJanela();
+    }
     LT.pares.forEach(p => { if (p.alvo?.id === x.id) p.alvo = null; });
-    LT.pares[LT.ativo].alvo = x; if (LT.res) delete LT.res[LT.pares[LT.ativo].aid];
+    LT.pares[LT.ativo].alvo = x; if (LT.res) delete LT.res[LT.pares[LT.ativo].k];
     const prox = LT.pares.findIndex(p => !p.alvo); if (prox >= 0) LT.ativo = prox;
     return ltJanela();
   }
 });
 document.addEventListener('change', e => {
+  if (e.target.id === 'lt-manter-capa') { LT.manterCapa = e.target.checked; LT.res = null; return; }
   if (e.target.id === 'lt-loja') { LT.loja = e.target.value; LT.lista = null; LT.busca = ''; LT.pares.forEach(p => p.alvo = null); LT.res = null; LT.ativo = 0; return ltJanela(); }
   const c = e.target.closest('[data-lt-cor]'); if (c) { const r = LT.res[+c.dataset.ltCor]; if (r) r.mapa[c.dataset.cor] = c.value; }
 });

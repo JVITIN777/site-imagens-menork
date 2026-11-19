@@ -152,12 +152,32 @@ def subir_fotos(imgs):
     return links
 
 
-def _enviar_lote(lote, links, tentativa=1):
+def _subir_link(u):
+    """Baixa uma foto que ja esta no marketplace (ex.: a capa atual do anuncio) e sobe no B2X para mandar de novo."""
+    if not re.match(r"^https?://", str(u)):
+        raise HTTPException(400, "Link da capa atual inválido.")
+    req = urllib.request.Request(u, headers={"User-Agent": "Mozilla/5.0 (site-imagens-menork)"})
+    try:
+        with urllib.request.urlopen(req, timeout=30) as r:
+            dados = r.read(20 * 1024 * 1024)
+        with Image.open(io.BytesIO(dados)) as im:
+            im = im.convert("RGB")
+            b = io.BytesIO()
+            im.save(b, "JPEG", quality=92)
+            dados = b.getvalue()
+    except Exception as e:
+        raise HTTPException(502, f"Não consegui baixar a capa atual do anúncio: {e}")
+    links = {}
+    _enviar_lote([({"id": "capa_loja", "nome_original": "capa atual"}, dados)], links, guardar=False)
+    return links["capa_loja"]
+
+
+def _enviar_lote(lote, links, tentativa=1, guardar=True):
     corpo = {"fotos": [{"arquivo_base64": base64.b64encode(d).decode("ascii")} for _, d in lote], "prazo_s": 90}
     status, r = chamar("POST", "/v1/fotos", corpo, timeout=150)
     if status >= 500 and tentativa < 3:
         time.sleep(5 * tentativa)
-        return _enviar_lote(lote, links, tentativa + 1)
+        return _enviar_lote(lote, links, tentativa + 1, guardar)
     itens = r.get("fotos") or []
     if not itens:
         raise HTTPException(502, f"Não consegui subir as fotos no {config()['nome']} ({status}). {texto_erro(r)}")
@@ -167,7 +187,8 @@ def _enviar_lote(lote, links, tentativa=1):
             item = next((x for x in itens if x.get("indice") == i), itens[i] if i < len(itens) else {})
             if item.get("situacao") == "ok" and item.get("url"):
                 links[img["id"]] = item["url"]
-                c.execute("INSERT OR REPLACE INTO b2x_fotos(imagem_id, sha, url, expira_em) VALUES(?,?,?,?)",
+                if guardar:
+                    c.execute("INSERT OR REPLACE INTO b2x_fotos(imagem_id, sha, url, expira_em) VALUES(?,?,?,?)",
                           (img["id"], img.get("sha", ""), item["url"], str(item.get("expira_em") or "")[:19]))
             elif item.get("situacao") == "pendente" or item.get("temporario"):
                 pendentes.append((img, d))
@@ -178,7 +199,7 @@ def _enviar_lote(lote, links, tentativa=1):
     if pendentes:
         if tentativa >= 4:
             raise HTTPException(502, "O B2X não terminou de receber as fotos. Tente de novo em 1 minuto.")
-        _enviar_lote(pendentes, links, tentativa + 1)
+        _enviar_lote(pendentes, links, tentativa + 1, guardar)
 
 
 # ------------------------------------------------------------ lojas e anuncios
@@ -368,14 +389,23 @@ async def fotos_simular(request: Request):
         raise HTTPException(400, "Escolha pelo menos uma cor para trocar.")
     envios = []
     if canal == "shopee":
-        fotos = ([L["capa"]] if L["capa"] else []) + L["galeria"]
+        manter = bool(d.get("manter_capa_loja")) and galeria
+        fotos = ([L["capa"]] if L["capa"] and not manter else []) + L["galeria"]
         if galeria and not fotos:
             raise HTTPException(400, "Este anúncio do site não tem capa nem fotos para mandar.")
-        imgs = (fotos[:9] if galeria else []) + [variacoes[c.lower()]["capa"] for c in mapa.values()]
+        capa_loja = ""
+        if manter:  # a foto 1 continua a que o anuncio ja tem na loja; o site manda so as fotos 2 a 9
+            info = anuncio(loja, anuncio_id, canal)
+            atual = (info.get("fotos") or [None])[0] or info.get("capa") or ""
+            if not atual:
+                raise HTTPException(400, "Não consegui ler a capa atual deste anúncio na loja para manter.")
+            capa_loja = _subir_link(atual)
+        fotos = fotos[:8] if manter else fotos[:9]
+        imgs = (fotos if galeria else []) + [variacoes[c.lower()]["capa"] for c in mapa.values()]
         links = subir_fotos(imgs)
         corpo = {"loja": loja, "anuncio": anuncio_id}
         if galeria:
-            corpo["fotos"] = [links[r["id"]] for r in fotos[:9]]
+            corpo["fotos"] = ([capa_loja] if capa_loja else []) + [links[r["id"]] for r in fotos]
         if mapa:
             corpo["fotos_por_cor"] = {cor_mk: links[variacoes[cor_site.lower()]["capa"]["id"]] for cor_mk, cor_site in mapa.items()}
         envios.append({"rotulo": "Fotos do anúncio e capas das cores" if galeria and mapa else ("Fotos do anúncio" if galeria else "Capas das cores"),
