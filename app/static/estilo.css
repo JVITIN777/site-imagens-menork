@@ -802,3 +802,10 @@ html[data-tema="azul"] *{scrollbar-width:thin;scrollbar-color:var(--luz) transpa
 html[data-tema="azul"] ::selection{background:rgba(var(--brilho),.45);color:#fff}
 .tema-escolha .f-escuro{background:linear-gradient(180deg,#161617,#0d0d0e)}
 .tema-escolha .f-azul{background:radial-gradient(70px 50px at 90% 0,rgba(31,122,224,.6),transparent),radial-gradient(60px 40px at 10% 100%,rgba(40,110,255,.35),transparent),#08090b}
+/* faixa larga (imagem + nome) no lugar da logo, quando existir dados/faixa.png */
+.marca-site.com-faixa{padding:0;display:block}
+.marca-site .faixa{display:block;width:100%;height:auto;border-radius:10px;box-shadow:0 0 0 1px var(--borda)}
+.faixa-grande{display:block;width:min(520px,86vw);height:auto;margin:0 auto 18px;border-radius:14px;
+  -webkit-mask-image:radial-gradient(ellipse 72% 80% at 50% 50%,#000 62%,transparent 100%);mask-image:radial-gradient(ellipse 72% 80% at 50% 50%,#000 62%,transparent 100%)}
+.abertura-faixa{width:min(560px,80vw);height:auto;border-radius:14px;
+  -webkit-mask-image:radial-gradient(ellipse 72% 80% at 50% 50%,#000 62%,transparent 100%);mask-image:radial-gradient(ellipse 72% 80% at 50% 50%,#000 62%,transparent 100%)}

@@ -159,7 +159,7 @@ def pagina(estilos, banner, rodape, scripts, titulo, marca=MARCA, abertura=""):
 <body data-desfazer="60">
 {abertura}<canvas id="agua" aria-hidden="true"></canvas>
 <aside class="lateral">
-  <a class="marca-site" href="#" data-rota="/">{marca}<span><b class="nome-cromado">Menor K</b><small>imagens</small></span></a>
+  {{% if versao_faixa() %}}<a class="marca-site com-faixa" href="#" data-rota="/" title="Menor K"><img class="faixa" src="/faixa?v={{{{ versao_faixa() }}}}" alt="Menor K"></a>{{% else %}}<a class="marca-site" href="#" data-rota="/">{marca}<span><b class="nome-cromado">Menor K</b><small>imagens</small></span></a>{{% endif %}}
   <form class="busca" data-busca="1"><svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="9" cy="9" r="6"/><path d="m14 14 4 4"/></svg><input type="search" name="q" placeholder="Buscar" aria-label="Buscar produto, cor, tipo, anúncio ou arquivo"></form>
   <nav>{nav}</nav>
   <div class="rodape-lateral">{rodape}</div>
@@ -189,7 +189,7 @@ assert 'FAKE' not in site_js and 'arte(' not in site_js and 'TAREFAS_NOVAS' not 
 open(R+'static/site.js','w').write(site_js)
 open(R+'static/extra.css','w').write(extra.split('\n',3)[3])
 # abertura: cartas caindo enquanto o site carrega (some quando a primeira tela fica pronta; minimo 1,5 s, maximo 6 s)
-ABERTURA = """<div id="abertura" aria-hidden="true"><canvas id="cartas"></canvas><div class="abertura-centro">{% set lv = versao_logo() %}{% if lv %}<img class="abertura-logo" src="/logo?v={{ lv }}" alt="">{% endif %}<b class="nome-cromado">Menor K</b><span class="abertura-barra"><i></i></span></div></div>
+ABERTURA = """<div id="abertura" aria-hidden="true"><canvas id="cartas"></canvas><div class="abertura-centro">{% if versao_faixa() %}<img class="abertura-faixa" src="/faixa?v={{ versao_faixa() }}" alt="Menor K">{% else %}{% set lv = versao_logo() %}{% if lv %}<img class="abertura-logo" src="/logo?v={{ lv }}" alt="">{% endif %}<b class="nome-cromado">Menor K</b>{% endif %}<span class="abertura-barra"><i></i></span></div></div>
 <script src="/static/cartas.js?v={{ versao }}"></script>
 <script>(() => { const t0 = performance.now(); let foi = false;
   window.ABERTURA_FIM = () => { if (foi) return; foi = true; setTimeout(() => { const a = document.getElementById('abertura'); if (!a) return;

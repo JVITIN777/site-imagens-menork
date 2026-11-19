@@ -34,9 +34,22 @@ def versao_logo():
 
 
 tpl.env.globals["versao_logo"] = versao_logo
+
+
+def arquivo_faixa():
+    """Faixa larga com a imagem e o nome (dados/faixa.png). Fica so no PC do Menork, nunca no repositorio."""
+    return next((n.pasta_dados() / f"faixa{e}" for e in (".png", ".jpg", ".webp") if (n.pasta_dados() / f"faixa{e}").exists()), None)
+
+
+def versao_faixa():
+    p = arquivo_faixa()
+    return int(p.stat().st_mtime) if p else 0
+
+
+tpl.env.globals["versao_faixa"] = versao_faixa
 tpl.env.globals["versao_site"] = lambda: atu.versao_local()
 
-LIVRES = ("/static", "/entrar", "/criar-senha", "/logo")
+LIVRES = ("/static", "/entrar", "/criar-senha", "/logo", "/faixa")
 LOCAIS = ("127.0.0.1", "::1", "localhost")
 
 
@@ -84,6 +97,14 @@ def marca_mk(qual: str):
 @app.get("/logo")
 def logo():
     p = arquivo_logo()
+    if not p:
+        raise HTTPException(404)
+    return FileResponse(p, headers={"Cache-Control": "max-age=86400"})
+
+
+@app.get("/faixa")
+def faixa():
+    p = arquivo_faixa()
     if not p:
         raise HTTPException(404)
     return FileResponse(p, headers={"Cache-Control": "max-age=86400"})
