@@ -1510,16 +1510,20 @@ Object.assign(TELAS, {
     } else {
       // igual à visão "Lista" do ClickUp: grupos por status (recolhíveis) e as mesmas colunas da visão
       const cols = d.colunas || [], grupos = [...d.status]; tarefas.forEach(t => { if (!grupos.some(c => c.nome === t.status)) grupos.push({ nome: t.status, cor: t.cor }); });
+      // igual ao ClickUp: hoje / ontem / há N dias (até 6), depois 18/9/26
+      const ckQuando = ms => { if (!ms) return '<span class="ck-vazio">–</span>'; const d = new Date(+ms), h = new Date(); h.setHours(0, 0, 0, 0); const dias = Math.round((h - new Date(d).setHours(0, 0, 0, 0)) / 864e5);
+        return dias <= 0 ? 'Hoje' : dias === 1 ? 'Ontem' : dias < 7 ? `há ${dias} dias` : `${d.getDate()}/${d.getMonth() + 1}/${String(d.getFullYear()).slice(2)}`; };
       const pill = v => v.cor ? `<span class="ck-pill" style="--c:${esc(v.cor)}">${esc(v.texto)}</span>` : `<span class="ck-txt" title="${esc(v.texto)}">${esc(v.texto)}</span>`;
       const celula = (t, c) => {
         if (c.chave === 'priority') return ckPri[t.prioridade] ? `<span class="ck-prio"><i style="color:${ckPri[t.prioridade][1]}">⚑</i>${ckPri[t.prioridade][0]}</span>` : '<span class="ck-vazio">–</span>';
-        if (c.chave === 'status') return `<span class="ck-st" style="--c:${esc(t.cor)}">${esc(t.status)}</span>`;
+        if (c.chave === 'status') return `<span class="ck-st-cel" style="--c:${esc(t.cor)}"><i></i>${esc(t.status)}</span>`;
         if (c.chave === 'assignee') return t.responsaveis.map(ckAvatar).join('') || '<span class="ck-vazio">–</span>';
         if (c.chave === 'dueDate') return t.prazo ? `<span class="${+t.prazo < Date.now() ? 'ck-atrasada' : ''}">${ckData(t.prazo)}</span>` : '<span class="ck-vazio">–</span>';
-        if (c.chave === 'dateUpdated') return t.atualizada ? new Date(+t.atualizada).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' }) : '';
-        if (c.chave === 'dateCreated') return t.criada ? new Date(+t.criada).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' }) : '';
+        if (c.chave === 'dateUpdated') return ckQuando(t.atualizada);
+        if (c.chave === 'dateCreated') return ckQuando(t.criada);
         if (c.chave === 'tag') return t.etiquetas.map(g => `<span class="ck-pill" style="--c:${esc(g.cor)}">${esc(g.nome)}</span>`).join('');
-        const v = (t.campos || {})[c.chave] || []; return v.length ? v.map(pill).join('') : '<span class="ck-vazio">–</span>';
+        const v = (t.campos || {})[c.chave] || []; if (!v.length) return '<span class="ck-vazio">–</span>';
+        return c.tipo === 'drop_down' && v[0].cor ? `<span class="ck-bloco" style="--c:${esc(v[0].cor)}">${esc(v[0].texto)}</span>` : v.map(pill).join('');
       };
       corpo = `<div class="ck-lista">${grupos.filter(g => tarefas.some(t => t.status === g.nome) || g.tipo !== 'closed').map(g => { const ts = tarefas.filter(t => t.status === g.nome), fechado = CK.recolhidos.has(g.nome);
         return `<section class="ck-grupo"><header><button type="button" class="ck-seta ${fechado ? 'fechado' : ''}" data-ck-recolher="${esc(g.nome)}">▾</button><span class="ck-st" style="--c:${esc(g.cor)}">${esc(g.nome)}</span><small>${ts.length}</small></header>

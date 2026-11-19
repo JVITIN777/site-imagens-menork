@@ -895,3 +895,9 @@ html[data-tema="azul"] ::selection{background:rgba(var(--brilho),.45);color:#fff
 .ck-tab{min-width:0}.ck-rolagem{width:fit-content;max-width:100%}
 .crh-falta{color:var(--amarelo,#f5b400);font-weight:600}
 .ps-mesmo{background:var(--verde,#2ecd6f)!important;color:#fff!important}
+/* ClickUp: células parecidas com as do app */
+.ck-bloco{display:block;padding:3px 7px;border-radius:3px;background:var(--c);color:#fff;font-size:12px;font-weight:500;text-transform:uppercase;overflow:hidden;text-overflow:ellipsis;text-shadow:0 0 2px rgba(0,0,0,.4)}
+.ck-st-cel{display:inline-flex;align-items:center;gap:6px;padding:2px 8px;border-radius:4px;border:1px solid var(--borda);font-size:11px;font-weight:600;text-transform:uppercase;max-width:100%;overflow:hidden;text-overflow:ellipsis}
+.ck-st-cel i{width:9px;height:9px;border-radius:50%;border:2px dotted var(--c);flex:none}
+.ck-tab td{padding:6px 10px}
+.ck-tab td.ck-nome b{text-transform:none}
