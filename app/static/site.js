@@ -2185,15 +2185,18 @@ window.ANUNCIO = (ID) => {
     const selTipo = i => i.tipo ? '' : `<select class="mini-tipo" data-classificar="${i.id}" title="Dizer o tipo desta imagem"><option value="">Tipo…</option>${TIPOS_SEL.map(([v, t]) => `<option value="${v}">${t}</option>`).join('')}</select>`;
     const banco = `<div class="bloco banco"><h2>Imagens para usar no anúncio <small>arraste para cima ou use os botões</small></h2>
       <div class="abas-banco">${grupos.map(([k, nome, l]) => `<button type="button" data-aba-banco="${k}" class="${k === abaBanco ? 'ativo' : ''}" ${l.length ? '' : 'disabled'}>${nome} <b>${l.length}</b></button>`).join('')}</div>
-      <div class="trilho banco-trilho">${atual.map(i => peca(i, colocar + (proprias.has(i.id) ? botao('desvincular', '×', 'Tirar deste anúncio') : '') + selTipo(i), { arrasta: i.status === 'aprovada' })).join('') || vaga('Nada aqui.')}</div></div>`;
+      <div class="trilho banco-trilho ${atual.length > 14 ? 'duas' : ''}">${atual.map(i => peca(i, colocar + (proprias.has(i.id) ? botao('desvincular', '×', 'Tirar deste anúncio') : '') + selTipo(i), { arrasta: i.status === 'aprovada' })).join('') || vaga('Nada aqui.')}</div></div>`;
     // guarda onde voce deixou as rolagens: redesenhar nao pode jogar a coluna de volta para o topo
-    const rolCol = editor.querySelector('.slots-col')?.scrollTop || 0, rolAbas = editor.querySelector('.abas-cor')?.scrollTop || 0, rolJanela = window.scrollY;
+    const rolBanco = editor.querySelector('.banco-trilho')?.scrollLeft || 0, rolCol = editor.querySelector('.slots-col')?.scrollTop || 0, rolAbas = editor.querySelector('.abas-cor')?.scrollTop || 0, rolJanela = window.scrollY;
     editor.innerHTML = `<div class="editor-um">
       <div class="bloco fotos-principal"><div class="fotos-e-video"><div class="fp-fotos">${fotosCol}</div>${caixaVideo(a)}</div></div>
-      <div class="resto">${cores}${blocoTamanhos()}
-      ${banco}</div></div>`;
+      ${banco}
+      <div class="resto">${cores}${blocoTamanhos()}</div></div>`;
     const topo = document.getElementById('dados-topo');
     if (topo) topo.innerHTML = dados; else editor.querySelector('.resto').insertAdjacentHTML('beforeend', `<div class="bloco">${dados}</div>`);
+    // banco logo embaixo das fotos, em 2 linhas que rolam para o lado (a roda do mouse rola para o lado)
+    const trilho = editor.querySelector('.banco-trilho');
+    if (trilho) { trilho.scrollLeft = rolBanco; trilho.addEventListener('wheel', ev => { if (Math.abs(ev.deltaY) > Math.abs(ev.deltaX) && trilho.scrollWidth > trilho.clientWidth) { trilho.scrollLeft += ev.deltaY; ev.preventDefault(); } }, { passive: false }); }
     const col = editor.querySelector('.slots-col'), abas = editor.querySelector('.abas-cor');
     if (col) col.scrollTop = rolCol; if (abas) abas.scrollTop = rolAbas;
     if (Math.abs(window.scrollY - rolJanela) > 1) window.scrollTo(0, rolJanela);

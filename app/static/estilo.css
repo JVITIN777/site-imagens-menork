@@ -903,6 +903,11 @@ html[data-tema="azul"] ::selection{background:rgba(var(--brilho),.45);color:#fff
 .ck-tab td.ck-nome b{text-transform:none}
 /* TikTok Shop: prévia e marca */
 .tela.mk-tiktok{--pv:#fe2c55}
-.mk-marca.tiktok{background:#000;box-shadow:inset 2px 0 0 #25f4ee,inset -2px 0 0 #fe2c55}
+.mk-marca.tiktok{background:#000;border-radius:50%}
 .tela.mk-tiktok .comprar .forte{background:#fe2c55}
 .tela.mk-tiktok .comprar span:not(.forte){color:#161823}
+/* banco de imagens colado embaixo das fotos: 2 linhas rolando para o lado, para arrastar perto */
+.editor-um > .banco{margin-top:10px}
+.banco .banco-trilho{display:grid;grid-template-columns:none;grid-template-rows:auto;grid-auto-flow:column;grid-auto-columns:118px;max-height:none;overflow-x:auto;overflow-y:hidden;padding:0 0 8px;scroll-behavior:auto}
+.banco .banco-trilho .peca img{aspect-ratio:1;object-fit:cover}
+.banco .banco-trilho.duas{grid-template-rows:repeat(2,auto)}
