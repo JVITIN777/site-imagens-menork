@@ -862,3 +862,4 @@ html[data-tema="azul"] ::selection{background:rgba(var(--brilho),.45);color:#fff
 @media (max-width:1000px){.ck-grade{grid-template-columns:1fr}.ck-arvore{position:static;max-height:260px}}
 .ck-comentar textarea,.ck-nova input{font:inherit}
 .ck-pasta > summary::before{content:"▸";font-size:10px;transition:transform .15s}.ck-pasta[open] > summary::before{transform:rotate(90deg)}
+.ck-chave-form{display:flex;gap:8px;max-width:640px}.ck-chave-form input{flex:1;min-width:0}

@@ -1488,8 +1488,8 @@ Object.assign(TELAS, {
     let corpo = '';
     if (CK.erro === 'SEM_CHAVE') return `<div class="cabeca"><h1>ClickUp <small>ligue a sua conta uma vez</small></h1></div>
       <div class="bloco ck-ligar"><h2>Cole a sua chave pessoal do ClickUp</h2>
-      <ol><li>No ClickUp, clique na sua foto (canto de baixo, à esquerda) › <b>Configurações</b>.</li><li>Entre em <b>Apps</b> e, em <b>API Token</b>, clique em <b>Gerar</b> (ou <b>Copiar</b>, se já tiver).</li><li>Cole aqui embaixo. Ela começa com <b>pk_</b>.</li></ol>
-      <form class="b2-linha" data-ck-chave><input type="password" name="chave" placeholder="pk_..." autocomplete="off" style="flex:1"><button class="b">Ligar</button></form>
+      <ol><li>Abra <a href="https://app.clickup.com/settings/apps" target="_blank" rel="noopener"><b>app.clickup.com/settings/apps</b></a> (ou: clique na sua foto no ClickUp › <b>Configurações</b> › <b>Apps</b>).</li><li>Em <b>API Token</b>, clique em <b>Generate</b> (Gerar). Se já tiver, clique em <b>Copy</b> (Copiar).</li><li>Cole aqui embaixo e clique em <b>Ligar</b>. Ela começa com <b>pk_</b>.</li></ol>
+      <form class="ck-chave-form" data-ck-chave><input type="password" name="chave" placeholder="pk_..." autocomplete="off"><button class="b">Ligar</button></form>
       <p class="pequeno">A chave fica guardada só no seu PC (no banco do site). Não vai para o GitHub e não aparece na tela.</p></div>`;
     if (CK.erro) corpo = `<div class="nota ruim"><b>Não deu para ler o ClickUp</b><span>${esc(CK.erro)}</span></div>`;
     else if (!d) corpo = '<p class="pequeno">Carregando a lista…</p>';
