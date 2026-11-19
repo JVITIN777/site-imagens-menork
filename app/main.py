@@ -497,6 +497,37 @@ def capas_ja_publicadas(c, aid):
     return avisos[:20]
 
 
+def _palavras_cor(t):
+    import unicodedata
+    t = unicodedata.normalize("NFKD", str(t or "")).encode("ascii", "ignore").decode().lower()
+    return " ".join(re.findall(r"[a-z0-9]+", t))
+
+
+def _parecido(a, b):
+    """Codigos que diferem por uma letra ou numero a mais (TA01 x TA101): o Grok as vezes escreve o codigo curto."""
+    a, b = a.upper(), b.upper()
+    if a == b or min(len(a), len(b)) < 3 or abs(len(a) - len(b)) != 1:
+        return False
+    curto, longo = sorted((a, b), key=len)
+    return any(longo[:k] + longo[k + 1:] == curto for k in range(len(longo)))
+
+
+def _do_produto_parecido(c, aid, produto, cores, ja):
+    """Imagens aprovadas de um codigo parecido (TA01 para o TA101) que tem uma das cores deste anuncio:
+    entram no banco do anuncio. As de outras cores (o outro modelo de verdade) ficam de fora."""
+    if not cores:
+        return []
+    alvo = {_palavras_cor(x) for x in cores}
+    outros = [r[0] for r in c.execute("SELECT DISTINCT produto FROM imagens WHERE produto<>''") if _parecido(r[0], produto)]
+    saida = []
+    for p in outros:
+        for r in c.execute(f"SELECT {CAMPOS_IMG} FROM imagens i WHERE i.produto=? AND i.status='aprovada' AND i.arquivo<>'' "
+                           "AND i.id NOT IN (SELECT imagem_id FROM imagem_anuncio WHERE anuncio_id=?) ORDER BY i.tipo, i.cor, i.id", (p, aid)):
+            if r["id"] not in ja and _palavras_cor(r["cor"]) in alvo:
+                saida.append(r)
+    return saida[:150]
+
+
 def montagem(c, aid):
     """Estrutura completa de um anuncio: capa, fotos em ordem, cores e o que sobra."""
     a = c.execute("SELECT * FROM anuncios WHERE id=?", (aid,)).fetchone()
@@ -532,7 +563,8 @@ def montagem(c, aid):
         sugestoes = c.execute(
             f"SELECT {CAMPOS_IMG} FROM imagens i WHERE i.produto=? AND i.status='aprovada' AND i.arquivo<>'' "
             "AND i.id NOT IN (SELECT imagem_id FROM imagem_anuncio WHERE anuncio_id=?) "
-            "ORDER BY i.tipo, i.cor, i.id LIMIT 60", (produto, aid)).fetchall()
+            "ORDER BY i.tipo, i.cor, i.id LIMIT 150", (produto, aid)).fetchall()
+        sugestoes = list(sugestoes) + _do_produto_parecido(c, aid, produto, [v["cor"] for v in variacoes], {r["id"] for r in sugestoes})
     return {
         "anuncio": dict({k: a[k] for k in ("id", "nome", "formato", "titulo", "preco", "preco_antigo", "descricao", "video")},
                         modo=_modo(a["modo"]), tamanhos=a["tamanhos"] or ""),

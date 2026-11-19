@@ -152,7 +152,8 @@
     const vistos = new Set(), todas = [];
     const juntar = l => (l || []).forEach(i => { if (i && !vistos.has(i.id)) { vistos.add(i.id); todas.push(i); } });
     juntar(E.todas); juntar(E.sugestoes); juntar((typeof DB !== 'undefined' && DB.imgs) || []);
-    const ia = todas.filter(i => i.status === 'aprovada' && ['ia', 'cena'].includes(i.tipo) && (!i.produto || !prod || String(i.produto).toUpperCase() === prod) && mesmaCor(i.cor, cor));
+    const doBanco = new Set([...(E.todas || []), ...(E.sugestoes || [])].map(i => i.id));  // o banco ja traz as do codigo parecido (TA01 x TA101)
+    const ia = todas.filter(i => i.status === 'aprovada' && ['ia', 'cena'].includes(i.tipo) && (doBanco.has(i.id) || !i.produto || !prod || String(i.produto).toUpperCase() === prod) && mesmaCor(i.cor, cor));
     const fundo = document.createElement('div'); fundo.className = 'troca-capa-fundo';
     fundo.innerHTML = `<div class="troca-capa"><div class="tc-cab"><h3>Capa da variação <b>${esc(cor)}</b> <small>${ia.length} foto(s) IA desta cor${prod ? ' do ' + esc(prod) : ''} · clique para trocar</small></h3><button type="button" class="b claro mini" data-tc-fechar>Fechar</button></div>
       <div class="tc-grade">${ia.map(i => `<button type="button" class="tc-foto ${i.id === v.capa.id ? 'atual' : ''}" data-tc-img="${i.id}" title="${esc(i.cor || '')}"><img loading="lazy" src="/mini/${i.id}" alt="">${i.id === v.capa.id ? '<em>atual</em>' : ''}</button>`).join('')
