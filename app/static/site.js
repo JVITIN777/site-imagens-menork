@@ -1040,7 +1040,7 @@ function mkMostrar() {
       <div class="b2-grade"><label class="largo2">Título novo<input name="titulo" placeholder="${esc(d.titulo)}" maxlength="255"></label>
         <label>Preço novo<input name="preco" inputmode="decimal" placeholder="Ex.: 49,90"></label><label>Estoque novo${vs.length > 1 ? ' (todas as variações)' : ''}<input name="estoque" inputmode="numeric" placeholder="Ex.: 20"></label></div>
       <label class="campo-b2">Descrição nova<textarea name="descricao" rows="4" placeholder="${d.descricao ? 'Deixe vazio para manter a atual' : ''}">${''}</textarea></label>
-      ${l?.canal === 'shopee' ? `<h3>Promoção <small class="pequeno">coloque este anúncio numa promoção que a loja já tem e ajuste o preço</small></h3>
+      ${['shopee', 'tiktokshop'].includes(l?.canal) ? `<h3>Promoção <small class="pequeno">coloque este anúncio numa promoção que a loja já tem e ajuste o preço</small></h3>
         <div class="b2-linha"><button type="button" class="b claro" data-promo-shp="${esc(d.id)}" data-loja="${esc(l.id)}">Colocar numa promoção</button></div>` : ''}
       ${l?.canal === 'mercadolivre' ? `<h3>Promoção <small class="pequeno">desconto direto do Mercado Livre; o preço do anúncio fica como o cheio, riscado</small></h3>
         <div class="b2-linha"><input id="mk-promo" inputmode="decimal" placeholder="Preço promocional, ex.: 59,90"><button type="button" class="b claro" id="mk-promo-simular">Simular promoção</button></div>` : ''}
