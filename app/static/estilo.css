@@ -708,3 +708,56 @@ html[data-fundo="luz"] :is(.cartao,.bloco,.arvore){background:rgba(16,16,18,.78)
 .b2-irmaos-lista span{display:flex;flex-direction:column;min-width:0}
 .b2-irmaos-lista small{color:var(--fraco);font-size:11px}
 .ja-criado{font-style:normal;color:var(--verde)}
+
+/* ================= tema "Azul" (teste): preto azulado, fonte Inter, azul de destaque, brilhos azuis nos cantos,
+   cartões sem borda que acendem no passar do mouse (fundo clareia, borda azul, título fica azul) ================= */
+@font-face{font-family:"Inter";src:url("/static/fontes/Inter-latin.woff2") format("woff2");font-weight:100 900;font-display:swap;unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
+@font-face{font-family:"Inter";src:url("/static/fontes/Inter-latin-ext.woff2") format("woff2");font-weight:100 900;font-display:swap;unicode-range:U+0100-02AF,U+0304,U+0308,U+0329,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF}
+html[data-tema="azul"]{
+  --chao:#08090b; --painel:#0d0e11; --relevo:#16181d; --borda:#1c1f25; --borda-forte:#2a2f38;
+  --texto:#f4f5f7; --fraco:#8b919c; --apagado:#5d636d;
+  --luz:#1f7ae0; --luz-tinta:#ffffff; --azul:#4a9bff; --brilho:31,122,224;
+  --titulo:"Inter",system-ui,sans-serif; --corpo:"Inter",system-ui,sans-serif;
+  background:#08090b}
+html[data-tema="azul"] body{letter-spacing:-.005em}
+html[data-tema="azul"] h1{font-weight:800;letter-spacing:-.025em}
+html[data-tema="azul"] :is(h2,h3){letter-spacing:-.015em}
+/* fundo: brilhos azuis desfocados nos cantos, mexendo bem devagar */
+html[data-tema="azul"]::before,html[data-tema="azul"] body::before{content:"";position:fixed;z-index:-1;pointer-events:none;border-radius:50%;filter:blur(90px);will-change:transform}
+html[data-tema="azul"]::before{width:640px;height:640px;top:-260px;right:-200px;background:rgba(var(--brilho),.22);animation:brilho-a 26s ease-in-out infinite alternate}
+html[data-tema="azul"] body::before{width:560px;height:560px;bottom:-260px;left:60px;background:rgba(40,110,255,.14);animation:brilho-b 32s ease-in-out infinite alternate}
+html[data-tema="azul"] body::after{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;background:radial-gradient(ellipse at 50% 0,rgba(255,255,255,.025),transparent 60%)}
+@keyframes brilho-a{to{transform:translate3d(-80px,60px,0) scale(1.1)}}
+@keyframes brilho-b{to{transform:translate3d(120px,-50px,0) scale(.92)}}
+@media (prefers-reduced-motion:reduce){html[data-tema="azul"]::before,html[data-tema="azul"] body::before{animation:none}}
+html[data-tema="azul"] #agua{display:none!important}
+/* lateral e cabeçalho */
+html[data-tema="azul"] .lateral{background:rgba(10,11,14,.78);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border-right:1px solid rgba(255,255,255,.05)}
+html[data-tema="azul"] .lateral nav a{transition:background .2s,color .2s}
+html[data-tema="azul"] .lateral nav a:hover{background:rgba(255,255,255,.04)}
+html[data-tema="azul"] .lateral nav a.ativo{background:rgba(var(--brilho),.13);color:#fff}
+html[data-tema="azul"] .lateral nav a.ativo svg{color:var(--azul)}
+html[data-tema="azul"] .bolha{background:var(--luz);color:#fff}
+/* cartões e blocos: sem borda, cantos 16px; acendem ao passar o mouse */
+html[data-tema="azul"] :is(.cartao,.bloco,.arvore){background:rgba(22,24,29,.55);border:1px solid rgba(255,255,255,.04);border-radius:16px;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);transition:background .3s cubic-bezier(.4,0,.2,1),border-color .3s,translate .3s,box-shadow .3s}
+html[data-tema="azul"] .cartao:hover{background:rgba(28,31,38,.78);border-color:rgba(var(--brilho),.35);translate:0 -3px;box-shadow:0 14px 34px -18px rgba(var(--brilho),.55)}
+html[data-tema="azul"] .cartao :is(b,strong,h3){transition:color .3s}
+html[data-tema="azul"] .cartao:hover :is(.nome,.produto,b:first-of-type,h3){color:var(--azul)}
+html[data-tema="azul"] .bloco:hover{border-color:rgba(255,255,255,.07)}
+/* botões: azul cheio e contorno azul, com brilho no passar do mouse */
+html[data-tema="azul"] .b{border-radius:10px;transition:background .2s,box-shadow .25s,border-color .2s,filter .2s,translate .12s}
+html[data-tema="azul"] .b:not(.claro):not(.verde):not(.vermelho):hover{filter:none;background:#2b87ee;box-shadow:0 8px 24px -8px rgba(var(--brilho),.8)}
+html[data-tema="azul"] .b.claro{background:transparent;border-color:rgba(var(--brilho),.45);color:var(--texto)}
+html[data-tema="azul"] .b.claro:hover{background:rgba(var(--brilho),.1);border-color:rgba(var(--brilho),.8)}
+html[data-tema="azul"] .b.verde:hover{box-shadow:0 8px 24px -10px rgba(67,196,135,.7)}
+html[data-tema="azul"] :is(input,select,textarea){background:rgba(8,9,11,.7);border-color:#20242b;border-radius:10px;transition:border-color .2s,box-shadow .2s}
+html[data-tema="azul"] :is(input,select,textarea):focus{border-color:var(--luz);box-shadow:0 0 0 3px rgba(var(--brilho),.18);outline:none}
+html[data-tema="azul"] :focus-visible{outline-color:var(--azul)}
+html[data-tema="azul"] .nome-cromado{filter:drop-shadow(0 0 14px rgba(var(--brilho),.35))}
+/* números e destaques em azul */
+html[data-tema="azul"] :is(.numero,.grande-numero,.kpi b){color:var(--azul)}
+html[data-tema="azul"] ::selection{background:rgba(var(--brilho),.45)}
+html[data-tema="azul"] ::-webkit-scrollbar-thumb{background:#22262e;border-color:#08090b}
+
+.tema-escolha .f-escuro{background:linear-gradient(180deg,#161617,#0d0d0e)}
+.tema-escolha .f-azul{background:radial-gradient(70px 50px at 90% 0,rgba(31,122,224,.6),transparent),radial-gradient(60px 40px at 10% 100%,rgba(40,110,255,.35),transparent),#08090b}

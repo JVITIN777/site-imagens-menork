@@ -150,6 +150,7 @@ def pagina(estilos, banner, rodape, scripts, titulo, marca=MARCA, abertura=""):
     return f"""<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
+<script>try{{document.documentElement.dataset.tema=localStorage.getItem('tema')||'escuro'}}catch(e){{}}</script>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{titulo}</title>

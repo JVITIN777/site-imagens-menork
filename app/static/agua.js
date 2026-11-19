@@ -3,7 +3,9 @@
 // 30 quadros por segundo, e para quando a aba nao esta visivel.
 (() => {
   // qual fundo: 'naipes' (padrao), 'fumaca', 'feltro', 'coringa' (losangos), 'agua' (o antigo, animado) ou 'liso'
-  let fundo = 'luz'; try { fundo = localStorage.getItem('fundo_v2') || 'luz'; } catch (_) {}
+  let fundo = 'luz', tema = 'escuro'; try { fundo = localStorage.getItem('fundo_v2') || 'luz'; tema = localStorage.getItem('tema') || 'escuro'; } catch (_) {}
+  document.documentElement.dataset.tema = tema;
+  if (tema === 'azul') fundo = 'azul'; // o tema azul tem o fundo dele (brilhos azuis)
   document.documentElement.dataset.fundo = fundo;
   const tela = document.getElementById('agua'); if (!tela) return;
   if (fundo !== 'agua') { tela.style.display = 'none'; return; }
