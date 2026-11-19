@@ -911,3 +911,12 @@ html[data-tema="azul"] ::selection{background:rgba(var(--brilho),.45);color:#fff
 .banco .banco-trilho{display:grid;grid-template-columns:none;grid-template-rows:auto;grid-auto-flow:column;grid-auto-columns:118px;max-height:none;overflow-x:auto;overflow-y:hidden;padding:0 0 8px;scroll-behavior:auto}
 .banco .banco-trilho .peca img{aspect-ratio:1;object-fit:cover}
 .banco .banco-trilho.duas{grid-template-rows:repeat(2,auto)}
+/* trocar a capa da variacao: janela com as fotos IA da cor */
+.troca-capa-fundo{position:fixed;inset:0;z-index:300;background:rgba(0,0,0,.6);display:grid;place-items:center;padding:20px}
+.troca-capa{background:var(--painel,#141414);border:1px solid var(--borda,#333);border-radius:14px;padding:16px;width:min(980px,96vw);max-height:86vh;display:flex;flex-direction:column;gap:12px}
+.tc-cab{display:flex;align-items:center;justify-content:space-between;gap:10px}.tc-cab h3{margin:0;font-size:16px}.tc-cab small{color:var(--fraco);font-weight:400;margin-left:6px}
+.tc-grade{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px;overflow:auto}
+.tc-foto{position:relative;padding:0;border:2px solid transparent;border-radius:10px;overflow:hidden;cursor:pointer;background:#000;aspect-ratio:1}
+.tc-foto img{width:100%;height:100%;object-fit:cover;display:block;transition:transform .15s}
+.tc-foto:hover{border-color:var(--luz,#2b8cee)}.tc-foto:hover img{transform:scale(1.04)}
+.tc-foto.atual{border-color:var(--verde,#2ecd6f)}.tc-foto em{position:absolute;left:6px;top:6px;background:var(--verde,#2ecd6f);color:#000;font-size:11px;font-style:normal;font-weight:700;padding:1px 6px;border-radius:5px}

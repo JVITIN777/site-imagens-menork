@@ -2178,7 +2178,7 @@ window.ANUNCIO = (ID) => {
       </div>`;
 
     const chip = x => `<div class="peca var-cor chip-cor ${ml() && x.cor === corAtiva ? 'escolhida' : ''}" data-cor="${esc(x.cor)}" data-cor-alvo="${esc(x.cor)}">
-        <button type="button" class="chip-foto" ${ml() ? `data-cor-aba="${esc(x.cor)}"` : `data-ver="${x.capa.id}"`} title="${ml() ? 'Montar as fotos desta cor' : 'Ver a capa da variação'}"><img loading="lazy" src="/mini/${(ml() && x.fotos[0] ? x.fotos[0] : x.capa).id}" alt=""></button>
+        <button type="button" class="chip-foto" ${ml() ? `data-cor-aba="${esc(x.cor)}"` : `data-trocar-capa="${esc(x.cor)}"`} title="${ml() ? 'Montar as fotos desta cor' : 'Trocar a capa da variação: mostra as fotos IA desta cor'}"><img loading="lazy" src="/mini/${(ml() && x.fotos[0] ? x.fotos[0] : x.capa).id}" alt=""></button>
         <span class="chip-txt"><input class="nome-cor" value="${esc(x.cor)}" aria-label="Nome da cor"><small>${ml() ? x.fotos.length + ' de 10 fotos' : 'capa da variação'}</small></span>
         <button type="button" class="chip-tirar" data-acao="tirar_cor" title="Tirar esta cor do anúncio">×</button></div>`;
     const cores = `<div class="bloco cores-compacto"><h2>Variação 1: Cor <small>${E.variacoes.length} cor(es) · ${ml() ? 'clique numa cor para montar as fotos dela lá em cima' : 'arraste uma imagem para cima de uma cor para trocar a capa da variação'}</small></h2>
@@ -2222,6 +2222,39 @@ window.ANUNCIO = (ID) => {
     c.classList.toggle('passou', !!max && n > max);
   }
 
+  // ---- trocar a capa da variacao: clica na cor e aparecem as fotos IA daquela cor do produto; clicou, trocou
+  const semAc = t => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  function mesmaCor(corImg, corVar) {
+    const a = semAc(corImg), b = semAc(corVar); if (!a || !b) return false;
+    if (a === b) return true;
+    const pal = b.split(' '), sig = pal.map(w => w[0]).join('');
+    if (a.replace(/ /g, '') === sig) return true;  // Grok: PD = Palha/Dourado, CN = Caramelo/Natural
+    if (pal.length === 1 && a.length <= 3 && b.startsWith(a)) return true;  // CA = Caramelo
+    return false;
+  }
+  function trocarCapa(cor) {
+    const v = variacao(cor); if (!v) return;
+    const prod = (E.produto || E.anuncio.nome.split(/\s+/)[0] || '').toUpperCase();
+    const vistos = new Set(), todas = [];
+    const juntar = l => (l || []).forEach(i => { if (i && !vistos.has(i.id)) { vistos.add(i.id); todas.push(i); } });
+    juntar(E.todas); juntar(E.sugestoes); juntar((typeof DB !== 'undefined' && DB.imgs) || []);
+    const ia = todas.filter(i => i.status === 'aprovada' && ['ia', 'cena'].includes(i.tipo) && (!i.produto || !prod || String(i.produto).toUpperCase() === prod) && mesmaCor(i.cor, cor));
+    const fundo = document.createElement('div'); fundo.className = 'troca-capa-fundo';
+    fundo.innerHTML = `<div class="troca-capa"><div class="tc-cab"><h3>Capa da variação <b>${esc(cor)}</b> <small>${ia.length} foto(s) IA desta cor${prod ? ' do ' + esc(prod) : ''} · clique para trocar</small></h3><button type="button" class="b claro mini" data-tc-fechar>Fechar</button></div>
+      <div class="tc-grade">${ia.map(i => `<button type="button" class="tc-foto ${i.id === v.capa.id ? 'atual' : ''}" data-tc-img="${i.id}" title="${esc(i.cor || '')}"><img loading="lazy" src="${IMG(i.id)}" alt="">${i.id === v.capa.id ? '<em>atual</em>' : ''}</button>`).join('')
+        || `<p class="pequeno">Nenhuma foto IA aprovada da cor ${esc(cor)}${prod ? ' do ' + esc(prod) : ''}. Arraste qualquer imagem para cima da cor para trocar.</p>`}</div></div>`;
+    document.body.appendChild(fundo);
+    const fechar = () => { fundo.remove(); document.removeEventListener('keydown', esc_); };
+    const esc_ = ev => { if (ev.key === 'Escape') fechar(); };
+    document.addEventListener('keydown', esc_);
+    fundo.addEventListener('click', ev => {
+      if (ev.target === fundo || ev.target.closest('[data-tc-fechar]')) return fechar();
+      const f = ev.target.closest('[data-tc-img]'); if (!f) return;
+      fechar(); if (+f.dataset.tcImg === v.capa.id) return;
+      fazer({ acao: 'cor', cor, imagem: +f.dataset.tcImg }).then(() => aviso('Capa da variação ' + cor + ' trocada.'));
+    });
+  }
+
   function escolherCor(p, imagem) {  // mostra as cores como botoes na propria imagem
     if (!E.variacoes.length) return fazer({ acao: 'cor', imagem });
     const caixa = p.querySelector('.botoes'); caixa.classList.add('escolha');
@@ -2233,6 +2266,7 @@ window.ANUNCIO = (ID) => {
   editor.addEventListener('click', e => {
     const ab = e.target.closest('[data-aba-banco]'); if (ab) { abaBanco = ab.dataset.abaBanco; return desenharEditor(); }
     if (e.target.closest('select')) return;
+    const tc = e.target.closest('[data-trocar-capa]'); if (tc) return trocarCapa(tc.dataset.trocarCapa);
     const aba = e.target.closest('[data-cor-aba]'); if (aba) { corAtiva = corPrevia = aba.dataset.corAba; return desenhar(); }
     const ts = e.target.closest('[data-tirar-slot]');
     if (ts) return ml() ? fazer({ acao: 'tirar_foto_cor', cor: corAtiva, imagem: +ts.dataset.tirarSlot }) : fazer({ acao: 'tirar', imagem: +ts.dataset.tirarSlot });
