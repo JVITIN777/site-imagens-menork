@@ -809,3 +809,5 @@ html[data-tema="azul"] ::selection{background:rgba(var(--brilho),.45);color:#fff
   -webkit-mask-image:radial-gradient(ellipse 72% 80% at 50% 50%,#000 62%,transparent 100%);mask-image:radial-gradient(ellipse 72% 80% at 50% 50%,#000 62%,transparent 100%)}
 .abertura-faixa{width:min(560px,80vw);height:auto;border-radius:14px;
   -webkit-mask-image:radial-gradient(ellipse 72% 80% at 50% 50%,#000 62%,transparent 100%);mask-image:radial-gradient(ellipse 72% 80% at 50% 50%,#000 62%,transparent 100%)}
+.marca-site.com-faixa{flex:none}
+@media (max-width:1000px){.marca-site.com-faixa{width:auto}.marca-site .faixa{width:auto;height:44px;max-width:none}}
