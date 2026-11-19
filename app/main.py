@@ -379,7 +379,9 @@ async def demanda_produto(request: Request):
 @app.get("/api/versao")
 def api_versao():
     """Leve: a pagina pergunta isto de tempos em tempos para recarregar sozinha depois de uma atualizacao."""
-    return {"atual": atu.versao_local()}
+    with n.con() as c:  # e o numero da Fila de aprovacao, para a bolinha do menu ficar sempre certa
+        fila = c.execute("SELECT COUNT(*) FROM imagens WHERE status IN ('gerada','conferencia')").fetchone()[0]
+    return {"atual": atu.versao_local(), "fila": fila}
 
 
 @app.post("/api/atualizar")

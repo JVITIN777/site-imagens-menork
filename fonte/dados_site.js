@@ -72,13 +72,18 @@ document.addEventListener('click', async e => {
   async function olhar() {
     try {
       const r = await fetch('/api/versao', { cache: 'no-store' }); if (!r.ok) return;
-      const v = (await r.json()).atual; if (!minha) { minha = v; return; }
+      const resp = await r.json(), v = resp.atual;
+      // bolinha da Fila de aprovacao: atualiza sozinha; se mudou, recarrega os dados (a fila aberta tambem atualiza)
+      const bolha = document.getElementById('bolha');
+      if (bolha && resp.fila != null && String(resp.fila) !== bolha.textContent) { bolha.textContent = resp.fila; bolha.hidden = !resp.fila;
+        if (!ocupado() && (typeof ROTA === 'undefined' || ROTA === '/' || ROTA === '')) document.dispatchEvent(new Event('menork:mudou')); }
+      if (!minha) { minha = v; return; }
       if (v === minha) return;
       if (ocupado()) { if (!avisou) { avisou = true; window.menork.aviso('Saiu a versão ' + v + ' do site. A página recarrega quando você terminar de digitar.', null, null, 20); } return; }
       window.menork.aviso('Site atualizado para a versão ' + v + '. Recarregando…', null, null, 5);
       setTimeout(() => location.reload(), 1500);
     } catch (_) { /* o site esta religando: tenta de novo no proximo giro */ }
   }
-  olhar(); setInterval(olhar, 20000);
+  olhar(); setInterval(olhar, 10000);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) olhar(); });
 })();
