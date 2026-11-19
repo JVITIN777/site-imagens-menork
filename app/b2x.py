@@ -23,7 +23,8 @@ from PIL import Image
 from . import nucleo as n
 
 rota = APIRouter()
-CANAIS = {"shopee": "Shopee", "mercadolivre": "Mercado Livre"}
+CANAIS = {"shopee": "Shopee", "mercadolivre": "Mercado Livre", "tiktokshop": "TikTok"}
+COM_PROMO_DA_LOJA = ("shopee", "tiktokshop")  # sobem com o preco cheio e entram numa promocao que a loja ja tem
 _preparos = {}  # simulacoes de troca de fotos esperando o confirmar (ficam 30 min na memoria)
 
 
@@ -355,7 +356,7 @@ async def fotos_simular(request: Request):
     mapa = {str(k): str(v) for k, v in (d.get("mapa") or {}).items() if v}  # cor no marketplace -> cor no site
     if d.get("ajustar_modo") and canal in ("shopee", "mercadolivre"):  # troca em lote: o modo segue a loja escolhida
         with n.con() as c:
-            c.execute("UPDATE anuncios SET modo=? WHERE id=?", ("ml" if canal == "mercadolivre" else "shopee", aid))
+            c.execute("UPDATE anuncios SET modo=? WHERE id=?", ({"mercadolivre": "ml", "tiktokshop": "tiktok"}.get(canal, "shopee"), aid))
     m = _anuncio_local(aid)
     L = m["linhas"]
     variacoes = {v["cor"].lower(): v for v in L["variacoes"]}
@@ -522,7 +523,7 @@ def _promo_do_anuncio(c, aid):
 
 def _falta_promo(c, r):
     """Shopee criado com preco cheio e ainda fora da promocao: devolve o preco promocional que falta colocar."""
-    if r.get("canal") != "shopee" or r.get("promo_feita") or not r.get("anuncio_ids") or r.get("status") != "criado":
+    if r.get("canal") not in COM_PROMO_DA_LOJA or r.get("promo_feita") or not r.get("anuncio_ids") or r.get("status") != "criado":
         return ""
     if r.get("promo"):
         return r["promo"]
@@ -660,9 +661,36 @@ def ficha(loja: str, categoria: str, marca: str = ""):
              for x in (marca_.get("lista") or [])[:300]] if isinstance(marca_, dict) else []
     tipos = [{"id": str(x[0] if isinstance(x, list) else x.get("id")), "nome": str(x[1] if isinstance(x, list) else x.get("nome"))}
              for x in (r.get("tipos_anuncio") or [])] if isinstance(r.get("tipos_anuncio"), list) else []
-    return {"canal": r.get("canal") or "", "obrigatorios": obrig, "opcionais": opcionais[:40], "campos_b2x": sorted(r.keys())[:60], "marcas": lista,
+    tab = r.get("tabela_medidas") or {}
+    dep_cols = r.get("depositos_colunas") or ["id", "nome", "tipo", "status", "padrao", "serve_para_vender"]
+    depositos = [dict(zip(dep_cols, x)) if isinstance(x, list) else x for x in (r.get("depositos_detalhe") or [])]
+    depositos = [{"id": str(x.get("id")), "nome": str(x.get("nome") or ""), "padrao": bool(x.get("padrao"))}
+                 for x in depositos if isinstance(x, dict) and x.get("serve_para_vender", True) and x.get("status", "ENABLED") == "ENABLED"]
+    modelos = [{"id": str(x[0] if isinstance(x, list) else x.get("id")), "nome": str((x[1] if isinstance(x, list) and len(x) > 1 else x.get("nome")) or "")}
+               for x in (tab.get("modelos") or []) if isinstance(x, (list, dict))] if isinstance(tab, dict) else []
+    return {"canal": r.get("canal") or "", "depositos": depositos, "tabela_modelos": modelos, "obrigatorios": obrig, "opcionais": opcionais[:40], "campos_b2x": sorted(r.keys())[:60], "marcas": lista,
             "sem_marca": bool(marca_.get("sem_marca_aceita")) if isinstance(marca_, dict) else False,
             "tabela_exige": bool((r.get("tabela_medidas") or {}).get("exige")), "tipos_anuncio": tipos, "dica": r.get("dica") or ""}
+
+
+def _linhas_medidas(aid, tamanhos):
+    """Linhas da tabela de medidas do TikTok a partir da aba Medidas (produto = 1a palavra do nome do anuncio)."""
+    with n.con() as c:
+        a = c.execute("SELECT nome FROM anuncios WHERE id=?", (aid,)).fetchone()
+        ref = ((a["nome"] if a else "") or "").strip().split()
+        if not ref:
+            return []
+        med = {str(m["numero"]).strip(): m["cm"] for m in c.execute("SELECT numero, cm FROM medidas WHERE UPPER(produto)=?", (ref[0].upper(),))}
+    linhas = []
+    for t in tamanhos:
+        cm = med.get(str(t).strip())
+        if cm is None and "/" in str(t):  # 33/34: usa o maior
+            cm = med.get(str(t).split("/")[-1].strip())
+        try:
+            linhas.append({"tamanho": str(t), "comprimento_pe_cm": float(str(cm).replace(",", "."))})
+        except (TypeError, ValueError):
+            pass
+    return linhas
 
 
 def _preco(t):
@@ -700,7 +728,7 @@ def criar_do_site(d, por="você"):
         raise HTTPException(400, "Preencha o preço do anúncio no site antes de criar.")
     cheio = _preco(a["preco_antigo"])
     promo_ml = preco if canal == "mercadolivre" and cheio and cheio > preco else None
-    promo_shopee = preco if canal == "shopee" and cheio and cheio > preco else None
+    promo_shopee = preco if canal in COM_PROMO_DA_LOJA and cheio and cheio > preco else None  # Shopee e TikTok
     if promo_ml or promo_shopee:  # sobe com o preco cheio; ML: desconto direto depois; Shopee: voce coloca numa promocao da loja
         preco = cheio
     if not (a["titulo"] or "").strip() or not (a["descricao"] or "").strip():
@@ -718,7 +746,7 @@ def criar_do_site(d, por="você"):
     if sem:
         raise HTTPException(400, f"A cor {sem[0]} ainda não tem foto no modo {'Mercado Livre' if ml else 'Shopee'} do site.")
     tabela = next((r for r in L["galeria"] + L["resto"] + [x for v in L["variacoes"] for x in v["fotos"]] if r["tipo"] == "tabela"), None) \
-        if d.get("tabela") and not ml else None
+        if (d.get("tabela") or d.get("tabela_modo") == "imagem") and not ml else None
     links = subir_fotos(galeria + [r for f in por_cor.values() for r in f] + ([tabela] if tabela else []))
     sku = re.sub(r"[^A-Za-z0-9-]+", "-", str(d.get("sku") or "").strip().upper()).strip("-")[:30]
     variacoes = [dict({"cor": cor, "tamanho": t, "preco": preco, "estoque": estoque, "fotos": [links[r["id"]] for r in f]},
@@ -748,6 +776,25 @@ def criar_do_site(d, por="você"):
         corpo["video_url"] = subir_video(video)
     if ml:
         corpo["ml"] = {"tipo_anuncio": str(d.get("tipo_anuncio") or "gold_special"), "titulo": a["titulo"].strip()[:60]}
+    elif canal == "tiktokshop":
+        tk = {}
+        marca = d.get("marca") or {}
+        if str(marca.get("id") or "").strip() not in ("", "0"):
+            tk["marca_id"] = str(marca["id"]).strip()
+        if str(d.get("deposito") or "").strip():
+            tk["deposito_id"] = str(d["deposito"]).strip()
+        # tabela de medidas: a imagem aprovada do anuncio, ou as linhas da aba Medidas (o B2X desenha a tabela), ou um modelo da loja
+        modo_tab = str(d.get("tabela_modo") or "")
+        if modo_tab == "imagem" and tabela:
+            tk["tabela_medidas_url"] = links[tabela["id"]]
+        elif modo_tab == "modelo" and str(d.get("tabela_modelo") or "").strip():
+            tk["tabela_medidas_modelo_id"] = str(d["tabela_modelo"]).strip()
+        elif modo_tab == "medidas":
+            linhas = _linhas_medidas(aid, tamanhos)
+            if linhas:
+                tk["tabela_medidas"] = {"linhas": linhas}
+        if tk:
+            corpo["tiktok"] = tk
     else:
         marca = d.get("marca") or {}
         corpo["marca"] = {"id": int(marca["id"]), "nome": str(marca.get("nome") or "")} if str(marca.get("id") or "").isdigit() and int(marca["id"]) else {"id": 0}
@@ -771,7 +818,8 @@ def criar_do_site(d, por="você"):
     if promo_shopee:
         saida["promocao_shopee"] = promo_shopee
         if validar:
-            saida["avisos"].insert(0, f"Shopee: sobe com o preço cheio R$ {preco:.2f}. Depois de criado, coloque numa promoção da loja com R$ {promo_shopee:.2f} (botão Colocar numa promoção).")
+            saida["avisos"].insert(0, f"{CANAIS[canal]}: sobe com o preço cheio R$ {preco:.2f}. Depois de criado, entra sozinho na promoção da loja "
+                                      f"com o nome do modelo por R$ {promo_shopee:.2f} (se não achar uma só, você escolhe em Anúncios criados).")
     if not validar:
         ids = r.get("anuncio_ids") or ([r["anuncio_id"]] if r.get("anuncio_id") else [])
         ok = 200 <= status < 300 and r.get("success", True) is not False and bool(ids)
@@ -1175,14 +1223,15 @@ def promocoes_loja(loja: str, aid: int = 0):
     for p in d.get("promocoes") or []:
         if not isinstance(p, dict):
             continue
-        tipo = str(p.get("tipo") or "")
+        tipo_b2x = str(p.get("tipo") or "")
+        tipo = tipo_b2x if tipo_b2x in TIPO_PROMO else str(p.get("tipo_padrao") or "")
         if tipo not in TIPO_PROMO:
-            continue  # cupom, combo e campanha nao recebem anuncio com preco proprio por aqui
+            continue  # cupom, combo, leve mais e campanha nao recebem anuncio com preco proprio por aqui  # cupom, combo e campanha nao recebem anuncio com preco proprio por aqui
         pode = p.get("pode") or {}
         obs = (p.get("pode_obs") or {}).get("incluir") if isinstance(p.get("pode_obs"), dict) else ""
         vagas = p.get("vagas") or {}
         lista.append({"id": str(p.get("id") or ""), "tipo": "relampago" if "relampago" in tipo else tipo,
-                      "tipo_nome": TIPO_PROMO[tipo], "nome": p.get("nome") or p.get("tipo_nome") or "",
+                      "tipo_b2x": tipo_b2x, "tipo_nome": p.get("tipo_nome") if tipo_b2x != tipo else TIPO_PROMO[tipo], "nome": p.get("nome") or p.get("tipo_nome") or "",
                       "status": str(p.get("status") or ""), "inicio": p.get("inicio_brasilia") or "", "fim": p.get("fim_brasilia") or "",
                       "produtos": p.get("produtos"), "pode_incluir": pode.get("incluir") is not False,
                       "motivo": _frase(obs) if obs else "", "vagas_livres": vagas.get("livres") if isinstance(vagas, dict) else None,
@@ -1222,14 +1271,14 @@ def incluir_na_promo_do_modelo(loja, anuncio_, aid, preco):
         p = promo_do_modelo(promocoes_loja(loja)["promocoes"], ref, kit)
         if not p:
             return {"ok": False, "msg": f"Não achei uma promoção com o nome do modelo {ref}: escolha a promoção na tela."}
-        base = {"loja": loja, "id": p["id"], "tipo": "desconto", "mudancas": {"incluir": [{"produto_id": str(anuncio_), "variacoes": [{"id": None, "preco_promocional": preco}]}]}}
+        base = {"loja": loja, "id": p["id"], "tipo": p.get("tipo_b2x") or "desconto", "mudancas": {"incluir": [{"produto_id": str(anuncio_), "variacoes": [{"id": None, "preco_promocional": preco}]}]}}
         cores = _cores_do(_detalhe(loja, str(anuncio_))[0])
         if cores:
             base["mudancas"]["incluir"][0]["variacoes"] = [{"cor": c_, "preco_promocional": preco} for c_ in cores]
         st, r = chamar("POST", "/v1/promocoes/editar", dict(base, simular=True), timeout=180)
         prob = [_frase(x) for x in (r.get("problemas") or r.get("erros") or [])][:3]
         if not 200 <= st < 300 or prob or r.get("validado") is False or not r.get("pedido_id"):
-            return {"ok": False, "msg": f"A Shopee não aceitou na {p['nome']}: {'; '.join(prob) or texto_erro(r) or st}"}
+            return {"ok": False, "msg": f"A loja não aceitou na {p['nome']}: {'; '.join(prob) or texto_erro(r) or st}"}
         st, r = chamar("POST", "/v1/promocoes/editar", dict(base, pedido_id=r["pedido_id"]), timeout=180)
         falhas = [_frase(x) for x in (r.get("falhas") or [])][:3]
         ok = 200 <= st < 300 and r.get("success", True) is not False and not (falhas and not r.get("aplicadas"))
@@ -1255,7 +1304,7 @@ async def promocao_incluir(request: Request):
     por_cor = {str(k): _preco(v) for k, v in (d.get("precos_cor") or {}).items() if _preco(v)}
     a, _ = _detalhe(loja, anuncio_)
     cores = _cores_do(a)
-    relampago = tipo == "relampago"
+    relampago = tipo in ("relampago", "oferta_relampago")
     try:
         estoque = max(1, int(str(d.get("estoque_promocional") or "10").strip()))
     except ValueError:
@@ -1323,7 +1372,8 @@ async def memoria_gravar(request: Request):
     if not canal or not categoria:
         raise HTTPException(400, "Falta o canal ou a categoria.")
     m = _memoria()
-    m.setdefault("ficha", {})[f"{canal}:{categoria}"] = {"attr": d.get("attr") or {}, "marca": d.get("marca"), "tipo_anuncio": d.get("tipo_anuncio")}
+    m.setdefault("ficha", {})[f"{canal}:{categoria}"] = {"attr": d.get("attr") or {}, "marca": d.get("marca"), "tipo_anuncio": d.get("tipo_anuncio"),
+                                                          **{k: d.get(k) for k in ("tabela_modo", "tabela_modelo", "deposito") if d.get(k)}}
     m.setdefault("envio", {})[canal] = {k: d.get(k) for k in ("peso_g", "comprimento_cm", "largura_cm", "altura_cm", "estoque")}
     produto = str(d.get("produto") or "").strip().upper()
     if produto:

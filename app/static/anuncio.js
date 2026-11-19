@@ -3,7 +3,8 @@
   const ID = window.ANUNCIO_ID, editor = document.getElementById('editor'), tela = document.getElementById('tela');
   // Shopee: 9 fotos do anuncio (1a = capa) + uma capa por variacao de cor + tamanhos.
   // Mercado Livre: cada cor tem as suas fotos (ate 10, 1a = principal) + tamanhos; titulo ate 60 caracteres.
-  const MODOS = { shopee: { nome: 'Shopee', fotos: 9 }, ml: { nome: 'Mercado Livre', fotos: 10, titulo: 60 } };
+  const MODOS = { shopee: { nome: 'Shopee', fotos: 9 }, ml: { nome: 'Mercado Livre', fotos: 10, titulo: 60 }, tiktok: { nome: 'TikTok', fotos: 9, titulo: 255 } };
+  const tk = () => E.modo === 'tiktok';
   let E = null, corAtiva = null, corPrevia = null, abaBanco = null;
   // banco de imagens embaixo das variacoes, separado por botoes
   const ABAS_BANCO = [
@@ -42,7 +43,7 @@
     return `<div class="bloco"><h2>Variação 2: Tamanho <small>${t ? t + ' tamanho(s)' : 'nenhum ainda'}</small></h2>
       <label class="campo-tam">Tamanhos<input id="c-tamanhos" data-campo="tamanhos" value="${esc(E.anuncio.tamanhos)}" placeholder="Ex.: 33/34, 35/36, 37/38 ou 34 a 39"></label>
       <div class="chips-tam">${E.tamanhos.map(x => `<span>${esc(x)}</span>`).join('')}</div>
-      ${cores && t ? `<p class="pequeno">${cores} cor(es) × ${t} tamanho(s) = <b>${cores * t} variações</b>. ${ml() ? 'O Mercado Livre cria uma variação para cada cor com cada tamanho.' : 'A Shopee cruza a Variação 1 com a Variação 2 sozinha.'}</p>` : ''}</div>`;
+      ${cores && t ? `<p class="pequeno">${cores} cor(es) × ${t} tamanho(s) = <b>${cores * t} variações</b>. ${ml() ? 'O Mercado Livre cria uma variação para cada cor com cada tamanho.' : (tk() ? 'O TikTok' : 'A Shopee') + ' cruza a Variação 1 com a Variação 2 sozinha.'}</p>` : ''}</div>`;
   }
 
   function desenharEditor() {
@@ -53,10 +54,10 @@
     const cheias = lista.filter(Boolean).length;
     document.getElementById('resumo').textContent = ml()
       ? `Mercado Livre: ${E.variacoes.length} cor(es), cada uma com as suas fotos`
-      : `Shopee: ${cheias} de ${M.fotos} fotos, ${E.variacoes.length} variação(ões) de cor`;
+      : `${M.nome}: ${cheias} de ${M.fotos} fotos, ${E.variacoes.length} variação(ões) de cor`;
     document.querySelectorAll('.troca [data-modo]').forEach(b => b.classList.toggle('ativo', b.dataset.modo === E.modo));
     const dica = document.getElementById('dica-previa');
-    if (dica) dica.textContent = ml() ? 'Prévia no jeito do Mercado Livre: toque numa cor e as fotos mudam para as daquela cor.' : 'Prévia no jeito da Shopee: deslize as fotos e toque numa cor para ver a capa daquela variação.';
+    if (dica) dica.textContent = ml() ? 'Prévia no jeito do Mercado Livre: toque numa cor e as fotos mudam para as daquela cor.' : tk() ? 'Prévia no jeito do TikTok Shop: deslize as fotos e toque numa cor para ver a foto daquela variação. As fotos são as mesmas do modo Shopee.' : 'Prévia no jeito da Shopee: deslize as fotos e toque numa cor para ver a capa daquela variação.';
 
     const fotosCol = ml()
       ? (E.variacoes.length ? `<h2>Fotos da cor ${v ? esc(v.cor) : ''} <small>${v ? v.fotos.length : 0} de 10 · a 1ª é a principal da cor</small></h2>
@@ -73,7 +74,7 @@
         ${ml() ? `<label>Preço cheio (riscado)<input id="c-preco_antigo" data-campo="preco_antigo" value="${esc(a.preco_antigo)}" placeholder="79,90" inputmode="decimal"></label>
         <label title="O anúncio sobe com o preço cheio e este entra como Desconto direto do Mercado Livre (o desconto do próprio vendedor, igual ao da Central de promoções; não entra em campanha do ML). O B2X renova a cada 30 dias. Depois de criado, para tirar o desconto pode ser preciso ir no painel do ML.">Preço promocional ⓘ<input id="c-preco" data-campo="preco" value="${esc(a.preco)}" placeholder="49,90" inputmode="decimal"></label>`
         : `<label>Preço cheio (riscado)<input id="c-preco_antigo" data-campo="preco_antigo" value="${esc(a.preco_antigo)}" placeholder="79,90" inputmode="decimal"></label>
-        <label title="Na Shopee o anúncio sobe com o preço cheio. Depois de criado você coloca ele numa promoção que a loja já tem (desconto ou relâmpago) com este preço: botão Colocar numa promoção.">Preço promocional ⓘ<input id="c-preco" data-campo="preco" value="${esc(a.preco)}" placeholder="49,90" inputmode="decimal"></label>`}
+        <label title="${tk() ? 'No TikTok' : 'Na Shopee'} o anúncio sobe com o preço cheio e, depois de criado, entra sozinho na promoção da loja com o nome do modelo (ex.: PROMO TJ01) com este preço. Se a loja não tiver uma só, você escolhe em Anúncios criados.">Preço promocional ⓘ<input id="c-preco" data-campo="preco" value="${esc(a.preco)}" placeholder="49,90" inputmode="decimal"></label>`}
         <label class="largo">Descrição<textarea id="c-descricao" data-campo="descricao" rows="2" placeholder="Texto da descrição do anúncio">${esc(a.descricao)}</textarea></label>
       </div>`;
 
@@ -258,8 +259,8 @@
     const coresHtml = E.variacoes.length ? `<div class="cores"><span>Cor${escolhida ? ': <b>' + esc(escolhida.cor) + '</b>' : ` <em>${E.variacoes.length} opções</em>`}</span><div>${E.variacoes.map(c => `<button type="button" data-cor="${esc(c.cor)}" class="${escolhida && c.cor === escolhida.cor ? 'ativa' : ''}" title="${esc(c.cor)}"><img src="/mini/${(ml() && c.fotos[0] ? c.fotos[0] : c.capa).id}" alt="${esc(c.cor)}"></button>`).join('')}</div></div>` : '';
     const tamHtml = E.tamanhos.length ? `<div class="cores tams"><span>Tamanho <em>${E.tamanhos.length} opções</em></span><div>${E.tamanhos.map(t => `<i>${esc(t)}</i>`).join('')}</div></div>` : '';
     const descHtml = `<div class="descricao"><h4>Descrição</h4><p class="${a.descricao ? '' : 'falta'}">${esc(a.descricao) || 'A descrição aparece aqui.'}</p></div>`;
-    const comprar = '<div class="comprar"><span>Adicionar ao carrinho</span><span class="forte">Comprar agora</span></div>';
-    tela.className = 'tela ' + (ml() ? 'modelo-b mk-ml' : 'modelo-a mk-shopee');
+    const comprar = tk() ? '<div class="comprar"><span>Adicionar ao carrinho</span><span class="forte">Comprar com cupom</span></div>' : '<div class="comprar"><span>Adicionar ao carrinho</span><span class="forte">Comprar agora</span></div>';
+    tela.className = 'tela ' + (ml() ? 'modelo-b mk-ml' : tk() ? 'modelo-a mk-tiktok' : 'modelo-a mk-shopee');
     tela.innerHTML = ml()
       ? `<div class="rolo"><div class="miolo"><span class="novo">Novo</span>${tituloHtml}</div>${fotosHtml}${coresHtml}${tamHtml}<div class="miolo">${precoHtml}</div><div class="miolo empilha"><span class="forte">Comprar agora</span><span>Adicionar ao carrinho</span></div>${descHtml}</div>`
       : `<div class="rolo">${fotosHtml}<div class="miolo">${precoHtml}${tituloHtml}</div>${coresHtml}${tamHtml}${descHtml}</div>${comprar}`;

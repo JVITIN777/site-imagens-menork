@@ -130,7 +130,7 @@ document.addEventListener('submit', async e => {
 // ---- B2X: trocar as fotos de um anuncio que ja existe ou criar um anuncio novo (Shopee e Mercado Livre)
 const B2 = { passo: '' };
 const b2get = url => window.menork.api(url), b2post = (url, corpo) => window.menork.api(url, corpo);
-const B2CANAL = { shopee: 'Shopee', mercadolivre: 'Mercado Livre' };
+const B2CANAL = { shopee: 'Shopee', mercadolivre: 'Mercado Livre', tiktokshop: 'TikTok' };
 const semAc = t => String(t || '').normalize('NFKD').replace(/[̀-ͯ]/g, '').trim().toLowerCase();
 function b2Tela(html) { abrirJanela(`<div class="b2x">${html}</div>`); }
 function b2Carregando(txt) { b2Tela(`<h2>${esc(INTEG().nome)}</h2><p class="dica">${esc(txt)}</p>`); }
@@ -138,7 +138,7 @@ function b2Erro(err, voltar) { b2Tela(`<h2>Não deu certo</h2><div class="nota r
 const b2Lista = (t, xs) => xs && xs.length ? `<h3>${t}</h3><ul class="envios-feitos">${xs.map(x => `<li>${esc(x)}</li>`).join('')}</ul>` : '';
 
 async function b2Inicio(aid) {
-  const a = DB.anuncios.find(x => x.id === aid); B2.aid = aid; B2.canal = a.modo === 'ml' ? 'mercadolivre' : 'shopee'; B2.lote = new Set([aid]);
+  const a = DB.anuncios.find(x => x.id === aid); B2.aid = aid; B2.canal = a.modo === 'ml' ? 'mercadolivre' : a.modo === 'tiktok' ? 'tiktokshop' : 'shopee'; B2.lote = new Set([aid]);
   b2Carregando(`Buscando as lojas de ${B2CANAL[B2.canal]} no ${INTEG().nome}…`);
   try { const r = await b2get('/api/b2x/lojas?canal=' + B2.canal); B2.lojas = r.lojas; b2Lojas(); } catch (err) { b2Erro(err); }
 }
@@ -343,6 +343,23 @@ async function b2Categorias(busca) {
       <div class="acoes"><button class="b claro" data-b2="lojas">Voltar</button></div>`);
   } catch (err) { b2Erro(err, 'lojas'); }
 }
+// TikTok: marca (opcional), depósito de onde sai e a tabela de medidas (a categoria de calçado exige)
+function tkCampos(f, val, m, temTabela) {
+  const ref = refProduto(), med = (typeof MEDIDAS !== 'undefined' && MEDIDAS[ref]) || [], tams = m.tamanhos || [];
+  const temMed = tams.length && tams.every(t => med.some(([n]) => String(n).trim() === String(t).trim() || String(t).split('/').pop().trim() === String(n).trim()));
+  const modo = val.tabela_modo || (temTabela ? 'imagem' : temMed ? 'medidas' : f.tabela_modelos.length ? 'modelo' : 'imagem');
+  const op = (v, t, ok = true) => `<option value="${v}" ${modo === v ? 'selected' : ''} ${ok ? '' : 'disabled'}>${t}</option>`;
+  const marca = f.marcas.length ? `<label>Marca <small class="pequeno">opcional</small><select name="marca"><option value="">Sem marca</option>${f.marcas.map(x => `<option value="${esc(x.id)}" ${String(val.marca || '') === String(x.id) ? 'selected' : ''}>${esc(x.nome)}</option>`).join('')}</select></label>` : '';
+  const dep = f.depositos.length > 1 ? `<label>Sai do depósito<select name="deposito">${f.depositos.map(x => `<option value="${esc(x.id)}" ${(val.deposito ? val.deposito === x.id : x.padrao) ? 'selected' : ''}>${esc(x.nome)}${x.padrao ? ' (padrão)' : ''}</option>`).join('')}</select></label>` : '';
+  return `<h3>TikTok</h3><div class="b2-grade">${marca}${dep}
+    <label class="${f.tabela_exige ? 'pedir' : ''}">Tabela de medidas${f.tabela_exige ? ' <em class="auto-tag escolher">esta categoria exige</em>' : ''}<select name="tabela_modo">
+      ${op('imagem', 'A imagem da tabela do anúncio' + (temTabela ? '' : ' (não tem)'), temTabela)}
+      ${op('medidas', `As medidas de ${esc(ref)} da aba Medidas` + (temMed ? '' : ' (faltam tamanhos)'), temMed)}
+      ${op('modelo', 'Um modelo de tabela da loja' + (f.tabela_modelos.length ? '' : ' (a loja não tem)'), f.tabela_modelos.length)}
+      ${f.tabela_exige ? '' : op('', 'Não mandar')}</select></label>
+    ${f.tabela_modelos.length ? `<label>Modelo da loja<select name="tabela_modelo">${f.tabela_modelos.map(x => `<option value="${esc(x.id)}" ${val.tabela_modelo === x.id ? 'selected' : ''}>${esc(x.nome || x.id)}</option>`).join('')}</select></label>` : ''}</div>
+    ${temMed ? `<p class="pequeno">Medidas de ${esc(ref)}: ${med.map(([n, c]) => `${esc(n)} = ${esc(c)} cm`).join(', ')}. Com "medidas", o B2X desenha a tabela que o TikTok lê.</p>` : `<p class="pequeno">Para usar as medidas, cadastre os tamanhos de ${esc(ref)} em ${elo('/medidas', 'Medidas')}.</p>`}`;
+}
 async function b2Ficha(cat, caminho) {
   B2.categoria = cat; B2.caminho = caminho; b2Carregando('Lendo o que essa categoria pede…');
   try { const f = await b2get(`/api/b2x/ficha?loja=${encodeURIComponent(B2.loja)}&categoria=${encodeURIComponent(cat)}`); B2.ficha = f;
@@ -361,12 +378,13 @@ async function b2Ficha(cat, caminho) {
         ${f.obrigatorios.length ? `<h3>A categoria pede</h3><div class="b2-grade">${f.obrigatorios.map(campo).join('')}</div>` : ''}
         ${(f.opcionais || []).length ? `<h3>Mais detalhes <small class="pequeno">não são obrigatórios, mas deixam o anúncio completo (a loja mostra "Complete: x de y")</small></h3><div class="b2-grade">${f.opcionais.map(campo).join('')}</div>` : ''}
         ${B2.canal === 'shopee' ? `<h3>Marca</h3><div class="b2-grade"><label>Marca<select name="marca">${opcoesMarca(f, val.marca)}</select></label></div>` : ''}
+        ${B2.canal === 'tiktokshop' ? tkCampos(f, val, m, temTabela) : ''}
         ${B2.canal === 'mercadolivre' && f.tipos_anuncio.length ? `<h3>Tipo de anúncio</h3><div class="b2-grade"><label>Tipo<select name="tipo_anuncio">${f.tipos_anuncio.map(x => `<option value="${esc(x.id)}" ${val.tipo_anuncio === x.id ? 'selected' : ''}>${esc(x.nome)}</option>`).join('')}</select></label></div>` : ''}
         <h3>Embalagem e estoque</h3><div class="b2-grade">
           <label class="${val.peso_g ? "" : "pedir"}">Peso (g)${val.peso_g ? "" : " <em class=\"auto-tag escolher\">você preenche</em>"}<input name="peso_g" inputmode="decimal" value="${esc(val.peso_g)}" placeholder="peso com a caixa, ex.: 650" required></label><label>Comprimento (cm)<input name="comprimento_cm" inputmode="decimal" value="${esc(val.comprimento_cm)}"></label>
           <label>Largura (cm)<input name="largura_cm" inputmode="decimal" value="${esc(val.largura_cm)}"></label><label>Altura (cm)<input name="altura_cm" inputmode="decimal" value="${esc(val.altura_cm)}"></label>
           <label>Estoque de cada variação<input name="estoque" inputmode="numeric" value="${esc(val.estoque)}"></label><label>Começo do SKU (opcional)<input name="sku" value="${esc(val.sku)}" placeholder="Ex.: TA01"></label></div>
-        ${B2.canal === 'shopee' ? `<label class="linha"><input type="checkbox" name="tabela" ${temTabela ? 'checked' : 'disabled'}> Mandar a tabela de medidas do anúncio ${temTabela ? '' : '(este anúncio não tem tabela aprovada)'}${f.tabela_exige ? ' · esta categoria exige' : ''}</label>` : (f.tabela_exige ? '<p class="pequeno">Esta categoria do Mercado Livre exige tabela de medidas: se a validação reclamar, ela precisa ser criada no B2X.</p>' : '')}
+        ${B2.canal === 'shopee' ? `<label class="linha"><input type="checkbox" name="tabela" ${temTabela ? 'checked' : 'disabled'}> Mandar a tabela de medidas do anúncio ${temTabela ? '' : '(este anúncio não tem tabela aprovada)'}${f.tabela_exige ? ' · esta categoria exige' : ''}</label>` : (f.tabela_exige && B2.canal === 'mercadolivre' ? '<p class="pequeno">Esta categoria do Mercado Livre exige tabela de medidas: se a validação reclamar, ela precisa ser criada no B2X.</p>' : '')}
         ${f.dica ? `<p class="pequeno">${esc(f.dica)}</p>` : ''}
         <div class="acoes"><button class="b">Validar (nada é publicado)</button><button type="button" class="b claro" data-b2="categorias">Voltar</button></div></form>`);
   } catch (err) { b2Erro(err, 'categorias'); }
@@ -376,8 +394,9 @@ function b2LerFicha(f) {
   f.querySelectorAll('[data-b2-attr]').forEach(x => { if (!x.value.trim()) return; attr[x.dataset.b2Attr] = x.value.trim(); atributos.push(x.dataset.texto ? { id: x.dataset.b2Attr, texto: x.value.trim() } : { id: x.dataset.b2Attr, opcao: x.value }); });
   const v = k => f.elements[k]?.value ?? '';
   const marcaSel = f.elements.marca, marca = marcaSel ? { id: marcaSel.value, nome: marcaSel.selectedOptions[0]?.textContent || '' } : null;
-  B2.form = { attr, peso_g: v('peso_g'), comprimento_cm: v('comprimento_cm'), largura_cm: v('largura_cm'), altura_cm: v('altura_cm'), estoque: v('estoque'), sku: v('sku'), tipo_anuncio: v('tipo_anuncio') || 'gold_special', marca: marca?.id, tabela: !!f.elements.tabela?.checked };
-  return { aid: B2.aid, loja: B2.loja, canal: B2.canal, categoria: B2.categoria, atributos, marca, peso_g: B2.form.peso_g, comprimento_cm: B2.form.comprimento_cm, largura_cm: B2.form.largura_cm, altura_cm: B2.form.altura_cm, estoque: B2.form.estoque, sku: B2.form.sku, tipo_anuncio: B2.form.tipo_anuncio, tabela: B2.form.tabela };
+  const tkx = B2.canal === 'tiktokshop' ? { tabela_modo: v('tabela_modo'), tabela_modelo: v('tabela_modelo'), deposito: v('deposito') } : {};
+  B2.form = { ...tkx, attr, peso_g: v('peso_g'), comprimento_cm: v('comprimento_cm'), largura_cm: v('largura_cm'), altura_cm: v('altura_cm'), estoque: v('estoque'), sku: v('sku'), tipo_anuncio: v('tipo_anuncio') || 'gold_special', marca: marca?.id, tabela: !!f.elements.tabela?.checked };
+  return { aid: B2.aid, loja: B2.loja, canal: B2.canal, categoria: B2.categoria, atributos, marca, peso_g: B2.form.peso_g, comprimento_cm: B2.form.comprimento_cm, largura_cm: B2.form.largura_cm, altura_cm: B2.form.altura_cm, estoque: B2.form.estoque, sku: B2.form.sku, tipo_anuncio: B2.form.tipo_anuncio, tabela: B2.form.tabela, ...tkx };
 }
 async function b2Validar(corpo) {
   B2.corpo = corpo; b2Carregando('Subindo as fotos e validando com o marketplace. Pode levar um minuto…');
@@ -386,7 +405,7 @@ async function b2Validar(corpo) {
     b2Tela(`<h2>${r.validado ? 'Validado: pode criar' : 'O marketplace pediu correções'} <small>nada foi publicado ainda</small></h2>
       <p class="pequeno">${esc(B2.lojaNome)} · ${esc(B2.caminho)} · ${r.variacoes} variações · ${r.fotos} foto(s) enviadas</p>
       ${r.problemas.length ? `<div class="nota ruim"><b>Corrigir</b>${r.problemas.map(p => `<span>${esc(p)}</span>`).join('')}</div>` : ''}${b2Lista('Avisos', r.avisos)}
-      <p class="pequeno">${B2.canal === 'shopee' ? 'Na Shopee o anúncio nasce OCULTO' : 'No Mercado Livre o anúncio nasce PAUSADO'}: revise lá e ative quando estiver tudo certo.</p>
+      <p class="pequeno">${B2.canal === 'shopee' ? 'Na Shopee o anúncio nasce OCULTO' : B2.canal === 'tiktokshop' ? 'No TikTok o anúncio passa pela análise do TikTok antes de vender' : 'No Mercado Livre o anúncio nasce PAUSADO'}: revise lá e ative quando estiver tudo certo.</p>
       ${r.validado && B2.lote.size > 1 ? `<p class="pequeno">Validei o <b>${esc(DB.anuncios.find(x => x.id === B2.aid).nome)}</b>. Os outros ${B2.lote.size - 1} usam a mesma categoria e ficha; cada um é validado na hora de criar, com o título e as fotos dele.</p>` : ''}
       <div class="acoes">${r.validado ? `<button class="b verde" data-b2="publicar">${B2.lote.size > 1 ? `Criar os ${B2.lote.size} anúncios` : 'Criar o anúncio'}</button>` : ''}<button class="b claro" data-b2="ficha">Voltar e corrigir</button></div>`);
   } catch (err) { b2Erro(err, 'ficha'); }
@@ -408,8 +427,8 @@ async function b2PublicarLote() {
   const okN = res.filter(r => r.ok).length;
   b2Tela(`<h2>${okN} de ${res.length} anúncio(s) criado(s) <small>${esc(B2.lojaNome)}</small></h2>
     <div class="lt-res">${res.map(r => `<div class="nota ${r.ok || r.fila ? '' : 'ruim'}"><b>${esc(r.nome)}: ${r.ok ? 'criado ' + r.ids.map(esc).join(', ') : r.fila ? 'na fila' : 'não criado'}</b>${r.msg ? `<span>${esc(r.msg)}</span>` : ''}
-      ${r.ok && B2.canal === 'shopee' && r.ids.length ? `<span><button class="b claro mini" data-promo-shp="${esc(r.ids[0])}" data-loja="${esc(B2.loja)}" data-preco="${esc(r.promo || '')}">Colocar numa promoção</button></span>` : ''}</div>`).join('')}</div>
-    <p class="pequeno">${B2.canal === 'shopee' ? 'Na Shopee eles nascem OCULTOS' : 'No Mercado Livre nascem PAUSADOS'}: revise e ative no marketplace. Tudo fica em "Anúncios criados".</p>
+      ${r.ok && ['shopee', 'tiktokshop'].includes(B2.canal) && r.ids.length ? `<span><button class="b claro mini" data-promo-shp="${esc(r.ids[0])}" data-loja="${esc(B2.loja)}" data-preco="${esc(r.promo || '')}">Colocar numa promoção</button></span>` : ''}</div>`).join('')}</div>
+    <p class="pequeno">${B2.canal === 'shopee' ? 'Na Shopee eles nascem OCULTOS' : B2.canal === 'tiktokshop' ? 'No TikTok passam pela análise do TikTok' : 'No Mercado Livre nascem PAUSADOS'}: revise e ative no marketplace. Tudo fica em "Anúncios criados".</p>
     <div class="acoes"><button class="b" data-fechar>Fechar</button></div>`);
   window.AO_DESENHAR?.(B2.aid);
 }
@@ -420,7 +439,7 @@ async function b2Publicar() {
     B2.promoShp = r.promocao_shopee || '';
     if (r.na_fila) return b2Fila(r.pedido_id);
     // Shopee com preço promocional: já abre a escolha da promoção (você escolhe, simula e confirma)
-    if (r.criado && B2.canal === 'shopee' && r.promocao_shopee && r.anuncio_ids?.length) return psAbrir(B2.loja, r.anuncio_ids[0], r.promocao_shopee, B2.aid);
+    if (r.criado && ['shopee', 'tiktokshop'].includes(B2.canal) && r.promocao_shopee && r.anuncio_ids?.length) return psAbrir(B2.loja, r.anuncio_ids[0], r.promocao_shopee, B2.aid);
     b2Tela(r.criado ? `<h2>Anúncio criado</h2><div class="nota"><b>${esc(B2CANAL[B2.canal])}: ${r.anuncio_ids.map(esc).join(', ')}</b><span>Situação: ${esc(({ UNLIST: 'oculto', unlist: 'oculto', paused: 'pausado', PAUSED: 'pausado', active: 'ativo', NORMAL: 'ativo' })[r.status] || r.status || (B2.canal === 'shopee' ? 'oculto' : 'pausado'))}. Revise no marketplace e ative.</span>${r.divergencias.map(x => `<span>Ficou diferente: ${esc(x)}</span>`).join('')}</div>${r.promocao ? `<div class="nota ${r.promocao.ok ? '' : 'ruim'}"><span>${esc(r.promocao.msg)}</span></div>` : ''}${b2Lista('Avisos', r.avisos)}<div class="acoes">${B2.canal === 'shopee' && r.anuncio_ids.length ? `<button class="b verde" data-promo-shp="${esc(r.anuncio_ids[0])}" data-loja="${esc(B2.loja)}" data-preco="${esc(r.promocao_shopee || '')}">Colocar numa promoção</button>` : ''}<button class="b ${B2.canal === 'shopee' ? 'claro' : ''}" data-fechar>Fechar</button></div>`
       : `<h2>Não foi criado</h2>${r.incerto ? '<div class="nota ruim"><span>A resposta ficou incerta. Não crie de novo: confira a loja no marketplace antes. Repetir por aqui usa o mesmo pedido e não duplica.</span></div>' : ''}<div class="nota ruim">${r.problemas.map(p => `<span>${esc(p)}</span>`).join('') || '<span>O marketplace não devolveu o código do anúncio.</span>'}</div><div class="acoes"><button class="b" data-b2="publicar">Tentar de novo (não duplica)</button><button class="b claro" data-b2="ficha">Voltar</button></div>`);
     window.AO_DESENHAR?.(B2.aid);
@@ -1265,7 +1284,7 @@ async function b2Fila(pedido) {
   try { const s = await b2get(`/api/b2x/criar/status?pedido_id=${encodeURIComponent(pedido)}&loja=${encodeURIComponent(B2.loja)}`);
     if (s.final || s.parar) {
       const ok = s.anuncio_id && !['recusado', 'apagado', 'parado'].includes(s.estado);
-      return b2Tela(ok ? `<h2>Anúncio criado</h2><div class="nota"><b>${esc(B2CANAL[B2.canal])}: ${esc(s.anuncio_id)}</b><span>Situação: ${esc(s.estado)}. ${B2.canal === 'mercadolivre' ? 'Se o anúncio tem preço cheio maior, a promoção entra sozinha em instantes.' : B2.promoShp ? `Subiu com o preço cheio; o site coloca sozinho na promoção do mesmo modelo por ${esc(reais(B2.promoShp))}. Se não achar, fica em Anúncios criados › Falta promoção.` : ''}</span></div><div class="acoes">${B2.canal === 'shopee' && B2.promoShp ? `<button class="b verde" data-promo-shp="${esc(String(s.anuncio_id).split(',')[0])}" data-loja="${esc(B2.loja)}" data-preco="${esc(B2.promoShp)}">Colocar na promoção agora</button>` : ''}<button class="b ${B2.canal === 'shopee' && B2.promoShp ? 'claro' : ''}" data-fechar>Fechar</button></div>`
+      return b2Tela(ok ? `<h2>Anúncio criado</h2><div class="nota"><b>${esc(B2CANAL[B2.canal])}: ${esc(s.anuncio_id)}</b><span>Situação: ${esc(s.estado)}. ${B2.canal === 'mercadolivre' ? 'Se o anúncio tem preço cheio maior, a promoção entra sozinha em instantes.' : B2.promoShp ? `Subiu com o preço cheio; o site coloca sozinho na promoção do mesmo modelo por ${esc(reais(B2.promoShp))}. Se não achar, fica em Anúncios criados › Falta promoção.` : ''}</span></div><div class="acoes">${['shopee', 'tiktokshop'].includes(B2.canal) && B2.promoShp ? `<button class="b verde" data-promo-shp="${esc(String(s.anuncio_id).split(',')[0])}" data-loja="${esc(B2.loja)}" data-preco="${esc(B2.promoShp)}">Colocar na promoção agora</button>` : ''}<button class="b ${['shopee', 'tiktokshop'].includes(B2.canal) && B2.promoShp ? 'claro' : ''}" data-fechar>Fechar</button></div>`
         : `<h2>Não foi criado <small>${esc(s.estado)}</small></h2><div class="nota ruim">${s.motivo ? `<span>${esc(s.motivo)}</span>` : ''}${s.erros.map(x => `<span>${esc(x)}</span>`).join('')}</div><div class="acoes"><button class="b claro" data-b2="ficha">Voltar</button></div>`);
     }
     b2Tela(`<h2>Publicando <small>${esc(s.estado)}</small></h2><div class="cr-andamento"><span class="abertura-barra"><i></i></span><p>${esc(s.etapa || 'Na fila do B2X…')}</p></div>
@@ -1430,7 +1449,7 @@ Object.assign(TELAS, {
     const grupo = r => ({ criado: 'ok', erro: 'ruim', cancelado: 'ruim' }[r.status] || 'espera');
     const conta = { todos: CR_H.lista.length, ok: 0, espera: 0, ruim: 0, promo: 0 }; CR_H.lista.forEach(r => { conta[grupo(r)]++; if (r.falta_promo) conta.promo++; });
     const l = CR_H.lista.filter(r => CR_H.filtro === 'todos' || (CR_H.filtro === 'promo' ? r.falta_promo : grupo(r) === CR_H.filtro));
-    const mk = c => ({ shopee: 'Shopee', mercadolivre: 'Mercado Livre' }[c] || c || '');
+    const mk = c => ({ shopee: 'Shopee', mercadolivre: 'Mercado Livre', tiktokshop: 'TikTok' }[c] || c || '');
     return `<div class="cabeca"><h1>Anúncios criados <small>tudo que foi mandado para as lojas, por você ou pelo Grok</small></h1><div class="acoes"><button class="b claro" id="crh-atualizar">Atualizar</button></div></div>
       <div class="crh-filtros">${[['todos', 'Todos'], ['ok', 'Criados'], ['espera', 'Esperando'], ['ruim', 'Não subiram'], ['promo', 'Falta promoção']].map(([k, n]) => `<button type="button" data-crh-filtro="${k}" class="${CR_H.filtro === k ? 'ativo' : ''}">${n} <b>${conta[k]}</b></button>`).join('')}</div>
       ${l.length ? `<div class="bloco crh"><table class="tabela crh-tabela"><tr><th>Quando</th><th>Anúncio</th><th>Loja</th><th>Quem</th><th>Status</th><th></th></tr>

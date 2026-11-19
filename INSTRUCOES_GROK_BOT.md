@@ -182,3 +182,6 @@ menork.ps1 pacote -Anuncio "CI9 unitário" -Marketplace SHP -Destino "C:\Temp\ci
 ```
 Se faltar qualquer coisa, a resposta é `ERRO:` com a lista do que falta e **nenhum arquivo é baixado**. Nesse caso não suba o anúncio: avise o Menork. Quando o pacote sai, ele fica registrado na tela do anúncio ("Montado em ... por ...") e o ZIP fica guardado na pasta do site.
 A pasta recebe as fotos já na ordem (`..._01_capa`, `..._02`, …), a pasta `cores` com uma foto por variação e o `anuncio.txt` com título, preço e descrição. Suba nessa ordem.
+
+## TikTok
+O anúncio do site tem 3 modos: Mercado Livre, Shopee e TikTok. O TikTok usa as mesmas fotos do modo Shopee (9 fotos + a capa de cada cor). Para publicar no TikTok, a loja escolhida é de TikTok (canal tiktokshop). A categoria de calçado exige tabela de medidas: o site manda a imagem da tabela aprovada do anúncio ou as medidas da aba Medidas. Com preço cheio maior que o preço, sobe com o cheio e entra sozinho na promoção de preço fixo da loja com o nome do modelo.

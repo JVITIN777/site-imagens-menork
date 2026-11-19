@@ -85,7 +85,7 @@ async def porteiro(request: Request, call_next):
 @app.get("/marca-mk/{qual}")
 def marca_mk(qual: str):
     """Logo de marketplace que o Menork colocou em dados/ (logo_ml.png, logo_shopee.png). Nunca vai para o repositorio."""
-    if qual not in ("ml", "shopee"):
+    if qual not in ("ml", "shopee", "tiktok"):
         raise HTTPException(404)
     p = next((n.pasta_dados() / f"logo_{qual}{e}" for e in (".png", ".svg", ".webp", ".jpg", ".jpeg")
               if (n.pasta_dados() / f"logo_{qual}{e}").exists()), None)
@@ -427,13 +427,20 @@ def _img(r):
 #          (1 foto, aparece quando o cliente toca na cor). Variacao 2 = Tamanho. A Shopee cruza as duas.
 #  Mercado Livre: cada cor e uma variacao com as SUAS fotos (ate 10, a 1a e a principal daquela cor).
 #          O tamanho e o segundo atributo. O titulo vai ate 60 caracteres.
-MODOS = {"shopee": {"nome": "Shopee", "fotos": 9}, "ml": {"nome": "Mercado Livre", "fotos": 10, "titulo": 60}}
+MODOS = {"shopee": {"nome": "Shopee", "fotos": 9}, "ml": {"nome": "Mercado Livre", "fotos": 10, "titulo": 60},
+         "tiktok": {"nome": "TikTok", "fotos": 9, "titulo": 255}}  # TikTok usa as fotos como a Shopee (9 + a capa de cada cor)
+
+
+def _modo_do_canal(canal):
+    return {"mercadolivre": "ml", "tiktokshop": "tiktok"}.get(str(canal or ""), "shopee")
 
 
 def _modo(valor):
     v = str(valor or "").strip().lower()
     if v in ("ml", "mercado livre", "mercadolivre", "meli"):
         return "ml"
+    if v in ("tiktok", "tiktokshop", "tiktok shop", "tk"):
+        return "tiktok"
     return "shopee"
 
 
@@ -443,6 +450,8 @@ def _modo_mk(mk, padrao):
         return "ml"
     if k in ("SHP", "SHOPEE"):
         return "shopee"
+    if k in ("TIKTOK", "TIKTOKSHOP", "TK"):
+        return "tiktok"
     return _modo(padrao)
 
 
@@ -796,7 +805,7 @@ def checagem(c, aid, m=None, modo=None):
     if ml and len((a["titulo"] or "").strip()) > MODOS["ml"]["titulo"]:
         falta("titulo", f"O título tem {len(a['titulo'].strip())} caracteres; no Mercado Livre o limite é {MODOS['ml']['titulo']}")
     if not ml and len(L["galeria"]) > MODOS["shopee"]["fotos"] - 1:
-        falta("limite", f"A Shopee aceita {MODOS['shopee']['fotos']} fotos e este anúncio tem {len(L['galeria']) + 1}: tire "
+        falta("limite", f"{'O TikTok' if modo == 'tiktok' else 'A Shopee'} aceita {MODOS['shopee']['fotos']} fotos e este anúncio tem {len(L['galeria']) + 1}: tire "
                         f"{len(L['galeria']) + 1 - MODOS['shopee']['fotos']}", faltam=len(L["galeria"]) + 1 - MODOS["shopee"]["fotos"])
     principal = (V[0]["fotos"][0] if V and V[0]["fotos"] else None) if ml else L["capa"]
     if principal:  # a mesma capa em dois anuncios
@@ -955,7 +964,7 @@ async def pedir_publicar(request: Request):
                 continue
             c.execute("UPDATE pedidos SET status='substituido', atualizado=? WHERE anuncio_id=? AND tipo='publicar' "
                       "AND status IN ('aberto','pego')", (n.agora(), aid))
-            c.execute("UPDATE anuncios SET modo=? WHERE id=?", ("ml" if l["canal"] == "mercadolivre" else "shopee", aid))
+            c.execute("UPDATE anuncios SET modo=? WHERE id=?", (_modo_do_canal(l["canal"]), aid))
             pid = c.execute("INSERT INTO pedidos(anuncio_id,criado_em,texto,atualizado,tipo,dados) VALUES(?,?,'',?,'publicar',?)",
                             (aid, n.agora(), n.agora(), dados)).lastrowid
             c.execute("UPDATE pedidos SET texto=? WHERE id=?",
@@ -1119,7 +1128,7 @@ async def bot_publicar(request: Request):
     d = await request.json()
     with n.con() as c:
         a, p, dados = _pedido_publicar(c, d.get("anuncio"))
-        c.execute("UPDATE anuncios SET modo=? WHERE id=?", ("ml" if dados["canal"] == "mercadolivre" else "shopee", a["id"]))
+        c.execute("UPDATE anuncios SET modo=? WHERE id=?", (_modo_do_canal(dados["canal"]), a["id"]))
     extra = d.get("json") or {}
     if isinstance(extra, str):
         try:
@@ -1268,7 +1277,7 @@ async def bot_substituir(request: Request):
             raise HTTPException(400, "O -Json não é um JSON válido.")
     canal, loja = dados["canal"], dados["loja"]
     with n.con() as c:
-        c.execute("UPDATE anuncios SET modo=? WHERE id=?", ("ml" if canal == "mercadolivre" else "shopee", a["id"]))
+        c.execute("UPDATE anuncios SET modo=? WHERE id=?", (_modo_do_canal(canal), a["id"]))
     info = b2x.anuncio(loja, alvo, canal)
     cores_mk = info.get("cores") or [v.get("cor") for v in info.get("lista_variacoes") or [] if v.get("cor")]
     m = b2x._anuncio_local(a["id"])
@@ -1319,13 +1328,13 @@ def bot_pedidos():
                 dados = json.loads(p["dados"] or "{}")
                 item.update(anuncio=c.execute("SELECT nome FROM anuncios WHERE id=?", (p["anuncio_id"],)).fetchone()[0],
                             loja=dados.get("loja_nome"), marketplace=dados.get("marketplace"),
-                            agora=checagem(c, p["anuncio_id"], modo="ml" if dados.get("canal") == "mercadolivre" else "shopee"))
+                            agora=checagem(c, p["anuncio_id"], modo=_modo_do_canal(dados.get("canal"))))
             elif p["tipo"] == "tarefa":
                 dados = json.loads(p["dados"] or "{}")
                 item.update(pedido_do_menork=dados.get("texto"), loja=dados.get("loja_nome"), marketplace=dados.get("marketplace"),
                             anuncios_do_site=[x["nome"] for x in dados.get("anuncios") or []],
                             anuncios_da_loja_que_pode_mexer=dados.get("alvos") or [],
-                            agora={x["nome"]: checagem(c, x["id"], modo="ml" if dados.get("canal") == "mercadolivre" else "shopee")["faltas"]
+                            agora={x["nome"]: checagem(c, x["id"], modo=_modo_do_canal(dados.get("canal")))["faltas"]
                                    for x in dados.get("anuncios") or [] if c.execute("SELECT 1 FROM anuncios WHERE id=?", (x["id"],)).fetchone()})
             else:
                 item["agora"] = checagem(c, p["anuncio_id"])
