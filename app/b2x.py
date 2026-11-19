@@ -181,6 +181,29 @@ def _enviar_lote(lote, links, tentativa=1):
 
 
 # ------------------------------------------------------------ lojas e anuncios
+# ------------------------------------------------------------ diagnostico: ver a resposta crua do B2X (so leitura; criar sempre so_validar)
+_BRUTO_OK = ("/v1/anuncios/criar/ficha", "/v1/anuncios/criar/envio", "/v1/anuncios/clonar-payload", "/v1/anuncios?", "/v1/anuncios/detalhe",
+             "/v1/anuncio?", "/v1/promocoes?", "/v1/ajuda", "/v1/docs", "/v1/manual", "/v1?", "/v1")
+
+
+@rota.get("/api/b2x/bruto")
+def bruto(caminho: str):
+    if not caminho.startswith("/v1") or not any(caminho == x or caminho.startswith(x) for x in _BRUTO_OK):
+        raise HTTPException(400, "Caminho não liberado.")
+    status, d = chamar("GET", caminho, timeout=150)
+    return {"status": status, "resposta": d}
+
+
+@rota.post("/api/b2x/bruto-validar")
+async def bruto_validar(request: Request):
+    """Manda um corpo de criacao so para VALIDAR (so_validar sempre ligado): nada e criado na loja."""
+    corpo = await request.json()
+    corpo["so_validar"] = True
+    corpo.pop("pedido_id", None)
+    status, d = chamar("POST", "/v1/anuncios/criar", corpo, timeout=240)
+    return {"status": status, "resposta": d}
+
+
 @rota.get("/api/b2x/lojas")
 def lojas(canal: str = ""):
     status, d = chamar("GET", "/v1/clientes")
