@@ -41,7 +41,7 @@
 
   function espacos(lista, total, primeiro) {
     return Array.from({ length: total }, (_, n) => { const i = lista[n], rot = n === 0 ? primeiro : String(n + 1), cls = n === 0 ? 'capa' : '';
-      return i ? `<div class="slot cheio ${cls}" data-pos="${n}" data-img="${i.id}" draggable="true" title="${esc(i.tipo_nome)}${i.cor ? ', ' + esc(i.cor) : ''}"><b>${rot}</b><img src="/mini/${i.id}" data-ver="${i.id}" alt=""><button type="button" data-tirar-slot="${i.id}" title="Tirar" aria-label="Tirar">×</button></div>`
+      return i ? `<div class="slot cheio ${cls} ${(E.capa_publicada || []).some(p => p.imagem === i.id) ? 'ja-publicada' : ''}" data-pos="${n}" data-img="${i.id}" draggable="true" title="${esc(i.tipo_nome)}${i.cor ? ', ' + esc(i.cor) : ''}"><b>${rot}</b><img src="/mini/${i.id}" data-ver="${i.id}" alt=""><button type="button" data-tirar-slot="${i.id}" title="Tirar" aria-label="Tirar">×</button></div>`
         : `<div class="slot vazio ${cls}" data-pos="${n}"><b>${rot}</b><span>${n === 0 ? 'Solte a ' + primeiro.toLowerCase() + ' aqui' : 'Vazio'}</span></div>`; }).join('');
   }
 
@@ -85,7 +85,7 @@
         <label class="largo">Descrição<textarea id="c-descricao" data-campo="descricao" rows="2" placeholder="Texto da descrição do anúncio">${esc(a.descricao)}</textarea></label>
       </div>`;
 
-    const chip = x => `<div class="peca var-cor chip-cor ${ml() && x.cor === corAtiva ? 'escolhida' : ''}" data-cor="${esc(x.cor)}" data-cor-alvo="${esc(x.cor)}">
+    const chip = x => `<div class="peca var-cor chip-cor ${ml() && x.cor === corAtiva ? 'escolhida' : ''} ${(E.capa_publicada || []).some(p => p.imagem === x.capa.id) ? 'ja-publicada' : ''}" data-cor="${esc(x.cor)}" data-cor-alvo="${esc(x.cor)}">
         <button type="button" class="chip-foto" ${ml() ? `data-cor-aba="${esc(x.cor)}"` : `data-trocar-capa="${esc(x.cor)}"`} title="${ml() ? 'Montar as fotos desta cor' : 'Trocar a capa da variação: mostra as fotos IA desta cor'}"><img loading="lazy" src="/mini/${(ml() && x.fotos[0] ? x.fotos[0] : x.capa).id}" alt=""></button>
         <span class="chip-txt"><input class="nome-cor" value="${esc(x.cor)}" aria-label="Nome da cor"><small>${ml() ? x.fotos.length + ' de 10 fotos' : 'capa da variação'}</small></span>
         <button type="button" class="chip-tirar" data-acao="tirar_cor" title="Tirar esta cor do anúncio">×</button></div>`;
@@ -108,7 +108,13 @@
       <div class="trilho banco-trilho ${atual.length > 14 ? 'duas' : ''}">${atual.map(i => peca(i, colocar + (proprias.has(i.id) ? botao('desvincular', '×', 'Tirar deste anúncio') : '') + selTipo(i), { arrasta: i.status === 'aprovada' })).join('') || vaga('Nada aqui.')}</div></div>`;
     // guarda onde voce deixou as rolagens: redesenhar nao pode jogar a coluna de volta para o topo
     const rolBanco = editor.querySelector('.banco-trilho')?.scrollLeft || 0, rolCol = editor.querySelector('.slots-col')?.scrollTop || 0, rolAbas = editor.querySelector('.abas-cor')?.scrollTop || 0, rolJanela = window.scrollY;
-    editor.innerHTML = `<div class="editor-um">
+    // aviso: capa que ja subiu para a loja em outro anuncio
+    const pub = E.capa_publicada || [], nomeLoja = id => (typeof todasLojas === 'function' && typeof LOJAS !== 'undefined' && LOJAS.clientes && todasLojas().find(x => x.id === id)) || null;
+    const avisoPub = pub.length ? `<div class="nota ruim capa-pub-aviso"><b>⚠ Capa já publicada em outro anúncio</b>${pub.map(p => { const l = nomeLoja(p.loja);
+      return `<span><img src="/mini/${p.imagem}" alt=""> A ${esc(p.onde)} já subiu no anúncio <a href="#" data-rota="/anuncios/${p.anuncio_id}"><b>${esc(p.anuncio)}</b></a>${l ? ' na loja ' + esc(l.cliente + ' · ' + l.nome) : ''}${p.quando ? ' em ' + esc(p.quando.split('-').reverse().join('/')) : ''}${p.ids ? ' (código ' + esc(p.ids.split(',')[0]) + ')' : ''}.</span>`; }).join('')}
+      <small>Pode usar mesmo assim; o aviso é só para você não repetir capa sem querer. Troque clicando na cor ou arrastando outra imagem.</small></div>` : '';
+    const pubIds = new Set(pub.map(p => p.imagem));
+    editor.innerHTML = `${avisoPub}<div class="editor-um">
       <div class="bloco fotos-principal"><div class="fotos-e-video"><div class="fp-fotos">${fotosCol}</div>${caixaVideo(a)}</div></div>
       ${banco}
       <div class="resto">${cores}${blocoTamanhos()}</div></div>`;

@@ -920,3 +920,8 @@ html[data-tema="azul"] ::selection{background:rgba(var(--brilho),.45);color:#fff
 .tc-foto img{width:100%;height:100%;object-fit:cover;display:block;transition:transform .15s}
 .tc-foto:hover{border-color:var(--luz,#2b8cee)}.tc-foto:hover img{transform:scale(1.04)}
 .tc-foto.atual{border-color:var(--verde,#2ecd6f)}.tc-foto em{position:absolute;left:6px;top:6px;background:var(--verde,#2ecd6f);color:#000;font-size:11px;font-style:normal;font-weight:700;padding:1px 6px;border-radius:5px}
+/* capa ja publicada em outro anuncio */
+.capa-pub-aviso{margin-bottom:12px}.capa-pub-aviso span{display:flex;align-items:center;gap:8px}.capa-pub-aviso img{width:34px;height:34px;object-fit:cover;border-radius:6px}
+.slot.ja-publicada,.chip-cor.ja-publicada{outline:2px solid #f5a524;outline-offset:2px}
+.slot.ja-publicada::after{content:"já publicada";position:absolute;right:6px;bottom:6px;background:#f5a524;color:#000;font-size:10px;font-weight:700;padding:1px 5px;border-radius:4px}
+.capa-pub{color:#f5a524!important}

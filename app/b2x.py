@@ -504,10 +504,15 @@ def _registrar(aid, ok, resposta, id_externo, desfazer=None):
 def criacao_nova(aid, loja, canal, por, titulo, status, ids=(), pedido_b2x="", mensagem="", pedido_bot=None, promo=None):
     with n.con() as c:
         nome = c.execute("SELECT nome FROM anuncios WHERE id=?", (aid,)).fetchone() if aid else None
-        return c.execute("INSERT INTO criacoes(quando,atualizado,anuncio_id,anuncio_nome,titulo,loja,canal,por,pedido_b2x,pedido_bot,status,"
+        cid = c.execute("INSERT INTO criacoes(quando,atualizado,anuncio_id,anuncio_nome,titulo,loja,canal,por,pedido_b2x,pedido_bot,status,"
                          "anuncio_ids,mensagem,promo) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                          (n.agora(), n.agora(), aid, nome[0] if nome else "", str(titulo or "")[:200], str(loja), canal, por, str(pedido_b2x or ""),
                           pedido_bot, status, ",".join(map(str, ids)), str(mensagem or "")[:1500], f"{promo:.2f}" if promo else "")).lastrowid
+        if aid:  # guarda quais capas foram junto (capa do anuncio e capas das cores), para avisar se forem usadas de novo
+            capas = [r[0] for r in c.execute("SELECT imagem_id FROM imagem_anuncio WHERE anuncio_id=? AND papel='capa'", (aid,))] + \
+                    [r[0] for r in c.execute("SELECT imagem_id FROM anuncio_cores WHERE anuncio_id=?", (aid,))]
+            c.execute("UPDATE criacoes SET capas=? WHERE id=?", (",".join(map(str, capas)), cid))
+        return cid
 
 
 def _promo_do_anuncio(c, aid):

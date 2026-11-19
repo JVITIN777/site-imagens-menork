@@ -221,7 +221,8 @@ def estado(request: Request):
                                           "fora": i["aprovadas_fora_do_anuncio"], "esperando": i["esperando_aprovacao"]}
                                          for i in k["faltas"]],
                                "metaCapa": k["metas"]["capa"], "info": k["metas"]["informativo"], "tab": k["metas"]["tabela"],
-                               "kit": a["formato"] != "unitario", "tarefa": k["tarefa"], "capas": k["capas_a_produzir"]}
+                               "kit": a["formato"] != "unitario", "tarefa": k["tarefa"], "capas": k["capas_a_produzir"],
+                               "capa_publicada": len(capas_ja_publicadas(c, a["id"]))}
         for p in c.execute("SELECT * FROM pacotes ORDER BY id DESC"):
             lista = pacotes.setdefault(p["anuncio_id"], [])
             if len(lista) < 5:
@@ -473,6 +474,29 @@ def lista_tamanhos(texto):
     return [t for t in saida if not (t.lower() in vistos or vistos.add(t.lower()))][:40]
 
 
+def capas_ja_publicadas(c, aid):
+    """Capas deste anuncio (a capa e as capas das cores) que ja subiram para uma loja em OUTRO anuncio do site."""
+    minhas = {r[0]: "capa do anúncio" for r in c.execute("SELECT imagem_id FROM imagem_anuncio WHERE anuncio_id=? AND papel='capa'", (aid,))}
+    for r in c.execute("SELECT imagem_id, cor FROM anuncio_cores WHERE anuncio_id=?", (aid,)):
+        minhas.setdefault(r[0], f"capa da cor {r[1]}")
+    if not minhas:
+        return []
+    avisos, vistos = [], set()
+    for cr in c.execute("SELECT * FROM criacoes WHERE status='criado' AND anuncio_id IS NOT NULL AND anuncio_id<>? ORDER BY id DESC", (aid,)):
+        usadas = {int(x) for x in str(cr["capas"] or "").split(",") if x.strip().isdigit()}
+        if not usadas:  # criado antes de guardar as capas: usa as capas que aquele anuncio tem hoje
+            usadas = {r[0] for r in c.execute("SELECT imagem_id FROM imagem_anuncio WHERE anuncio_id=? AND papel='capa'", (cr["anuncio_id"],))} | \
+                     {r[0] for r in c.execute("SELECT imagem_id FROM anuncio_cores WHERE anuncio_id=?", (cr["anuncio_id"],))}
+        for iid in usadas & set(minhas):
+            if (iid, cr["anuncio_id"]) in vistos:
+                continue
+            vistos.add((iid, cr["anuncio_id"]))
+            avisos.append({"imagem": iid, "onde": minhas[iid], "anuncio": cr["anuncio_nome"] or f"#{cr['anuncio_id']}",
+                           "anuncio_id": cr["anuncio_id"], "loja": cr["loja"], "canal": cr["canal"], "quando": (cr["quando"] or "")[:10],
+                           "ids": cr["anuncio_ids"] or ""})
+    return avisos[:20]
+
+
 def montagem(c, aid):
     """Estrutura completa de um anuncio: capa, fotos em ordem, cores e o que sobra."""
     a = c.execute("SELECT * FROM anuncios WHERE id=?", (aid,)).fetchone()
@@ -516,6 +540,7 @@ def montagem(c, aid):
         "tamanhos": lista_tamanhos(a["tamanhos"]),
         "variacoes": [{"cor": v["cor"], "capa": _img(v["capa"]), "fotos": [_img(r) for r in v["fotos"]]} for v in variacoes],
         "produto": produto,
+        "capa_publicada": capas_ja_publicadas(c, aid),
         "capa": _img(capa) if capa else None,
         "galeria": [dict(_img(r), pos=r["posicao"]) for r in galeria],  # pos: o espaco onde ficou (pode ter espaco vazio antes)
         "cores": [dict(_img(r), nome_cor=r["nome_cor"]) for r in cores],
