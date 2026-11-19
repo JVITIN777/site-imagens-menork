@@ -2123,6 +2123,13 @@ window.ANUNCIO = (ID) => {
       <div class="botoes">${pendente ? '<button type="button" data-ver="' + i.id + '">Aprovar primeiro</button>' : botoes}</div></div>`;
   }
   const vaga = texto => `<div class="vaga">${texto}</div>`;
+  // os 9 espacos da Shopee/TikTok como ficaram, com os vazios no meio (pos 1..8 = espacos 2..9)
+  function espacosShopee() {
+    const arr = Array(MODOS.shopee.fotos).fill(null); arr[0] = E.capa || null; const sobra = [];
+    E.galeria.forEach(i => { const p = +i.pos; if (p >= 1 && p < arr.length && !arr[p]) arr[p] = i; else sobra.push(i); });
+    sobra.forEach(i => { const k = arr.findIndex((x, n) => n > 0 && !x); if (k > 0) arr[k] = i; });
+    return arr;
+  }
 
   function espacos(lista, total, primeiro) {
     return Array.from({ length: total }, (_, n) => { const i = lista[n], rot = n === 0 ? primeiro : String(n + 1), cls = n === 0 ? 'capa' : '';
@@ -2142,7 +2149,7 @@ window.ANUNCIO = (ID) => {
     const a = E.anuncio, foco = document.activeElement?.id, M = MODOS[E.modo];
     if (ml() && !variacao(corAtiva)) corAtiva = E.variacoes[0]?.cor ?? null;
     const v = ml() ? variacao(corAtiva) : null;
-    const lista = ml() ? (v ? v.fotos : []) : [E.capa, ...E.galeria];
+    const lista = ml() ? (v ? v.fotos : []) : espacosShopee();
     const cheias = lista.filter(Boolean).length;
     document.getElementById('resumo').textContent = ml()
       ? `Mercado Livre: ${E.variacoes.length} cor(es), cada uma com as suas fotos`
@@ -2314,12 +2321,16 @@ window.ANUNCIO = (ID) => {
       if (fotos.length > MODOS.ml.fotos) return aviso('As 10 fotos desta cor já estão preenchidas. Tire uma para colocar outra.');
       return fazer({ acao: 'slots_cor', cor: corAtiva, ids: fotos });
     }
-    let capa = E.capa ? E.capa.id : null, fotos = E.galeria.map(i => i.id);
-    if (a.de === 0) capa = null; else if (a.de !== null) fotos.splice(a.de - 1, 1);
-    if (para === 0) { if (capa) fotos.splice(a.de > 0 ? a.de - 1 : 0, 0, capa); capa = a.img; }
-    else fotos.splice(Math.min(para - 1, fotos.length), 0, a.img);
-    if (fotos.length > MODOS.shopee.fotos - 1) return aviso('As 9 fotos já estão preenchidas. Tire uma para colocar outra.');
-    fazer({ acao: 'slots', ids: [capa, ...fotos] });
+    // espaco vazio: a foto vai exatamente para ele (pode ficar vazio no meio); espaco com foto: as duas trocam de lugar
+    const esp = espacosShopee().map(i => i ? i.id : null), de = a.de !== null ? a.de : esp.indexOf(a.img);
+    if (de === para) return;
+    if (de >= 0) { esp[de] = esp[para]; esp[para] = a.img; }
+    else {  // veio do banco: entra no espaco; se tinha foto, ela anda para o proximo vazio
+      const tinha = esp[para]; esp[para] = a.img;
+      if (tinha) { const k = esp.findIndex((x, n) => n > para && !x), k2 = k > 0 ? k : esp.findIndex((x, n) => n > 0 && !x);
+        if (k2 < 0) return aviso('As 9 fotos já estão preenchidas. Tire uma para colocar outra.'); esp[k2] = tinha; }
+    }
+    fazer({ acao: 'slots', ids: esp });
   });
   editor.addEventListener('dragend', () => { arr = null; limpar(); });
   document.getElementById('montar-auto').onclick = async () => {

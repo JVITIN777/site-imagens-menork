@@ -517,7 +517,7 @@ def montagem(c, aid):
         "variacoes": [{"cor": v["cor"], "capa": _img(v["capa"]), "fotos": [_img(r) for r in v["fotos"]]} for v in variacoes],
         "produto": produto,
         "capa": _img(capa) if capa else None,
-        "galeria": [_img(r) for r in galeria],
+        "galeria": [dict(_img(r), pos=r["posicao"]) for r in galeria],  # pos: o espaco onde ficou (pode ter espaco vazio antes)
         "cores": [dict(_img(r), nome_cor=r["nome_cor"]) for r in cores],
         "disponiveis": [_img(r) for r in ligadas if r["id"] not in usados],
         "todas": [_img(r) for r in ligadas if ok(r)],
@@ -558,9 +558,9 @@ async def api_montar(aid: int, request: Request):
             c.execute("UPDATE imagem_anuncio SET papel=?, posicao=? WHERE imagem_id=? AND anuncio_id=?",
                       (valor, pos, iid, aid))
 
-        def proxima():
-            return c.execute("SELECT COALESCE(MAX(posicao),0)+1 FROM imagem_anuncio WHERE anuncio_id=? "
-                             "AND papel='galeria'", (aid,)).fetchone()[0]
+        def proxima():  # o primeiro espaco vazio (o Menork pode deixar espaco vazio no meio)
+            usadas = {r[0] for r in c.execute("SELECT posicao FROM imagem_anuncio WHERE anuncio_id=? AND papel='galeria'", (aid,))}
+            return next((p for p in range(1, 60) if p not in usadas), 1)
 
         def por_cor(img, nome=""):
             nome = (nome or img["cor"] or "").strip()
