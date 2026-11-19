@@ -19,10 +19,33 @@ _cache = {}
 
 
 def _token():
-    t = str(n.CFG.get("clickup_token") or "").strip()
+    t = str(n.ajuste("clickup_chave", "") or n.CFG.get("clickup_token") or "").strip()
     if not t:
-        raise HTTPException(400, "Falta a chave do ClickUp: coloque em clickup_token no config.json e ligue o site de novo.")
+        raise HTTPException(400, "SEM_CHAVE")
     return t
+
+
+@rota.get("/api/clickup/chave")
+def chave_estado():
+    return {"tem": bool(str(n.ajuste("clickup_chave", "") or n.CFG.get("clickup_token") or "").strip())}
+
+
+@rota.post("/api/clickup/chave")
+async def chave_salvar(request: Request):
+    """Guarda a chave pessoal do ClickUp so no banco local (nunca no repositorio nem no /api/estado) e testa."""
+    d = await request.json()
+    t = str(d.get("chave") or "").strip()
+    if not t.startswith("pk_"):
+        raise HTTPException(400, "A chave pessoal do ClickUp começa com pk_ (ClickUp › Configurações › Apps › API Token).")
+    antiga = n.ajuste("clickup_chave", "")
+    n.gravar_ajuste("clickup_chave", t)
+    _cache.clear()
+    try:
+        u = _chamar("GET", "/user").get("user") or {}
+    except HTTPException:
+        n.gravar_ajuste("clickup_chave", antiga or "")
+        raise
+    return {"ok": True, "usuario": u.get("username") or u.get("email") or ""}
 
 
 def _chamar(metodo, caminho, corpo=None, timeout=40):

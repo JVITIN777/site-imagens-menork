@@ -1753,6 +1753,11 @@ Object.assign(TELAS, {
     const d = CK.dados, q = semAc(CK.busca);
     const tarefas = d ? d.tarefas.filter(t => !q || semAc(t.nome + ' ' + t.etiquetas.map(g => g.nome).join(' ') + ' ' + t.responsaveis.map(a => a.nome).join(' ')).includes(q)) : [];
     let corpo = '';
+    if (CK.erro === 'SEM_CHAVE') return `<div class="cabeca"><h1>ClickUp <small>ligue a sua conta uma vez</small></h1></div>
+      <div class="bloco ck-ligar"><h2>Cole a sua chave pessoal do ClickUp</h2>
+      <ol><li>No ClickUp, clique na sua foto (canto de baixo, à esquerda) › <b>Configurações</b>.</li><li>Entre em <b>Apps</b> e, em <b>API Token</b>, clique em <b>Gerar</b> (ou <b>Copiar</b>, se já tiver).</li><li>Cole aqui embaixo. Ela começa com <b>pk_</b>.</li></ol>
+      <form class="b2-linha" data-ck-chave><input type="password" name="chave" placeholder="pk_..." autocomplete="off" style="flex:1"><button class="b">Ligar</button></form>
+      <p class="pequeno">A chave fica guardada só no seu PC (no banco do site). Não vai para o GitHub e não aparece na tela.</p></div>`;
     if (CK.erro) corpo = `<div class="nota ruim"><b>Não deu para ler o ClickUp</b><span>${esc(CK.erro)}</span></div>`;
     else if (!d) corpo = '<p class="pequeno">Carregando a lista…</p>';
     else if (CK.modo === 'quadro') {
@@ -1817,6 +1822,9 @@ document.addEventListener('submit', e => {
       try { const r = await b2post(`/api/clickup/lista/${encodeURIComponent(CK.lista)}/tarefa`, { nome, status }); CK.dados.tarefas.unshift(r); CK.novaEm = null; window.menork.aviso('Tarefa criada no ClickUp.'); }
       catch (err) { window.menork.aviso(err.message); }
       RENDER(); }); }
+  if (f.matches('[data-ck-chave]')) { e.preventDefault(); const chave = f.chave.value.trim(); f.querySelector('button').disabled = true;
+    return b2post('/api/clickup/chave', { chave }).then(r => { window.menork.aviso('ClickUp ligado' + (r.usuario ? ': ' + r.usuario : '') + '.'); CK.erro = ''; CK.arvore = null; CK.dados = null; RENDER(); })
+      .catch(err => { window.menork.aviso(err.message); f.querySelector('button').disabled = false; }); }
   if (f.matches('[data-ck-comentar]')) { e.preventDefault(); const texto = f.texto.value.trim(); if (!texto) return; const id = f.dataset.ckComentar;
     f.querySelector('button').disabled = true;
     b2post(`/api/clickup/tarefa/${encodeURIComponent(id)}/comentario`, { texto }).then(() => { window.menork.aviso('Comentário enviado.'); return ckAbrir(id); }).catch(err => { window.menork.aviso(err.message); f.querySelector('button').disabled = false; }); }
