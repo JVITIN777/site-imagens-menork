@@ -1614,7 +1614,7 @@ document.addEventListener('submit', e => {
 });
 
 // ---- trocar SÓ as fotos de vários anúncios da loja de uma vez (cada anúncio do site → um anúncio da loja)
-const LT = { loja: '', pares: [], lista: null, busca: '', ativo: 0, res: null, seq: 0, manterCapa: null, capaModo: null, galeria: true, cores: true, capas: null, escolhendo: null };
+const LT = { loja: '', pares: [], lista: null, busca: '', ativo: 0, res: null, seq: 0, manterCapa: null, capaModo: null, galeria: true, cores: true, capas: null, escolhendo: null, descricao: false };
 const ltModelo = () => SEL_AN.size === 1;  // um anuncio do site (a estrutura) -> varios anuncios da loja
 function ltLoja() { return todasLojas().find(l => l.id === LT.loja); }
 async function ltJanela() {
@@ -1631,6 +1631,7 @@ async function ltJanela() {
   b2Tela(`<h2>Trocar fotos na loja <small>${LT.pares.length} anúncio(s) · só as fotos</small></h2>
     <div class="campo-b2"><span>Loja</span>${seletorLoja('lt-loja', lojas, LT.loja)}</div>
     ${!LT.loja ? '' : `<p class="pequeno">${ltModelo() ? `Clique em <b>todos</b> os anúncios da loja que vão receber a estrutura de <b>${esc(nomeAd(ids[0]))}</b> (clique de novo para tirar).` : 'Clique num anúncio do site (à esquerda) e depois no anúncio da loja que vai receber as fotos dele.'}</p>
+    ${LT.loja ? `<label class="linha lt-desc"><input type="checkbox" id="lt-descricao" ${LT.descricao ? 'checked' : ''}> <span><b>Mandar a descrição junto</b> (a do anúncio do site, a mesma em todos)</span></label>` : ''}
     ${ltLoja()?.canal === 'shopee' ? `<div class="lt-opcoes">
       <label class="linha"><input type="checkbox" id="lt-galeria" ${LT.galeria ? 'checked' : ''}> <span><b>Trocar as fotos do anúncio</b> (as da estrutura)</span></label>
       <label class="linha"><input type="checkbox" id="lt-cores" ${LT.cores ? 'checked' : ''}> <span><b>Trocar as capas das cores</b> (variações)</span></label>
@@ -1682,7 +1683,7 @@ async function ltSimular(manter) {
       const mapa = Object.fromEntries(Object.entries(r.mapa).filter(([, v]) => v));
       const outra = l.canal === 'shopee' && LT.galeria && LT.capaModo === 'outra';
       if (outra && !p.capa) throw new Error('Escolha uma capa para este anúncio (ou mude para "manter a que cada anúncio já tem").');
-      const s = await b2post('/api/b2x/fotos/simular', { aid: p.aid, loja: l.id, anuncio: p.alvo.id, canal: l.canal, mapa, galeria: l.canal === 'shopee' && LT.galeria, trocar_cores: LT.cores, ajustar_modo: true, manter_capa_loja: LT.capaModo === 'manter', capa_img: outra ? p.capa : null });
+      const s = await b2post('/api/b2x/fotos/simular', { aid: p.aid, loja: l.id, anuncio: p.alvo.id, canal: l.canal, mapa, galeria: l.canal === 'shopee' && LT.galeria, trocar_cores: LT.cores, trocar_descricao: LT.descricao, ajustar_modo: true, manter_capa_loja: LT.capaModo === 'manter', capa_img: outra ? p.capa : null });
       Object.assign(r, { token: s.token, envios: s.envios, ok: s.pode_confirmar, erro: '' });
     } catch (err) { Object.assign(r, { token: null, ok: false, erro: err.message }); }
   }
@@ -1733,6 +1734,7 @@ document.addEventListener('click', e => {
 });
 document.addEventListener('change', e => {
   if (e.target.id === 'lt-galeria') { LT.galeria = e.target.checked; LT.res = null; return ltJanela(); }
+  if (e.target.id === 'lt-descricao') { LT.descricao = e.target.checked; LT.res = null; return; }
   if (e.target.id === 'lt-cores') { LT.cores = e.target.checked; LT.res = null; return ltJanela(); }
   if (e.target.name === 'lt-capa') { LT.capaModo = e.target.value; LT.res = null; ltDistribuir(); return ltJanela(); }
   if (e.target.id === 'lt-loja') { LT.loja = e.target.value; LT.lista = null; LT.busca = ''; LT.pares.forEach(p => p.alvo = null); LT.res = null; LT.ativo = 0; return ltJanela(); }

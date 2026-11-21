@@ -387,10 +387,17 @@ async def fotos_simular(request: Request):
     galeria = bool(d.get("galeria")) and canal == "shopee"
     if d.get("trocar_cores") is False:  # so as fotos do anuncio: as capas das cores ficam como estao na loja
         mapa = {}
-    if not mapa and not galeria:
+    descricao = ""
+    if d.get("trocar_descricao"):  # a descricao do anuncio do site vai junto (a mesma para todos)
+        descricao = str((m["anuncio"].get("descricao") if isinstance(m.get("anuncio"), dict) else "") or "").strip()
+        if not descricao:
+            raise HTTPException(400, "O anúncio do site está sem descrição para mandar.")
+    if not mapa and not galeria and not descricao:
         raise HTTPException(400, "Escolha pelo menos uma cor para trocar.")
     envios = []
-    if canal == "shopee":
+    if descricao:
+        envios.append({"rotulo": "Descrição", "corpo": {"loja": loja, "anuncio": anuncio_id, "descricao": descricao}})
+    if canal == "shopee" and (galeria or mapa):
         manter = bool(d.get("manter_capa_loja")) and galeria
         capa_outra = None
         if galeria and d.get("capa_img"):  # uma capa diferente para este anuncio da loja (mesma estrutura, capa nao repete)
@@ -420,7 +427,7 @@ async def fotos_simular(request: Request):
             corpo["fotos_por_cor"] = {cor_mk: links[variacoes[cor_site.lower()]["capa"]["id"]] for cor_mk, cor_site in mapa.items()}
         envios.append({"rotulo": "Fotos do anúncio e capas das cores" if galeria and mapa else ("Fotos do anúncio" if galeria else "Capas das cores"),
                        "corpo": corpo})
-    else:
+    elif canal != "shopee" and mapa:
         sem = [c for c in mapa.values() if not variacoes[c.lower()]["fotos"]]
         if sem:
             raise HTTPException(400, f"A cor {sem[0]} não tem fotos no modo Mercado Livre do site. Monte as fotos dela primeiro.")
