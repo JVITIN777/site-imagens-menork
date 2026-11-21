@@ -928,3 +928,9 @@ html[data-tema="azul"] ::selection{background:rgba(var(--brilho),.45);color:#fff
 .ck-grade{position:relative}
 .ck-recolhe{position:absolute;left:-14px;top:-2px;z-index:3;width:22px;height:22px;border-radius:50%;border:1px solid var(--borda);background:var(--painel);color:var(--fraco);cursor:pointer;font-size:12px;line-height:1}
 .ck-grade.sem-arvore{grid-template-columns:minmax(0,1fr)}.ck-grade.sem-arvore .ck-arvore{display:none}
+.lt-opcoes{display:flex;flex-direction:column;gap:6px;margin:8px 0;padding:10px 12px;border:1px solid var(--borda);border-radius:10px}
+.lt-capa-modo{display:flex;flex-wrap:wrap;gap:6px 16px;align-items:center;font-size:13px}.lt-capa-modo label{display:flex;gap:6px;align-items:center}
+.lt-capa{width:42px;height:42px;padding:0;border:1px solid var(--borda);border-radius:6px;overflow:hidden;background:#000;cursor:pointer;flex:none;margin-right:8px}
+.lt-capa img{width:100%;height:100%;object-fit:cover}.lt-capa em{font-size:9px;color:var(--fraco)}
+.lt-pares li{display:flex;align-items:center;flex-wrap:wrap}
+.tc-foto .tc-ja{background:#f5a524}.tc-foto .tc-cor{position:absolute;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);color:#fff;font-size:10px;padding:2px 4px;text-align:left}

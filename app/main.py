@@ -528,6 +528,24 @@ def _do_produto_parecido(c, aid, produto, cores, ja):
     return saida[:150]
 
 
+@app.get("/api/anuncios/{aid}/capas-livres")
+def capas_livres(aid: int):
+    """Capas aprovadas do produto deste anuncio (e do codigo parecido, nas cores dele), dizendo quais ja subiram numa loja."""
+    with n.con() as c:
+        m = montagem(c, aid)
+        produto = m["produto"]
+        cores = {_palavras_cor(v["cor"]) for v in m["variacoes"]}
+        linhas = [r for r in c.execute(f"SELECT {CAMPOS_IMG} FROM imagens i WHERE i.status='aprovada' AND i.tipo LIKE 'capa%' AND i.arquivo<>'' "
+                                       "ORDER BY i.id DESC") if r["produto"] and (r["produto"] == produto or
+                                       (_parecido(r["produto"], produto) and _palavras_cor(r["cor"]) in cores))]
+        publicadas = set()
+        for cr in c.execute("SELECT capas, anuncio_id FROM criacoes WHERE status='criado'"):
+            publicadas |= {int(x) for x in str(cr["capas"] or "").split(",") if x.strip().isdigit()}
+        em_anuncio = {r[0] for r in c.execute("SELECT imagem_id FROM imagem_anuncio WHERE papel='capa'")}
+        trocas = {int(x) for r in c.execute("SELECT valor FROM ajustes WHERE chave LIKE 'capa_usada_loja:%'") for x in str(r[0]).split(",") if x.isdigit()}
+    return {"capas": [dict(_img(r), publicada=r["id"] in publicadas or r["id"] in trocas, em_anuncio=r["id"] in em_anuncio) for r in linhas][:200]}
+
+
 def montagem(c, aid):
     """Estrutura completa de um anuncio: capa, fotos em ordem, cores e o que sobra."""
     a = c.execute("SELECT * FROM anuncios WHERE id=?", (aid,)).fetchone()

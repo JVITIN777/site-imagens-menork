@@ -495,7 +495,7 @@ function b2Lojas() {
     ${B2.lojas.length ? `<div class="campo-b2"><span>Loja</span>${seletorLoja('b2-loja', B2.lojas.map(l => ({ ...l, canal: B2.canal })), B2.loja)}</div>
     <p class="pequeno" id="b2-aviso-loja"></p>
     ${b2Irmaos()}
-    <div class="b2-escolha"><button class="b" data-b2="trocar">Trocar fotos de um anúncio que já existe</button><button class="b claro" data-b2="criar">Criar anúncio novo</button></div>
+    <div class="b2-escolha"><button class="b" data-b2="trocar">Trocar fotos de anúncios que já existem (um ou vários)</button><button class="b claro" data-b2="criar">Criar anúncio novo</button></div>
     <p class="pequeno">Para usar outro marketplace, troque o modo do anúncio (botões em cima do celular).</p>`
     : `<div class="nota ruim"><span>Nenhuma loja de ${B2CANAL[B2.canal]} apareceu para esta chave.</span></div>`}
     <div class="acoes"><button class="b claro" data-fechar>Fechar</button></div>`);
@@ -726,7 +726,7 @@ document.addEventListener('click', e => {
   const b = e.target.closest('[data-b2]'); if (!b) return;
   const p = b.dataset.b2; b2AvisoLoja();
   if (['trocar', 'criar'].includes(p) && !B2.loja) return window.menork.aviso('Escolha a loja primeiro.');
-  ({ lojas: b2Lojas, trocar: () => b2Anuncios(''), anuncios: () => b2Anuncios(B2.busca || ''), mapear: () => b2Mapear(B2.anuncio), simular: b2Simular, confirmar: b2Confirmar,
+  ({ lojas: b2Lojas, trocar: () => { SEL_AN.clear(); SEL_AN.add(B2.aid); LT.pares = []; LT.capas = null; LT.capaModo = null; LT.loja = B2.loja; LT.lista = null; LT.busca = ''; return ltJanela(); }, anuncios: () => b2Anuncios(B2.busca || ''), mapear: () => b2Mapear(B2.anuncio), simular: b2Simular, confirmar: b2Confirmar,
      criar: () => b2Categorias(''), categorias: () => b2Categorias(''), ficha: () => b2Ficha(B2.categoria, B2.caminho), publicar: b2Publicar }[p] || (() => {}))();
 });
 document.addEventListener('change', e => { if (e.target.id === 'b2-loja') b2AvisoLoja(); });
@@ -1614,14 +1614,15 @@ document.addEventListener('submit', e => {
 });
 
 // ---- trocar SÓ as fotos de vários anúncios da loja de uma vez (cada anúncio do site → um anúncio da loja)
-const LT = { loja: '', pares: [], lista: null, busca: '', ativo: 0, res: null, seq: 0, manterCapa: null };
+const LT = { loja: '', pares: [], lista: null, busca: '', ativo: 0, res: null, seq: 0, manterCapa: null, capaModo: null, galeria: true, cores: true, capas: null, escolhendo: null };
 const ltModelo = () => SEL_AN.size === 1;  // um anuncio do site (a estrutura) -> varios anuncios da loja
 function ltLoja() { return todasLojas().find(l => l.id === LT.loja); }
 async function ltJanela() {
   if (!LOJAS.clientes) { b2Carregando('Buscando as lojas no B2X…'); await carregarLojas(); if (!LOJAS.clientes) return b2Erro(new Error(LOJAS.erro || 'Não consegui ler as lojas.')); }
   const ids = [...SEL_AN];
   if ([...new Set(LT.pares.map(p => p.aid))].join() !== ids.join()) { LT.pares = ids.map(aid => ({ k: ++LT.seq, aid, alvo: null })); LT.res = null; LT.manterCapa = null; }
-  if (LT.manterCapa === null) { const semCapa = ids.some(aid => !montagem(aid).capa); LT.manterCapa = semCapa; }  // estrutura sem capa: cada anuncio da loja fica com a capa dele
+  if (LT.capaModo === null) LT.capaModo = ids.some(aid => !montagem(aid).capa) ? 'manter' : 'site';  // estrutura sem capa: cada anuncio da loja fica com a capa dele
+  if (ltModelo() && LT.capas === null) { LT.capas = []; b2get(`/api/anuncios/${ids[0]}/capas-livres`).then(r => { LT.capas = r.capas; ltDistribuir(); if (document.getElementById('lt-simular')) ltJanela(); }).catch(() => {}); }
   const lojas = todasLojas().filter(l => ['shopee', 'mercadolivre'].includes(l.canal));
   if (!lojas.some(l => l.id === LT.loja)) { LT.loja = ''; LT.lista = null; }
   const nomeAd = aid => DB.anuncios.find(a => a.id === aid)?.nome || '#' + aid;
@@ -1630,13 +1631,38 @@ async function ltJanela() {
   b2Tela(`<h2>Trocar fotos na loja <small>${LT.pares.length} anúncio(s) · só as fotos</small></h2>
     <div class="campo-b2"><span>Loja</span>${seletorLoja('lt-loja', lojas, LT.loja)}</div>
     ${!LT.loja ? '' : `<p class="pequeno">${ltModelo() ? `Clique em <b>todos</b> os anúncios da loja que vão receber a estrutura de <b>${esc(nomeAd(ids[0]))}</b> (clique de novo para tirar).` : 'Clique num anúncio do site (à esquerda) e depois no anúncio da loja que vai receber as fotos dele.'}</p>
-    <label class="linha lt-manter"><input type="checkbox" id="lt-manter-capa" ${LT.manterCapa ? 'checked' : ''}> <span><b>Manter a capa (foto 1) que cada anúncio já tem na loja</b> e trocar só as fotos 2 a 9 e as capas das cores</span></label>
-    <div class="lt-grade"><ol class="lt-pares">${LT.pares.map((p, i) => `<li class="${i === LT.ativo ? 'ativo' : ''}" data-lt-ativo="${i}"><b>${esc(nomeAd(p.aid))}</b><span>→ ${p.alvo ? `${p.alvo.foto ? `<img src="${esc(p.alvo.foto)}" alt="">` : ''}${esc(p.alvo.titulo.slice(0, 50))} <small>${esc(p.alvo.id)}</small> <button type="button" class="x" data-lt-tirar="${i}" title="Tirar">×</button>` : '<em>escolha na loja</em>'}</span></li>`).join('')}</ol>
+    ${ltLoja()?.canal === 'shopee' ? `<div class="lt-opcoes">
+      <label class="linha"><input type="checkbox" id="lt-galeria" ${LT.galeria ? 'checked' : ''}> <span><b>Trocar as fotos do anúncio</b> (as da estrutura)</span></label>
+      <label class="linha"><input type="checkbox" id="lt-cores" ${LT.cores ? 'checked' : ''}> <span><b>Trocar as capas das cores</b> (variações)</span></label>
+      ${LT.galeria ? `<div class="lt-capa-modo"><b>Capa (foto 1):</b>
+        <label><input type="radio" name="lt-capa" value="manter" ${LT.capaModo === 'manter' ? 'checked' : ''}> manter a que cada anúncio já tem na loja</label>
+        ${ltModelo() ? `<label><input type="radio" name="lt-capa" value="outra" ${LT.capaModo === 'outra' ? 'checked' : ''}> uma capa diferente do site em cada anúncio <small>(${(LT.capas || []).length} capa(s) do produto; as já publicadas ficam por último)</small></label>` : ''}
+        ${ids.some(aid => montagem(aid).capa) ? `<label><input type="radio" name="lt-capa" value="site" ${LT.capaModo === 'site' ? 'checked' : ''}> a capa do anúncio do site</label>` : ''}</div>` : ''}</div>` : ''}
+    <div class="lt-grade"><ol class="lt-pares">${LT.pares.map((p, i) => `<li class="${i === LT.ativo ? 'ativo' : ''}" data-lt-ativo="${i}">${LT.capaModo === 'outra' && LT.galeria && p.alvo ? `<button type="button" class="lt-capa" data-lt-capa="${i}" title="Trocar a capa deste">${p.capa ? `<img src="/mini/${p.capa}" alt="">` : '<em>sem capa</em>'}</button>` : ''}<b>${esc(nomeAd(p.aid))}</b><span>→ ${p.alvo ? `${p.alvo.foto ? `<img src="${esc(p.alvo.foto)}" alt="">` : ''}${esc(p.alvo.titulo.slice(0, 50))} <small>${esc(p.alvo.id)}</small> <button type="button" class="x" data-lt-tirar="${i}" title="Tirar">×</button>` : '<em>escolha na loja</em>'}</span></li>`).join('')}</ol>
     <div><form id="lt-busca" class="b2-linha"><input name="busca" value="${esc(LT.busca)}" placeholder="Buscar na loja pelo título ou código"><button class="b claro">Buscar</button></form>
       <div class="tf-lista lt-lista">${LT.lista === null ? '<p class="pequeno">Carregando os anúncios da loja…</p>' : LT.lista.length ? LT.lista.map(x => { const usado = LT.pares.findIndex(p => p.alvo?.id === x.id); return `<button type="button" class="tf-item ${usado >= 0 ? 'escolhido' : ''}" data-lt-alvo="${esc(x.id)}">${x.foto ? `<img src="${esc(x.foto)}" alt="" onerror="this.style.visibility='hidden'">` : '<span class="tf-semfoto"></span>'}<span><b>${esc(x.titulo)}</b><small>${esc(x.id)}${x.preco ? ' · R$ ' + esc(x.preco) : ''}${usado >= 0 ? ' · ← ' + esc(nomeAd(LT.pares[usado].aid)) : ''}</small></span></button>`; }).join('') : '<p class="pequeno">Nada encontrado.</p>'}</div></div></div>`}
     <p class="pequeno">Muda só as fotos${ltLoja()?.canal === 'shopee' ? ' (as 9 do anúncio e a capa de cada cor)' : ltLoja() ? ' (as fotos de cada cor)' : ''}. Título, preço, descrição e estoque ficam como estão. Primeiro simula; nada muda até você confirmar.</p>
     <div class="acoes"><button class="b verde" id="lt-simular" ${prontos && LT.loja ? '' : 'disabled'}>Simular ${prontos || ''} troca(s)</button><button class="b claro" data-fechar>Cancelar</button></div>`);
   if (LT.loja && LT.lista === null) ltBuscar();
+}
+// cada anuncio da loja ganha uma capa diferente: primeiro as que nunca subiram, depois as ja publicadas
+function ltDistribuir() {
+  if (!LT.capas) return;
+  const ordem = [...LT.capas].sort((a, b) => (a.publicada - b.publicada) || (a.em_anuncio - b.em_anuncio));
+  const usadas = new Set(LT.pares.map(p => p.capa).filter(Boolean));
+  LT.pares.forEach(p => { if (p.alvo && !p.capa) { const c = ordem.find(x => !usadas.has(x.id)); if (c) { p.capa = c.id; usadas.add(c.id); } } });
+}
+function ltEscolherCapa(i) {
+  const p = LT.pares[i], usadas = new Set(LT.pares.filter((x, j) => j !== i).map(x => x.capa));
+  const fundo = document.createElement('div'); fundo.className = 'troca-capa-fundo';
+  fundo.innerHTML = `<div class="troca-capa"><div class="tc-cab"><h3>Capa para <b>${esc(p.alvo.titulo.slice(0, 50))}</b> <small>clique para escolher</small></h3><button type="button" class="b claro mini" data-tc-fechar>Fechar</button></div>
+    <div class="tc-grade">${(LT.capas || []).map(c => `<button type="button" class="tc-foto ${c.id === p.capa ? 'atual' : ''}" data-tc-img="${c.id}" ${usadas.has(c.id) ? 'title="Já escolhida para outro anúncio desta troca"' : ''}><img loading="lazy" src="/mini/${c.id}" alt="">${c.id === p.capa ? '<em>esta</em>' : usadas.has(c.id) ? '<em class="tc-ja">em outro</em>' : c.publicada ? '<em class="tc-ja">já publicada</em>' : ''}<small class="tc-cor">${esc(c.cor || '')}</small></button>`).join('') || '<p class="pequeno">Nenhuma capa aprovada deste produto.</p>'}</div></div>`;
+  document.body.appendChild(fundo);
+  fundo.addEventListener('click', ev => {
+    if (ev.target === fundo || ev.target.closest('[data-tc-fechar]')) return fundo.remove();
+    const f = ev.target.closest('[data-tc-img]'); if (!f) return;
+    p.capa = +f.dataset.tcImg; if (LT.res) delete LT.res[p.k]; fundo.remove(); ltJanela();
+  });
 }
 async function ltBuscar() {
   const loja = LT.loja;
@@ -1654,7 +1680,9 @@ async function ltSimular(manter) {
         r.nossas = (await b2get('/api/anuncios/' + p.aid)).variacoes.map(v => v.cor);
         r.mapa = Object.fromEntries(r.cores.map(c => [c, r.nossas.find(x => semAc(x) === semAc(c)) || ''])); }
       const mapa = Object.fromEntries(Object.entries(r.mapa).filter(([, v]) => v));
-      const s = await b2post('/api/b2x/fotos/simular', { aid: p.aid, loja: l.id, anuncio: p.alvo.id, canal: l.canal, mapa, galeria: l.canal === 'shopee', ajustar_modo: true, manter_capa_loja: !!LT.manterCapa });
+      const outra = l.canal === 'shopee' && LT.galeria && LT.capaModo === 'outra';
+      if (outra && !p.capa) throw new Error('Escolha uma capa para este anúncio (ou mude para "manter a que cada anúncio já tem").');
+      const s = await b2post('/api/b2x/fotos/simular', { aid: p.aid, loja: l.id, anuncio: p.alvo.id, canal: l.canal, mapa, galeria: l.canal === 'shopee' && LT.galeria, trocar_cores: LT.cores, ajustar_modo: true, manter_capa_loja: LT.capaModo === 'manter', capa_img: outra ? p.capa : null });
       Object.assign(r, { token: s.token, envios: s.envios, ok: s.pode_confirmar, erro: '' });
     } catch (err) { Object.assign(r, { token: null, ok: false, erro: err.message }); }
   }
@@ -1664,7 +1692,7 @@ function ltResultado(final) {
   const pares = LT.pares.filter(p => p.alvo), nomeAd = aid => DB.anuncios.find(a => a.id === aid)?.nome || '#' + aid;
   const okN = pares.filter(p => LT.res[p.k]?.ok).length;
   b2Tela(`<h2>${final ? 'Resultado' : 'Simulação'} <small>${final ? '' : 'nada foi trocado ainda'}</small></h2>
-    <div class="lt-res">${pares.map(p => { const r = LT.res[p.k] || {}, sem = (r.cores || []).filter(c => !r.mapa?.[c]);
+    <div class="lt-res">${pares.map(p => { const r = LT.res[p.k] || {}, sem = LT.cores ? (r.cores || []).filter(c => !r.mapa?.[c]) : [];
       return `<div class="nota ${(final ? r.feito : r.ok) ? '' : 'ruim'}"><b>${esc(nomeAd(p.aid))} → ${esc(p.alvo.titulo.slice(0, 50))} (${esc(p.alvo.id)}): ${final ? (r.feito ? 'fotos trocadas' : 'não trocado') : r.ok ? 'pronto' : 'não dá para trocar'}</b>
         ${r.erro ? `<span>${esc(r.erro)}</span>` : ''}${(final ? r.final || [] : r.envios || []).filter(e => !e.ok && e.erro).map(e => `<span>${esc(e.rotulo)}: ${esc(e.erro)}</span>`).join('')}
         ${!final && sem.length ? `<span>Cores da loja sem par no site (ficam com as fotos antigas): ${sem.map(c => `<label class="lt-cor">${esc(c)} → <select data-lt-cor="${p.k}" data-cor="${esc(c)}"><option value="">não mexer</option>${(r.nossas || []).map(x => `<option>${esc(x)}</option>`).join('')}</select></label>`).join(' ')}</span>` : ''}</div>`; }).join('')}</div>
@@ -1681,11 +1709,12 @@ async function ltConfirmar() {
 }
 document.addEventListener('click', e => {
   if (e.target.closest('#trocar-lote')) return ltJanela();
-  const est = e.target.closest('#estrutura-loja'); if (est) { SEL_AN.clear(); SEL_AN.add(+est.dataset.id); LT.pares = []; return ltJanela(); }
+  const est = e.target.closest('#estrutura-loja'); if (est) { SEL_AN.clear(); SEL_AN.add(+est.dataset.id); LT.pares = []; LT.capas = null; LT.capaModo = null; return ltJanela(); }
   if (e.target.closest('#lt-simular')) return ltSimular(false);
   if (e.target.closest('#lt-resimular')) return ltSimular(true);
   if (e.target.closest('#lt-confirmar')) return ltConfirmar();
   if (e.target.closest('#lt-voltar')) return ltJanela();
+  const lc = e.target.closest('[data-lt-capa]'); if (lc) { e.stopPropagation(); return ltEscolherCapa(+lc.dataset.ltCapa); }
   const t = e.target.closest('[data-lt-tirar]'); if (t) { e.stopPropagation(); LT.pares[+t.dataset.ltTirar].alvo = null; LT.ativo = +t.dataset.ltTirar; return ltJanela(); }
   const a = e.target.closest('[data-lt-ativo]'); if (a) { LT.ativo = +a.dataset.ltAtivo; return ltJanela(); }
   const al = e.target.closest('[data-lt-alvo]'); if (al) {
@@ -1694,7 +1723,7 @@ document.addEventListener('click', e => {
       const ja = LT.pares.findIndex(p => p.alvo?.id === x.id);
       if (ja >= 0) { if (LT.pares.length > 1) LT.pares.splice(ja, 1); else LT.pares[ja].alvo = null; }
       else { const livre = LT.pares.find(p => !p.alvo); if (livre) livre.alvo = x; else LT.pares.push({ k: ++LT.seq, aid: LT.pares[0].aid, alvo: x }); }
-      LT.res = null; return ltJanela();
+      LT.res = null; ltDistribuir(); return ltJanela();
     }
     LT.pares.forEach(p => { if (p.alvo?.id === x.id) p.alvo = null; });
     LT.pares[LT.ativo].alvo = x; if (LT.res) delete LT.res[LT.pares[LT.ativo].k];
@@ -1703,7 +1732,9 @@ document.addEventListener('click', e => {
   }
 });
 document.addEventListener('change', e => {
-  if (e.target.id === 'lt-manter-capa') { LT.manterCapa = e.target.checked; LT.res = null; return; }
+  if (e.target.id === 'lt-galeria') { LT.galeria = e.target.checked; LT.res = null; return ltJanela(); }
+  if (e.target.id === 'lt-cores') { LT.cores = e.target.checked; LT.res = null; return ltJanela(); }
+  if (e.target.name === 'lt-capa') { LT.capaModo = e.target.value; LT.res = null; ltDistribuir(); return ltJanela(); }
   if (e.target.id === 'lt-loja') { LT.loja = e.target.value; LT.lista = null; LT.busca = ''; LT.pares.forEach(p => p.alvo = null); LT.res = null; LT.ativo = 0; return ltJanela(); }
   const c = e.target.closest('[data-lt-cor]'); if (c) { const r = LT.res[+c.dataset.ltCor]; if (r) r.mapa[c.dataset.cor] = c.value; }
 });

@@ -385,12 +385,22 @@ async def fotos_simular(request: Request):
         if cor_site.lower() not in variacoes:
             raise HTTPException(400, f"A cor {cor_site} não existe neste anúncio do site.")
     galeria = bool(d.get("galeria")) and canal == "shopee"
+    if d.get("trocar_cores") is False:  # so as fotos do anuncio: as capas das cores ficam como estao na loja
+        mapa = {}
     if not mapa and not galeria:
         raise HTTPException(400, "Escolha pelo menos uma cor para trocar.")
     envios = []
     if canal == "shopee":
         manter = bool(d.get("manter_capa_loja")) and galeria
-        fotos = ([L["capa"]] if L["capa"] and not manter else []) + L["galeria"]
+        capa_outra = None
+        if galeria and d.get("capa_img"):  # uma capa diferente para este anuncio da loja (mesma estrutura, capa nao repete)
+            with n.con() as c:
+                capa_outra = c.execute("SELECT * FROM imagens WHERE id=? AND status='aprovada'", (int(d["capa_img"]),)).fetchone()
+            if not capa_outra:
+                raise HTTPException(400, "A capa escolhida não está aprovada no site.")
+            capa_outra = dict(capa_outra)
+            manter = False
+        fotos = ([capa_outra] if capa_outra else [L["capa"]] if L["capa"] and not manter else []) + L["galeria"]
         if galeria and not fotos:
             raise HTTPException(400, "Este anúncio do site não tem capa nem fotos para mandar.")
         capa_loja = ""
@@ -436,7 +446,8 @@ async def fotos_simular(request: Request):
                           "erro": "" if ok else (texto_erro(r) or f"respondeu {status}"), "pedido_id": e["pedido_id"]})
     token = secrets.token_hex(12)
     _limpar_preparos()
-    _preparos[token] = {"aid": aid, "loja": loja, "anuncio": anuncio_id, "canal": canal, "envios": envios, "quando": time.time()}
+    _preparos[token] = {"aid": aid, "loja": loja, "anuncio": anuncio_id, "canal": canal, "envios": envios, "quando": time.time(),
+                        "capa_img": capa_outra["id"] if canal == "shopee" and capa_outra else None}
     return {"token": token, "envios": resultado, "pode_confirmar": any(r["ok"] for r in resultado)}
 
 
@@ -519,6 +530,10 @@ async def fotos_confirmar(request: Request):
                        r.get("desfazer_com"))
         else:
             n.registrar(f"B2X: {e['rotulo']} em {p['anuncio']} (loja {p['loja']}): {saida[-1]['situacao']}")
+    if p.get("capa_img") and any(x["ok"] for x in saida):  # a capa foi para a loja: marca como ja usada (para nao repetir)
+        with n.con() as c:
+            chave = f"capa_usada_loja:{p['loja']}:{p['anuncio']}"
+            c.execute("INSERT OR REPLACE INTO ajustes(chave, valor) VALUES(?,?)", (chave, str(p["capa_img"])))
     _preparos.pop(str(d.get("token")), None)
     return {"envios": saida}
 
