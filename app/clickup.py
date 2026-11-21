@@ -129,13 +129,15 @@ def _campos_def(lid):
 
 
 NOMES_COLUNA = {"priority": "Prioridade", "status": "Status", "assignee": "Responsável", "dueDate": "Prazo",
-                "dateUpdated": "Atualizado", "dateCreated": "Criado", "tag": "Etiquetas", "startDate": "Início"}
+                "dateUpdated": "Data de atualização", "dateCreated": "Criado", "tag": "Etiquetas", "startDate": "Início"}
 
 
 def _colunas_da_visao(lid, defs):
     """As colunas visíveis da visão Lista do próprio ClickUp (a mesma ordem que o Menork usa lá)."""
     try:
-        views = _chamar("GET", f"/list/{urllib.parse.quote(lid)}/view").get("views") or []
+        r = _chamar("GET", f"/list/{urllib.parse.quote(lid)}/view")
+        # a visao "Lista" padrao do ClickUp vem em required_views, nao em views
+        views = list(r.get("views") or []) + [v for v in (r.get("required_views") or {}).values() if isinstance(v, dict)]
     except HTTPException:
         views = []
     v = next((x for x in views if x.get("type") == "list" and str(x.get("name", "")).lower() == "lista"), None) \
@@ -151,11 +153,13 @@ def _colunas_da_visao(lid, defs):
         if f.startswith("cf_"):
             d = defs.get(f[3:])
             if d:
-                cols.append({"chave": f, "nome": c.get("name") or d["nome"], "tipo": d["tipo"]})
+                cols.append({"chave": f, "nome": c.get("name") or d["nome"], "tipo": d["tipo"], "largura": c.get("width")})
         elif f in NOMES_COLUNA:
-            cols.append({"chave": f, "nome": c.get("name") or NOMES_COLUNA[f], "tipo": f})
-    if not cols:
-        cols = [{"chave": k, "nome": NOMES_COLUNA[k], "tipo": k} for k in ("assignee", "dueDate", "priority")]
+            cols.append({"chave": f, "nome": c.get("name") or NOMES_COLUNA[f], "tipo": f, "largura": c.get("width")})
+    if not cols:  # sem visao lida: prioridade, status, todos os campos da lista e a data de atualizacao
+        cols = [{"chave": k, "nome": NOMES_COLUNA[k], "tipo": k} for k in ("priority", "status")] + \
+               [{"chave": "cf_" + i, "nome": d["nome"], "tipo": d["tipo"]} for i, d in defs.items()] + \
+               [{"chave": "dateUpdated", "nome": NOMES_COLUNA["dateUpdated"], "tipo": "dateUpdated"}]
     return cols, bool(((v or {}).get("settings") or {}).get("show_closed") or ((v or {}).get("filters") or {}).get("show_closed"))
 
 

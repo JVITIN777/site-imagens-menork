@@ -1760,7 +1760,7 @@ document.addEventListener('click', e => {
 
 // ---- ClickUp dentro do site: árvore de listas, quadro por status, detalhe da tarefa. Toda mudança pede confirmação; nada é apagado.
 const CK = { arvore: null, erro: '', lista: (() => { try { return localStorage.getItem('ck_lista') || ''; } catch (_) { return ''; } })(), dados: null, carregando: false,
-  modo: (() => { try { return localStorage.getItem('ck_modo') || 'lista'; } catch (_) { return 'lista'; } })(), busca: '', aberta: null, tarefa: null, fechadas: true, recolhidos: new Set(), novaEm: null, arrastando: null, confirmar: null };
+  modo: (() => { try { return localStorage.getItem('ck_modo') || 'lista'; } catch (_) { return 'lista'; } })(), busca: '', aberta: null, tarefa: null, fechadas: true, recolhidos: new Set(), semArvore: (() => { try { return !!localStorage.getItem('ck_sem_arvore'); } catch (_) { return false; } })(), novaEm: null, arrastando: null, confirmar: null };
 const ckData = ms => ms ? new Date(+ms).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) : '';
 const ckPri = { urgent: ['Urgente', '#f50000'], high: ['Alta', '#ffcc00'], normal: ['Normal', '#6fddff'], low: ['Baixa', '#d8d8d8'] };
 async function ckArvore(atualizar) {
@@ -1816,6 +1816,7 @@ Object.assign(TELAS, {
       // igual ao ClickUp: hoje / ontem / há N dias (até 6), depois 18/9/26
       const ckQuando = ms => { if (!ms) return '<span class="ck-vazio">–</span>'; const d = new Date(+ms), h = new Date(); h.setHours(0, 0, 0, 0); const dias = Math.round((h - new Date(d).setHours(0, 0, 0, 0)) / 864e5);
         return dias <= 0 ? 'Hoje' : dias === 1 ? 'Ontem' : dias < 7 ? `há ${dias} dias` : `${d.getDate()}/${d.getMonth() + 1}/${String(d.getFullYear()).slice(2)}`; };
+      const ckLarg = c => Math.max(90, Math.min(320, +c.largura || 160));  // a mesma largura da coluna no ClickUp
       const pill = v => v.cor ? `<span class="ck-pill" style="--c:${esc(v.cor)}">${esc(v.texto)}</span>` : `<span class="ck-txt" title="${esc(v.texto)}">${esc(v.texto)}</span>`;
       const celula = (t, c) => {
         if (c.chave === 'priority') return ckPri[t.prioridade] ? `<span class="ck-prio"><i style="color:${ckPri[t.prioridade][1]}">⚑</i>${ckPri[t.prioridade][0]}</span>` : '<span class="ck-vazio">–</span>';
@@ -1830,7 +1831,7 @@ Object.assign(TELAS, {
       };
       corpo = `<div class="ck-lista">${grupos.filter(g => tarefas.some(t => t.status === g.nome) || g.tipo !== 'closed').map(g => { const ts = tarefas.filter(t => t.status === g.nome), fechado = CK.recolhidos.has(g.nome);
         return `<section class="ck-grupo"><header><button type="button" class="ck-seta ${fechado ? 'fechado' : ''}" data-ck-recolher="${esc(g.nome)}">▾</button><span class="ck-st" style="--c:${esc(g.cor)}">${esc(g.nome)}</span><small>${ts.length}</small></header>
-          ${fechado ? '' : `<div class="ck-rolagem"><table class="ck-tab" style="width:${380 + 150 * cols.length}px"><thead><tr><th class="ck-nome">Nome</th>${cols.map(c => `<th>${esc(c.nome)}</th>`).join('')}</tr></thead><tbody>
+          ${fechado ? '' : `<div class="ck-rolagem"><table class="ck-tab" style="width:${360 + cols.reduce((t, c) => t + ckLarg(c), 0)}px"><thead><tr><th class="ck-nome">Name</th>${cols.map(c => `<th style="width:${ckLarg(c)}px;max-width:${ckLarg(c)}px">${esc(c.nome)}</th>`).join('')}</tr></thead><tbody>
           ${ts.map(t => `<tr data-ck-tarefa="${esc(t.id)}"><td class="ck-nome"><div class="ck-nome-in"><i class="ck-bola" style="background:${esc(t.cor)}"></i><b>${esc(t.nome)}</b>${t.subtarefas ? `<small class="ck-sub">☰ ${t.subtarefas}</small>` : ''}</div></td>${cols.map(c => `<td>${celula(t, c)}</td>`).join('')}</tr>`).join('')}
           </tbody></table></div>
           ${CK.novaEm === g.nome ? `<form class="ck-nova ck-nova-lista" data-ck-nova="${esc(g.nome)}"><input name="nome" placeholder="Nome da tarefa" autocomplete="off" autofocus><button class="b mini">Criar</button><button type="button" class="b claro mini" data-ck-cancelar-nova>Cancelar</button></form>`
@@ -1852,7 +1853,7 @@ Object.assign(TELAS, {
     return `<div class="cabeca"><h1>ClickUp <small>${d ? `${esc([d.espaco, d.pasta].filter(Boolean).join(' › '))} › <b>${esc(d.nome)}</b> · ${d.tarefas.length} tarefa(s)` : 'o seu workspace aqui dentro'}</small></h1>
       <div class="acoes"><input class="ck-busca" placeholder="Buscar tarefa…" value="${esc(CK.busca)}" data-ck-busca><div class="ck-modo"><button type="button" data-ck-modo="lista" class="${CK.modo === 'lista' ? 'ativo' : ''}">☰ Lista</button><button type="button" data-ck-modo="quadro" class="${CK.modo === 'quadro' ? 'ativo' : ''}">▦ Quadro</button></div>
       <label class="pequeno ck-fech"><input type="checkbox" data-ck-fechadas ${CK.fechadas ? 'checked' : ''}> fechadas</label><button class="b claro" data-ck-atualizar>${CK.carregando ? 'Lendo…' : 'Atualizar'}</button></div></div>
-      <div class="ck-grade"><nav class="ck-arvore">${arvore || '<p class="pequeno">Nenhuma lista.</p>'}</nav><div class="ck-centro">${corpo}</div></div>${painel}${conf}`;
+      <div class="ck-grade ${CK.semArvore ? 'sem-arvore' : ''}"><button type="button" class="ck-recolhe" data-ck-arvore title="${CK.semArvore ? 'Mostrar as listas' : 'Esconder as listas e usar a tela toda'}">${CK.semArvore ? '»' : '«'}</button><nav class="ck-arvore">${arvore || '<p class="pequeno">Nenhuma lista.</p>'}</nav><div class="ck-centro">${corpo}</div></div>${painel}${conf}`;
   }
 });
 function ckPerguntar(titulo, texto, fazer) { CK.confirmar = { titulo, texto, fazer }; RENDER(); }
@@ -1868,6 +1869,7 @@ document.addEventListener('click', e => {
   if (!ROTA.startsWith('/clickup')) return;
   const l = e.target.closest('[data-ck-lista]'); if (l) { e.preventDefault(); CK.dados = null; CK.aberta = null; return ckLista(l.dataset.ckLista); }
   const m = e.target.closest('[data-ck-modo]'); if (m) { CK.modo = m.dataset.ckModo; try { localStorage.setItem('ck_modo', CK.modo); } catch (_) {} return RENDER(); }
+  if (e.target.closest('[data-ck-arvore]')) { CK.semArvore = !CK.semArvore; try { localStorage.setItem('ck_sem_arvore', CK.semArvore ? '1' : ''); } catch (_) {} return RENDER(); }
   const rc = e.target.closest('[data-ck-recolher]'); if (rc) { const g = rc.dataset.ckRecolher; CK.recolhidos.has(g) ? CK.recolhidos.delete(g) : CK.recolhidos.add(g); return RENDER(); }
   if (e.target.closest('[data-ck-atualizar]')) { CK.arvore = null; CK.dados = null; return ckArvore(true); }
   if (e.target.closest('[data-ck-fechar]')) { CK.aberta = null; CK.tarefa = null; return RENDER(); }

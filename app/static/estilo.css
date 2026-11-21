@@ -890,8 +890,8 @@ html[data-tema="azul"] ::selection{background:rgba(var(--brilho),.45);color:#fff
 .ck-nova-lista{flex-direction:row;align-items:center;margin-top:6px}.ck-nova-lista input{max-width:420px}
 .ck-grupo .ck-add{margin-top:4px}
 .ck-tab{table-layout:fixed;width:auto}
-.ck-tab th:not(.ck-nome),.ck-tab td:not(.ck-nome){width:150px;max-width:150px}
-.ck-tab .ck-nome{width:380px}
+.ck-tab td:not(.ck-nome){max-width:320px}
+.ck-tab .ck-nome{width:360px}
 .ck-tab{min-width:0}.ck-rolagem{width:fit-content;max-width:100%}
 .crh-falta{color:var(--amarelo,#f5b400);font-weight:600}
 .ps-mesmo{background:var(--verde,#2ecd6f)!important;color:#fff!important}
@@ -925,3 +925,6 @@ html[data-tema="azul"] ::selection{background:rgba(var(--brilho),.45);color:#fff
 .slot.ja-publicada,.chip-cor.ja-publicada{outline:2px solid #f5a524;outline-offset:2px}
 .slot.ja-publicada::after{content:"já publicada";position:absolute;right:6px;bottom:6px;background:#f5a524;color:#000;font-size:10px;font-weight:700;padding:1px 5px;border-radius:4px}
 .capa-pub{color:#f5a524!important}
+.ck-grade{position:relative}
+.ck-recolhe{position:absolute;left:-14px;top:-2px;z-index:3;width:22px;height:22px;border-radius:50%;border:1px solid var(--borda);background:var(--painel);color:var(--fraco);cursor:pointer;font-size:12px;line-height:1}
+.ck-grade.sem-arvore{grid-template-columns:minmax(0,1fr)}.ck-grade.sem-arvore .ck-arvore{display:none}
