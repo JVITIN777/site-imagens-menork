@@ -266,6 +266,16 @@ def _primeira_foto(x):
 def anuncios(loja: str, busca: str = "", pagina: int = 1, fotos_ao_vivo: int = 0):
     """Anuncios de uma loja. Pede detalhe=1: so assim o B2X manda capa_url e fotos_urls (a lista curta nao tem foto).
     fotos_ao_vivo=1 (botao Atualizar) faz o B2X ler as fotos agora no marketplace (Shopee, ate 100)."""
+    codigo = re.sub(r"[\s-]", "", busca.strip().upper())
+    if re.fullmatch(r"(MLB)?\d{6,}", codigo):  # buscou pelo codigo do anuncio: le direto aquele anuncio
+        try:
+            a = anuncio(loja, codigo)
+        except HTTPException:
+            a = None
+        if a and a.get("titulo"):
+            return {"anuncios": [{"id": a["id"], "titulo": a["titulo"], "preco": a.get("preco"), "estoque": a.get("estoque"),
+                                  "status": a.get("status") or "", "capa": a.get("capa") or "", "url": a.get("url") or ""}],
+                    "total": 1, "pagina": 1, "paginas": 1, "lido_em": "", "diagnostico": {"formato": "codigo"}}
     q = {"loja": loja, "pagina": max(1, pagina), "detalhe": 1}
     if busca.strip():
         q["busca"] = busca.strip()[:100]
